@@ -13,9 +13,12 @@ import (
 // It processes user inputs through an LLM provider and emits events
 // for thinking, messages, and errors.
 type DefaultAgent struct {
-	provider llm.Provider
-	channels *types.AgentChannels
-	config   *types.AgentConfig
+	provider     llm.Provider
+	channels     *types.AgentChannels
+	systemPrompt string
+	maxTurns     int
+	bufferSize   int
+	metadata     map[string]interface{}
 
 	// Conversation history with thread-safe access
 	historyMu sync.RWMutex
@@ -30,18 +33,54 @@ type DefaultAgent struct {
 	runMu   sync.Mutex
 }
 
-// NewDefaultAgent creates a new DefaultAgent with the given provider and config.
-func NewDefaultAgent(provider llm.Provider, config *types.AgentConfig) *DefaultAgent {
-	if config == nil {
-		config = types.NewAgentConfig()
+// AgentOption is a function that configures an agent
+type AgentOption func(*DefaultAgent)
+
+// WithSystemPrompt sets the system prompt for the agent
+func WithSystemPrompt(prompt string) AgentOption {
+	return func(a *DefaultAgent) {
+		a.systemPrompt = prompt
+	}
+}
+
+// WithMaxTurns sets the maximum number of conversation turns
+func WithMaxTurns(max int) AgentOption {
+	return func(a *DefaultAgent) {
+		a.maxTurns = max
+	}
+}
+
+// WithBufferSize sets the channel buffer size
+func WithBufferSize(size int) AgentOption {
+	return func(a *DefaultAgent) {
+		a.bufferSize = size
+	}
+}
+
+// WithMetadata sets metadata for the agent
+func WithMetadata(metadata map[string]interface{}) AgentOption {
+	return func(a *DefaultAgent) {
+		a.metadata = metadata
+	}
+}
+
+// NewDefaultAgent creates a new DefaultAgent with the given provider and options.
+func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
+	a := &DefaultAgent{
+		provider:   provider,
+		bufferSize: 10, // default buffer size
+		history:    make([]*types.Message, 0),
 	}
 
-	return &DefaultAgent{
-		provider: provider,
-		channels: types.NewAgentChannels(10),
-		config:   config,
-		history:  make([]*types.Message, 0),
+	// Apply options
+	for _, opt := range opts {
+		opt(a)
 	}
+
+	// Create channels with configured buffer size
+	a.channels = types.NewAgentChannels(a.bufferSize)
+
+	return a
 }
 
 // Start begins the agent's event loop in a goroutine.
@@ -55,8 +94,8 @@ func (a *DefaultAgent) Start(ctx context.Context) error {
 	a.runMu.Unlock()
 
 	// Add system message if configured
-	if a.config.SystemPrompt != "" {
-		a.addToHistory(types.NewSystemMessage(a.config.SystemPrompt))
+	if a.systemPrompt != "" {
+		a.addToHistory(types.NewSystemMessage(a.systemPrompt))
 	}
 
 	// Start event loop

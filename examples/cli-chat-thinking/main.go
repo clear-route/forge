@@ -9,7 +9,6 @@ import (
 	"github.com/clear-route/forge/pkg/agent"
 	"github.com/clear-route/forge/pkg/executor/cli"
 	"github.com/clear-route/forge/pkg/llm/openai"
-	"github.com/clear-route/forge/pkg/types"
 )
 
 func main() {
@@ -56,12 +55,10 @@ Based on my analysis, the answer is...
 
 Always use this format for complex questions that require reasoning.`
 
-	config := types.NewAgentConfig().
-		WithSystemPrompt(systemPrompt).
-		WithStreaming(true)
-
-	// Create agent
-	ag := agent.NewDefaultAgent(provider, config)
+	// Create agent with options
+	ag := agent.NewDefaultAgent(provider,
+		agent.WithSystemPrompt(systemPrompt),
+	)
 
 	// Create CLI executor
 	// Thinking is shown by default when the model includes <thinking> tags

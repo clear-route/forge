@@ -9,7 +9,6 @@ import (
 	"github.com/clear-route/forge/pkg/agent"
 	"github.com/clear-route/forge/pkg/executor/cli"
 	"github.com/clear-route/forge/pkg/llm/openai"
-	"github.com/clear-route/forge/pkg/types"
 )
 
 func main() {
@@ -37,13 +36,10 @@ func main() {
 		log.Fatalf("Failed to create OpenAI provider: %v", err)
 	}
 
-	// Create agent configuration
-	config := types.NewAgentConfig().
-		WithSystemPrompt("You are a helpful AI assistant. Be concise and friendly.").
-		WithStreaming(true)
-
-	// Create agent
-	ag := agent.NewDefaultAgent(provider, config)
+	// Create agent with options
+	ag := agent.NewDefaultAgent(provider,
+		agent.WithSystemPrompt("You are a helpful AI assistant. Be concise and friendly."),
+	)
 
 	// Create CLI executor
 	executor := cli.NewExecutor(ag,
