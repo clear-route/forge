@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/clear-route/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/llm"
 )
 
 func TestThinkingParser_SimpleThinking(t *testing.T) {

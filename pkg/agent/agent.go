@@ -5,7 +5,7 @@ package agent
 import (
 	"context"
 
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 // Agent interface defines the core capabilities of a Forge agent.

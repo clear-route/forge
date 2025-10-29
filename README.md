@@ -1,8 +1,8 @@
 # Forge
 
-[![CI](https://github.com/clear-route/forge/workflows/CI/badge.svg)](https://github.com/clear-route/forge/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/clear-route/forge)](https://goreportcard.com/report/github.com/clear-route/forge)
-[![GoDoc](https://pkg.go.dev/badge/github.com/clear-route/forge)](https://pkg.go.dev/github.com/clear-route/forge)
+[![CI](https://github.com/entrhq/forge/workflows/CI/badge.svg)](https://github.com/entrhq/forge/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/entrhq/forge)](https://goreportcard.com/report/github.com/entrhq/forge)
+[![GoDoc](https://pkg.go.dev/badge/github.com/entrhq/forge)](https://pkg.go.dev/github.com/entrhq/forge)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **Forge** is an open-source, lightweight agent framework for building AI agents with pluggable components. It provides a clean, modular architecture that makes it easy to create agents with different LLM providers and execution environments.
@@ -19,7 +19,7 @@
 ## Installation
 
 ```bash
-go get github.com/clear-route/forge
+go get github.com/entrhq/forge
 ```
 
 ## Quick Start
@@ -28,9 +28,9 @@ go get github.com/clear-route/forge
 package main
 
 import (
-    "github.com/clear-route/forge/pkg/agent"
-    "github.com/clear-route/forge/pkg/llm"
-    "github.com/clear-route/forge/pkg/executor"
+    "github.com/entrhq/forge/pkg/agent"
+    "github.com/entrhq/forge/pkg/llm"
+    "github.com/entrhq/forge/pkg/executor"
 )
 
 func main() {
@@ -104,7 +104,7 @@ go run examples/simple-agent/main.go
 
 ```bash
 # Clone the repository
-git clone https://github.com/clear-route/forge.git
+git clone https://github.com/entrhq/forge.git
 cd forge
 
 # Install development tools
@@ -154,7 +154,7 @@ This project is licensed under the Apache License 2.0 - see the [`LICENSE`](LICE
 
 ## Acknowledgments
 
-Built as part of the ClearRoute Agent Platform.
+Built as part of the Entr Agent Platform.
 
 ---
 

@@ -46,7 +46,7 @@ We welcome feature suggestions! Please create an issue with:
 
 ```bash
 # Clone the repository
-git clone https://github.com/clear-route/forge.git
+git clone https://github.com/entrhq/forge.git
 cd forge
 
 # Install development tools

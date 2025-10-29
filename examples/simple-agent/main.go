@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 func main() {

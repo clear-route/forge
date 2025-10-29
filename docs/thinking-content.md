@@ -58,7 +58,7 @@ When processing a stream with thinking content:
 The OpenAI provider automatically parses `<thinking>` tags using [`ThinkingParser`](../pkg/llm/parser/thinking.go:1). For other providers, you can use the parser:
 
 ```go
-import "github.com/clear-route/forge/pkg/llm/parser"
+import "github.com/entrhq/forge/pkg/llm/parser"
 
 thinkingParser := parser.NewThinkingParser()
 

@@ -12,9 +12,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/clear-route/forge/pkg/llm"
-	"github.com/clear-route/forge/pkg/llm/parser"
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/llm/parser"
+	"github.com/entrhq/forge/pkg/types"
 	"github.com/openai/openai-go"
 )
 

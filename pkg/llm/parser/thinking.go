@@ -4,7 +4,7 @@ package parser
 import (
 	"strings"
 
-	"github.com/clear-route/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/llm"
 )
 
 // ThinkingParser parses streaming content and separates <thinking> tags from regular content.

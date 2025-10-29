@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/clear-route/forge/pkg/agent"
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 // Executor is a CLI-based executor that enables turn-by-turn conversation

@@ -4,7 +4,7 @@ package llm
 import (
 	"context"
 
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 // Provider defines the interface for LLM integrations.

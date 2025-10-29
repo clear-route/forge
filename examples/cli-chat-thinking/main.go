@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/clear-route/forge/pkg/agent"
-	"github.com/clear-route/forge/pkg/executor/cli"
-	"github.com/clear-route/forge/pkg/llm/openai"
+	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/executor/cli"
+	"github.com/entrhq/forge/pkg/llm/openai"
 )
 
 func main() {

@@ -5,7 +5,7 @@ package executor
 import (
 	"context"
 
-	"github.com/clear-route/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent"
 )
 
 // Executor interface defines how agents interact with their runtime environment.

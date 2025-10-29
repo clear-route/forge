@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/clear-route/forge/pkg/llm"
-	"github.com/clear-route/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 // streamState tracks the current state of stream processing
