@@ -1,4 +1,42 @@
 // Package openai provides an OpenAI-compatible LLM provider implementation.
+//
+// Example usage:
+//
+//	package main
+//
+//	import (
+//	    "context"
+//	    "fmt"
+//	    "os"
+//
+//	    "github.com/entrhq/forge/pkg/llm/openai"
+//	    "github.com/entrhq/forge/pkg/types"
+//	)
+//
+//	func main() {
+//	    provider, err := openai.NewProvider(
+//	        os.Getenv("OPENAI_API_KEY"),
+//	        openai.WithModel("gpt-4o"),
+//	    )
+//	    if err != nil {
+//	        panic(err)
+//	    }
+//
+//	    messages := []types.Message{
+//	        {Role: "user", Content: "Hello!"},
+//	    }
+//
+//	    stream, err := provider.Complete(context.Background(), messages)
+//	    if err != nil {
+//	        panic(err)
+//	    }
+//
+//	    for chunk := range stream {
+//	        if chunk.Type == types.ChunkTypeMessageContent {
+//	            fmt.Print(chunk.Content)
+//	        }
+//	    }
+//	}
 package openai
 
 import (

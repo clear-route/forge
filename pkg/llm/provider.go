@@ -1,4 +1,46 @@
 // Package llm provides abstractions for LLM provider integration.
+//
+// Example usage:
+//
+//	package main
+//
+//	import (
+//	    "context"
+//	    "fmt"
+//	    "log"
+//	    "os"
+//
+//	    "github.com/entrhq/forge/pkg/llm/openai"
+//	    "github.com/entrhq/forge/pkg/types"
+//	)
+//
+//	func main() {
+//	    // Create provider
+//	    provider, err := openai.NewProvider(
+//	        os.Getenv("OPENAI_API_KEY"),
+//	        openai.WithModel("gpt-4o"),
+//	    )
+//	    if err != nil {
+//	        log.Fatal(err)
+//	    }
+//
+//	    // Use streaming
+//	    messages := []*types.Message{
+//	        types.NewUserMessage("Hello!"),
+//	    }
+//
+//	    stream, err := provider.StreamCompletion(context.Background(), messages)
+//	    if err != nil {
+//	        log.Fatal(err)
+//	    }
+//
+//	    for chunk := range stream {
+//	        if chunk.IsError() {
+//	            log.Fatal(chunk.Error)
+//	        }
+//	        fmt.Print(chunk.Content)
+//	    }
+//	}
 package llm
 
 import (

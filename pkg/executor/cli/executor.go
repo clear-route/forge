@@ -1,4 +1,38 @@
 // Package cli provides a command-line executor for Forge agents.
+//
+// Example usage:
+//
+//	package main
+//
+//	import (
+//	    "context"
+//	    "log"
+//	    "os"
+//
+//	    "github.com/entrhq/forge/pkg/agent"
+//	    "github.com/entrhq/forge/pkg/executor/cli"
+//	    "github.com/entrhq/forge/pkg/llm/openai"
+//	)
+//
+//	func main() {
+//	    provider, _ := openai.NewProvider(
+//	        os.Getenv("OPENAI_API_KEY"),
+//	        openai.WithModel("gpt-4o"),
+//	    )
+//
+//	    ag := agent.NewDefaultAgent(provider,
+//	        agent.WithSystemPrompt("You are helpful."),
+//	    )
+//
+//	    executor := cli.NewExecutor(ag,
+//	        cli.WithPrompt("You: "),
+//	        cli.WithShowThinking(true),
+//	    )
+//
+//	    if err := executor.Run(context.Background()); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	}
 package cli
 
 import (

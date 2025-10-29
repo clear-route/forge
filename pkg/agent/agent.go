@@ -1,5 +1,41 @@
 // Package agent provides the core agent interface and implementation
 // for the Forge agent framework.
+//
+// Example usage:
+//
+//	package main
+//
+//	import (
+//	    "context"
+//	    "log"
+//	    "os"
+//
+//	    "github.com/entrhq/forge/pkg/agent"
+//	    "github.com/entrhq/forge/pkg/executor/cli"
+//	    "github.com/entrhq/forge/pkg/llm/openai"
+//	)
+//
+//	func main() {
+//	    // Create provider
+//	    provider, err := openai.NewProvider(
+//	        os.Getenv("OPENAI_API_KEY"),
+//	        openai.WithModel("gpt-4o"),
+//	    )
+//	    if err != nil {
+//	        log.Fatal(err)
+//	    }
+//
+//	    // Create agent
+//	    ag := agent.NewDefaultAgent(provider,
+//	        agent.WithSystemPrompt("You are a helpful assistant."),
+//	    )
+//
+//	    // Create executor and run
+//	    executor := cli.NewExecutor(ag)
+//	    if err := executor.Run(context.Background()); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	}
 package agent
 
 import (

@@ -28,23 +28,39 @@ go get github.com/entrhq/forge
 package main
 
 import (
+    "context"
+    "log"
+    "os"
+
     "github.com/entrhq/forge/pkg/agent"
-    "github.com/entrhq/forge/pkg/llm"
-    "github.com/entrhq/forge/pkg/executor"
+    "github.com/entrhq/forge/pkg/executor/cli"
+    "github.com/entrhq/forge/pkg/llm/openai"
 )
 
 func main() {
     // 1. Create an LLM provider
-    provider := llm.NewOpenAIProvider(config)
+    provider, err := openai.NewProvider(
+        os.Getenv("OPENAI_API_KEY"),
+        openai.WithModel("gpt-4o"),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
     
     // 2. Create an agent with the provider
-    agent := agent.New(provider, options)
+    ag := agent.NewDefaultAgent(provider,
+        agent.WithSystemPrompt("You are a helpful AI assistant."),
+    )
     
     // 3. Create an executor
-    executor := executor.NewCLI()
+    executor := cli.NewExecutor(ag,
+        cli.WithPrompt("You: "),
+    )
     
     // 4. Run the agent
-    executor.Run(agent)
+    if err := executor.Run(context.Background()); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -55,7 +71,6 @@ Forge is built with a clean, modular architecture:
 - **Agent Core** ([`pkg/agent`](pkg/agent)): Core agent interface and functionality
 - **LLM Providers** ([`pkg/llm`](pkg/llm)): Pluggable LLM provider implementations
 - **Executors** ([`pkg/executor`](pkg/executor)): Different execution environments for agents
-- **Configuration** ([`pkg/config`](pkg/config)): Centralized configuration management
 - **Types** ([`pkg/types`](pkg/types)): Shared types and interfaces
 
 See [`docs/architecture.md`](docs/architecture.md) for detailed architecture documentation.
@@ -68,11 +83,12 @@ forge/
 │   ├── agent/        # Agent core
 │   ├── llm/          # LLM provider abstractions
 │   ├── executor/     # Execution plane abstractions
-│   ├── config/       # Configuration
 │   └── types/        # Shared types
 ├── internal/         # Private implementation
 ├── examples/         # Example applications
-│   └── simple-agent/ # Basic usage example
+│   ├── cli-chat/     # Basic CLI chat example
+│   ├── cli-chat-thinking/ # CLI chat with thinking mode
+│   └── simple-agent/ # Core types demonstration
 ├── docs/            # Documentation
 └── .github/         # CI/CD workflows
 ```
@@ -81,15 +97,24 @@ forge/
 
 Check out the [`examples/`](examples/) directory for working examples:
 
-- **Simple Agent** ([`examples/simple-agent`](examples/simple-agent)): Basic agent implementation
+- **CLI Chat** ([`examples/cli-chat`](examples/cli-chat)): Basic conversational agent
+- **CLI Chat with Thinking** ([`examples/cli-chat-thinking`](examples/cli-chat-thinking)): Agent that shows reasoning process
+- **Simple Agent** ([`examples/simple-agent`](examples/simple-agent)): Core types demonstration
 
 ### Running Examples
 
 ```bash
-# Run the simple agent example
-make run-example
+# Run the CLI chat example
+cd examples/cli-chat
+export OPENAI_API_KEY="your-api-key"
+go run main.go
 
-# Or directly with go
+# Run with thinking mode
+cd examples/cli-chat-thinking
+export OPENAI_API_KEY="your-api-key"
+go run main.go
+
+# Explore core types
 go run examples/simple-agent/main.go
 ```
 
@@ -140,13 +165,16 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ## Roadmap
 
+- [x] Streaming response support
+- [x] Basic CLI executor
+- [x] OpenAI provider implementation
 - [ ] Tool/function calling system
-- [ ] Streaming response support
 - [ ] State persistence and memory management
 - [ ] Multi-agent coordination
-- [ ] Additional LLM provider implementations
-- [ ] Advanced executor implementations (HTTP API server)
+- [ ] Additional LLM provider implementations (Anthropic, Google, etc.)
+- [ ] Advanced executor implementations (HTTP API server, Slack bot, etc.)
 - [ ] Prompt template system
+- [ ] Agent collaboration and handoffs
 
 ## License
 
