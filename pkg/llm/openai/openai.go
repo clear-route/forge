@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/clear-route/forge/pkg/llm"
+	"github.com/clear-route/forge/pkg/llm/parser"
 	"github.com/clear-route/forge/pkg/types"
 	"github.com/openai/openai-go"
 )
@@ -135,10 +136,20 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 // which provides better compatibility with OpenAI-compatible APIs that may
 // include SSE comments or have slight format variations.
 func (p *Provider) StreamCompletion(ctx context.Context, messages []*types.Message) (<-chan *llm.StreamChunk, error) {
-	// Convert our message format to OpenAI format
+	resp, err := p.sendStreamRequest(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
+
+	chunks := make(chan *llm.StreamChunk, 10)
+	go p.processStreamResponse(ctx, resp, chunks)
+	return chunks, nil
+}
+
+// sendStreamRequest creates and sends the HTTP request for streaming
+func (p *Provider) sendStreamRequest(ctx context.Context, messages []*types.Message) (*http.Response, error) {
 	openaiMessages := convertToOpenAIMessages(messages)
 
-	// Create request body
 	reqBody := map[string]interface{}{
 		"model":    p.model,
 		"messages": openaiMessages,
@@ -150,7 +161,6 @@ func (p *Provider) StreamCompletion(ctx context.Context, messages []*types.Messa
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Create HTTP request
 	url := p.baseURL + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -161,109 +171,160 @@ func (p *Provider) StreamCompletion(ctx context.Context, messages []*types.Messa
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 	req.Header.Set("Accept", "text/event-stream")
 
-	// Send request
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("API request failed with status %d (failed to read error body: %w)", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Create output channel
-	chunks := make(chan *llm.StreamChunk, 10)
+	return resp, nil
+}
 
-	// Stream in goroutine
-	go func() {
-		defer close(chunks)
-		defer resp.Body.Close()
+// processStreamResponse processes the SSE stream and sends chunks to the channel
+func (p *Provider) processStreamResponse(ctx context.Context, resp *http.Response, chunks chan<- *llm.StreamChunk) {
+	defer close(chunks)
+	defer resp.Body.Close()
 
-		scanner := bufio.NewScanner(resp.Body)
-		firstChunk := true
+	scanner := bufio.NewScanner(resp.Body)
+	firstChunk := true
+	thinkingParser := parser.NewThinkingParser()
 
-		for scanner.Scan() {
-			line := scanner.Text()
+	for scanner.Scan() {
+		line := scanner.Text()
 
-			// Skip empty lines and SSE comments
-			if line == "" || strings.HasPrefix(line, ":") {
-				continue
-			}
-
-			// SSE data lines start with "data: "
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			// Extract JSON data
-			data := strings.TrimPrefix(line, "data: ")
-
-			// Check for stream end
-			if data == "[DONE]" {
-				chunks <- &llm.StreamChunk{Finished: true}
-				return
-			}
-
-			// Parse JSON chunk
-			var chunk struct {
-				Choices []struct {
-					Delta struct {
-						Role    string `json:"role"`
-						Content string `json:"content"`
-					} `json:"delta"`
-					FinishReason *string `json:"finish_reason"`
-				} `json:"choices"`
-			}
-
-			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-				// Skip malformed chunks silently
-				continue
-			}
-
-			if len(chunk.Choices) == 0 {
-				continue
-			}
-
-			delta := chunk.Choices[0].Delta
-
-			// Create stream chunk
-			streamChunk := &llm.StreamChunk{}
-
-			// Set role on first chunk
-			if firstChunk && delta.Role != "" {
-				streamChunk.Role = delta.Role
-				firstChunk = false
-			}
-
-			// Set content if present
-			if delta.Content != "" {
-				streamChunk.Content = delta.Content
-			}
-
-			// Check for finish
-			if chunk.Choices[0].FinishReason != nil && *chunk.Choices[0].FinishReason == "stop" {
-				streamChunk.Finished = true
-			}
-
-			// Only send if there's content, role, or finished flag
-			if streamChunk.Content != "" || streamChunk.Role != "" || streamChunk.Finished {
-				select {
-				case chunks <- streamChunk:
-				case <-ctx.Done():
-					chunks <- &llm.StreamChunk{Error: ctx.Err()}
-					return
-				}
-			}
+		if !p.isValidSSELine(line) {
+			continue
 		}
 
-		if err := scanner.Err(); err != nil {
-			chunks <- &llm.StreamChunk{Error: fmt.Errorf("stream read error: %w", err)}
-		}
-	}()
+		data := strings.TrimPrefix(line, "data: ")
 
-	return chunks, nil
+		if data == "[DONE]" {
+			p.handleStreamEnd(ctx, thinkingParser, chunks)
+			return
+		}
+
+		if !p.processSSEChunk(ctx, data, &firstChunk, thinkingParser, chunks) {
+			return
+		}
+	}
+
+	p.flushRemainingContent(ctx, thinkingParser, chunks)
+
+	if err := scanner.Err(); err != nil {
+		chunks <- &llm.StreamChunk{Error: fmt.Errorf("stream read error: %w", err)}
+	}
+}
+
+// isValidSSELine checks if a line is a valid SSE data line
+func (p *Provider) isValidSSELine(line string) bool {
+	return line != "" && !strings.HasPrefix(line, ":") && strings.HasPrefix(line, "data: ")
+}
+
+// handleStreamEnd handles the [DONE] marker and flushes remaining content
+func (p *Provider) handleStreamEnd(ctx context.Context, thinkingParser *parser.ThinkingParser, chunks chan<- *llm.StreamChunk) {
+	p.flushRemainingContent(ctx, thinkingParser, chunks)
+	chunks <- &llm.StreamChunk{Finished: true}
+}
+
+// flushRemainingContent flushes any buffered content from the thinking parser
+func (p *Provider) flushRemainingContent(ctx context.Context, thinkingParser *parser.ThinkingParser, chunks chan<- *llm.StreamChunk) {
+	thinking, message := thinkingParser.Flush()
+	p.sendChunkIfPresent(ctx, thinking, chunks)
+	p.sendChunkIfPresent(ctx, message, chunks)
+}
+
+// sendChunkIfPresent sends a chunk to the channel if it's not nil
+func (p *Provider) sendChunkIfPresent(ctx context.Context, chunk *llm.StreamChunk, chunks chan<- *llm.StreamChunk) bool {
+	if chunk == nil {
+		return true
+	}
+	select {
+	case chunks <- chunk:
+		return true
+	case <-ctx.Done():
+		chunks <- &llm.StreamChunk{Error: ctx.Err()}
+		return false
+	}
+}
+
+// processSSEChunk processes a single SSE data chunk
+func (p *Provider) processSSEChunk(ctx context.Context, data string, firstChunk *bool, thinkingParser *parser.ThinkingParser, chunks chan<- *llm.StreamChunk) bool {
+	var chunk struct {
+		Choices []struct {
+			Delta struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"delta"`
+			FinishReason *string `json:"finish_reason"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return true // Skip malformed chunks silently
+	}
+
+	if len(chunk.Choices) == 0 {
+		return true
+	}
+
+	delta := chunk.Choices[0].Delta
+	streamChunk := &llm.StreamChunk{}
+
+	if *firstChunk && delta.Role != "" {
+		streamChunk.Role = delta.Role
+		*firstChunk = false
+	}
+
+	if delta.Content != "" {
+		if !p.processContent(ctx, delta.Content, streamChunk.Role, thinkingParser, chunks) {
+			return false
+		}
+	}
+
+	return p.handleFinishReason(ctx, chunk.Choices[0].FinishReason, streamChunk, chunks)
+}
+
+// processContent parses and sends content chunks
+func (p *Provider) processContent(ctx context.Context, content, role string, thinkingParser *parser.ThinkingParser, chunks chan<- *llm.StreamChunk) bool {
+	thinkingChunk, messageChunk := thinkingParser.Parse(content)
+
+	if thinkingChunk != nil {
+		thinkingChunk.Role = role
+		if !p.sendChunkIfPresent(ctx, thinkingChunk, chunks) {
+			return false
+		}
+	}
+
+	if messageChunk != nil {
+		messageChunk.Role = role
+		if !p.sendChunkIfPresent(ctx, messageChunk, chunks) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// handleFinishReason handles the finish_reason field
+func (p *Provider) handleFinishReason(ctx context.Context, finishReason *string, streamChunk *llm.StreamChunk, chunks chan<- *llm.StreamChunk) bool {
+	if finishReason != nil && *finishReason == "stop" {
+		streamChunk.Finished = true
+		return p.sendChunkIfPresent(ctx, streamChunk, chunks)
+	}
+
+	if streamChunk.Role != "" {
+		return p.sendChunkIfPresent(ctx, streamChunk, chunks)
+	}
+
+	return true
 }
 
 // Complete sends messages to the OpenAI API and returns the full response.
