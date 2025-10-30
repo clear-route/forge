@@ -1,4 +1,4 @@
-package agent
+package core
 
 import (
 	"github.com/entrhq/forge/pkg/llm"

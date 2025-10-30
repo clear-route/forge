@@ -1,41 +1,17 @@
-// Package agent provides the core agent interface and implementation
+// Package agent provides the core agent interface and DefaultAgent implementation
 // for the Forge agent framework.
 //
-// Example usage:
+// The DefaultAgent is available directly from this package for simple usage:
 //
-//	package main
+//	import "github.com/entrhq/forge/pkg/agent"
+//	ag := agent.NewDefaultAgent(provider, agent.WithSystemPrompt("..."))
 //
-//	import (
-//	    "context"
-//	    "log"
-//	    "os"
-//
-//	    "github.com/entrhq/forge/pkg/agent"
-//	    "github.com/entrhq/forge/pkg/executor/cli"
-//	    "github.com/entrhq/forge/pkg/llm/openai"
-//	)
-//
-//	func main() {
-//	    // Create provider
-//	    provider, err := openai.NewProvider(
-//	        os.Getenv("OPENAI_API_KEY"),
-//	        openai.WithModel("gpt-4o"),
-//	    )
-//	    if err != nil {
-//	        log.Fatal(err)
-//	    }
-//
-//	    // Create agent
-//	    ag := agent.NewDefaultAgent(provider,
-//	        agent.WithSystemPrompt("You are a helpful assistant."),
-//	    )
-//
-//	    // Create executor and run
-//	    executor := cli.NewExecutor(ag)
-//	    if err := executor.Run(context.Background()); err != nil {
-//	        log.Fatal(err)
-//	    }
-//	}
+// The package is organized with subpackages for specialized functionality:
+//   - core: Internal stream processing utilities
+//   - memory: Conversation history and context management (planned)
+//   - tools: Tool/function calling system (planned)
+//   - middleware: Event hooks and cross-cutting concerns (planned)
+//   - orchestration: Multi-agent coordination and workflows (planned)
 package agent
 
 import (

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/entrhq/forge/pkg/agent/core"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/types"
 )
@@ -215,7 +216,7 @@ func (a *DefaultAgent) processUserInput(ctx context.Context, content string) {
 	}
 
 	// Process stream chunks (handles thinking and message events) and converts to agent events
-	ProcessStream(stream, a.emitEvent, a.handleStreamComplete)
+	core.ProcessStream(stream, a.emitEvent, a.handleStreamComplete)
 
 	// Emit turn end
 	a.emitEvent(types.NewTurnEndEvent())
