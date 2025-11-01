@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const askQuestionToolName = "ask_question"
+
 // AskQuestionTool is a loop-breaking tool that allows the agent to ask
 // the user a clarifying question when additional information is needed
 // to complete the task.
@@ -18,7 +20,7 @@ func NewAskQuestionTool() *AskQuestionTool {
 
 // Name returns the tool's identifier
 func (t *AskQuestionTool) Name() string {
-	return "ask_question"
+	return askQuestionToolName
 }
 
 // Description returns a description of what this tool does
@@ -58,7 +60,7 @@ func (t *AskQuestionTool) Execute(ctx context.Context, arguments json.RawMessage
 	}
 
 	if err := json.Unmarshal(arguments, &args); err != nil {
-		return "", fmt.Errorf("invalid arguments for ask_question: %w", err)
+		return "", fmt.Errorf("invalid arguments for %s: %w", askQuestionToolName, err)
 	}
 
 	if args.Question == "" {

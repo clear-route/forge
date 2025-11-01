@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const taskCompletionToolName = "task_completion"
+
 // TaskCompletionTool is a loop-breaking tool that allows the agent to signal
 // that it has completed the user's task. This tool should be used when the
 // agent has finished all work and wants to present the final result to the user.
@@ -18,7 +20,7 @@ func NewTaskCompletionTool() *TaskCompletionTool {
 
 // Name returns the tool's identifier
 func (t *TaskCompletionTool) Name() string {
-	return "task_completion"
+	return taskCompletionToolName
 }
 
 // Description returns a description of what this tool does
@@ -48,7 +50,7 @@ func (t *TaskCompletionTool) Execute(ctx context.Context, arguments json.RawMess
 	}
 
 	if err := json.Unmarshal(arguments, &args); err != nil {
-		return "", fmt.Errorf("invalid arguments for task_completion: %w", err)
+		return "", fmt.Errorf("invalid arguments for %s: %w", taskCompletionToolName, err)
 	}
 
 	if args.Result == "" {

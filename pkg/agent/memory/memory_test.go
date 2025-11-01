@@ -281,7 +281,7 @@ func TestConversationMemory_GetAllReturnsACopy(t *testing.T) {
 	all := mem.GetAll()
 
 	// Append to the returned slice - this should not affect internal storage
-	all = append(all, types.NewUserMessage("New"))
+	_ = append(all, types.NewUserMessage("New"))
 
 	// Internal storage should still have only 1 message
 	if mem.Count() != 1 {

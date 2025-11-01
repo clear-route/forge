@@ -118,7 +118,6 @@ func TestPromptBuilder(t *testing.T) {
 			t.Error("should contain custom instructions header")
 		}
 	})
-
 }
 
 func TestBuildMessages(t *testing.T) {

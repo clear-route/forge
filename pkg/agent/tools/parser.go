@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const defaultServerName = "local"
+
 // ParseToolCall extracts a tool call from an LLM response that contains
 // XML-formatted tool invocations.
 //
@@ -42,7 +44,7 @@ func ParseToolCall(text string) (*ToolCall, string, error) {
 
 	// Server name defaults to "local" if not specified
 	if toolCall.ServerName == "" {
-		toolCall.ServerName = "local"
+		toolCall.ServerName = defaultServerName
 	}
 
 	// Remove the tool call from the text

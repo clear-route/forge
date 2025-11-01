@@ -173,75 +173,100 @@ func (e *Executor) handleEvents(events <-chan *types.AgentEvent, done chan struc
 	defer close(done)
 
 	for event := range events {
-		switch event.Type {
-		case types.EventTypeThinkingStart:
-			if e.showThinking {
-				fmt.Fprintln(e.writer, "\n[Thinking...]")
-			}
+		e.handleEvent(event, turnEnd)
+	}
+}
 
-		case types.EventTypeThinkingContent:
-			if e.showThinking {
-				fmt.Fprint(e.writer, event.Content)
-			}
+// handleEvent processes a single event based on its type
+func (e *Executor) handleEvent(event *types.AgentEvent, turnEnd chan struct{}) {
+	switch event.Type {
+	case types.EventTypeThinkingStart:
+		e.handleThinkingStart()
+	case types.EventTypeThinkingContent:
+		e.handleThinkingContent(event.Content)
+	case types.EventTypeThinkingEnd:
+		e.handleThinkingEnd()
+	case types.EventTypeToolCallStart, types.EventTypeToolCallContent, types.EventTypeToolCallEnd:
+		// Tool call events are captured but not displayed
+	case types.EventTypeToolCall:
+		e.handleToolCall(event.ToolName)
+	case types.EventTypeToolResult:
+		e.handleToolResult(event.ToolOutput)
+	case types.EventTypeToolResultError:
+		e.handleToolResultError(event.ToolName, event.Error)
+	case types.EventTypeMessageStart:
+		e.handleMessageStart()
+	case types.EventTypeMessageContent:
+		e.handleMessageContent(event.Content)
+	case types.EventTypeMessageEnd:
+		e.handleMessageEnd()
+	case types.EventTypeError:
+		e.handleError(event.Error)
+	case types.EventTypeUpdateBusy:
+		// Could show a spinner here in the future
+	case types.EventTypeTurnEnd:
+		e.handleTurnEnd(turnEnd)
+	}
+}
 
-		case types.EventTypeThinkingEnd:
-			if e.showThinking {
-				fmt.Fprintln(e.writer, "\n[Done thinking]")
-			}
+func (e *Executor) handleThinkingStart() {
+	if e.showThinking {
+		fmt.Fprintln(e.writer, "\n[Thinking...]")
+	}
+}
 
-		case types.EventTypeToolCallStart:
-			// Tool call XML is being streamed - don't show it to user
+func (e *Executor) handleThinkingContent(content string) {
+	if e.showThinking {
+		fmt.Fprint(e.writer, content)
+	}
+}
 
-		case types.EventTypeToolCallContent:
-			// Tool call content is captured but not displayed
+func (e *Executor) handleThinkingEnd() {
+	if e.showThinking {
+		fmt.Fprintln(e.writer, "\n[Done thinking]")
+	}
+}
 
-		case types.EventTypeToolCallEnd:
-			// Tool call XML complete - parser will handle it
+func (e *Executor) handleToolCall(toolName string) {
+	fmt.Fprintf(e.writer, "\n🔧 Tool: %s\n", toolName)
+}
 
-		case types.EventTypeToolCall:
-			// Display tool execution
-			fmt.Fprintf(e.writer, "\n🔧 Tool: %s\n", event.ToolName)
+func (e *Executor) handleToolResult(toolOutput interface{}) {
+	if result, ok := toolOutput.(string); ok {
+		fmt.Fprintf(e.writer, "✅ Result: %s\n", result)
+	} else {
+		fmt.Fprintf(e.writer, "✅ Result: %v\n", toolOutput)
+	}
+}
 
-		case types.EventTypeToolResult:
-			// Display tool result
-			if result, ok := event.ToolOutput.(string); ok {
-				fmt.Fprintf(e.writer, "✅ Result: %s\n", result)
-			} else {
-				fmt.Fprintf(e.writer, "✅ Result: %v\n", event.ToolOutput)
-			}
+func (e *Executor) handleToolResultError(toolName string, err error) {
+	fmt.Fprintf(e.writer, "❌ Tool Error (%s): %v\n", toolName, err)
+}
 
-		case types.EventTypeToolResultError:
-			// Display tool error
-			fmt.Fprintf(e.writer, "❌ Tool Error (%s): %v\n", event.ToolName, event.Error)
+func (e *Executor) handleMessageStart() {
+	e.messageStartPrinted = false
+}
 
-		case types.EventTypeMessageStart:
-			// Reset flag for new message
-			e.messageStartPrinted = false
+func (e *Executor) handleMessageContent(content string) {
+	if content != "" && !e.messageStartPrinted {
+		fmt.Fprintln(e.writer, "Assistant:")
+		e.messageStartPrinted = true
+	}
+	fmt.Fprint(e.writer, content)
+}
 
-		case types.EventTypeMessageContent:
-			// Only print "Assistant:" label before first non-empty content
-			if event.Content != "" && !e.messageStartPrinted {
-				fmt.Fprintln(e.writer, "Assistant:")
-				e.messageStartPrinted = true
-			}
-			fmt.Fprint(e.writer, event.Content)
+func (e *Executor) handleMessageEnd() {
+	fmt.Fprintln(e.writer) // New line after message
+}
 
-		case types.EventTypeMessageEnd:
-			fmt.Fprintln(e.writer) // New line after message
+func (e *Executor) handleError(err error) {
+	fmt.Fprintf(e.writer, "\n❌ Error: %v\n", err)
+}
 
-		case types.EventTypeError:
-			fmt.Fprintf(e.writer, "\n❌ Error: %v\n", event.Error)
-
-		case types.EventTypeUpdateBusy:
-			// Could show a spinner here in the future
-
-		case types.EventTypeTurnEnd:
-			// Signal that turn is complete
-			select {
-			case turnEnd <- struct{}{}:
-			default:
-			}
-		}
+func (e *Executor) handleTurnEnd(turnEnd chan struct{}) {
+	select {
+	case turnEnd <- struct{}{}:
+	default:
 	}
 }
 
