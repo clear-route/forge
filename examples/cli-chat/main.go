@@ -38,7 +38,7 @@ func main() {
 
 	// Create agent with options
 	ag := agent.NewDefaultAgent(provider,
-		agent.WithSystemPrompt("You are a helpful AI assistant. Be concise and friendly."),
+		agent.WithCustomInstructions("You are a helpful AI assistant. Be concise and friendly."),
 	)
 
 	// Create CLI executor

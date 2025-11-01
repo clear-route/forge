@@ -36,28 +36,15 @@ func main() {
 		log.Fatalf("Failed to create OpenAI provider: %v", err)
 	}
 
-	// Create agent configuration with system prompt that encourages thinking
-	systemPrompt := `You are a helpful AI assistant. When answering questions, you should show your thinking process.
-
-IMPORTANT: Format your responses as follows:
-1. First, wrap your reasoning/thinking in <thinking></thinking> tags
-2. Then provide your final answer outside the tags
-
-Example:
-<thinking>
-Let me break this down step by step:
-- First consideration...
-- Second point...
-- Therefore...
-</thinking>
-
-Based on my analysis, the answer is...
-
-Always use this format for complex questions that require reasoning.`
+	// Create agent with custom instructions
+	// Note: The agent loop system now automatically handles thinking and tool calls
+	// You can provide additional instructions here that will be added to the base system prompt
+	customInstructions := `You are a helpful AI assistant.
+When solving problems, think step by step and be thorough in your reasoning.`
 
 	// Create agent with options
 	ag := agent.NewDefaultAgent(provider,
-		agent.WithSystemPrompt(systemPrompt),
+		agent.WithCustomInstructions(customInstructions),
 	)
 
 	// Create CLI executor
@@ -66,9 +53,10 @@ Always use this format for complex questions that require reasoning.`
 		cli.WithPrompt("You: "),
 	)
 
-	fmt.Println("=== Chat with Thinking Mode ===")
-	fmt.Println("The AI will show its reasoning process in [Thinking...] blocks")
-	fmt.Println("Try asking: 'What is 15 * 23? Show your work.'")
+	fmt.Println("=== Agent Loop Chat with Thinking ===")
+	fmt.Println("The agent automatically shows its reasoning in [Thinking...] blocks")
+	fmt.Println("The agent uses tools to complete tasks or ask questions")
+	fmt.Println("Try: 'What is 15 * 23?' or 'Help me write a haiku'")
 	fmt.Println()
 
 	// Run the conversation

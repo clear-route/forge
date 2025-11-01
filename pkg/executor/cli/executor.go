@@ -57,6 +57,9 @@ type Executor struct {
 	// Display options
 	showThinking bool
 	prompt       string
+
+	// State tracking
+	messageStartPrinted bool
 }
 
 // ExecutorOption is a function that configures an Executor.
@@ -186,11 +189,41 @@ func (e *Executor) handleEvents(events <-chan *types.AgentEvent, done chan struc
 				fmt.Fprintln(e.writer, "\n[Done thinking]")
 			}
 
+		case types.EventTypeToolCallStart:
+			// Tool call XML is being streamed - don't show it to user
+
+		case types.EventTypeToolCallContent:
+			// Tool call content is captured but not displayed
+
+		case types.EventTypeToolCallEnd:
+			// Tool call XML complete - parser will handle it
+
+		case types.EventTypeToolCall:
+			// Display tool execution
+			fmt.Fprintf(e.writer, "\n🔧 Tool: %s\n", event.ToolName)
+
+		case types.EventTypeToolResult:
+			// Display tool result
+			if result, ok := event.ToolOutput.(string); ok {
+				fmt.Fprintf(e.writer, "✅ Result: %s\n", result)
+			} else {
+				fmt.Fprintf(e.writer, "✅ Result: %v\n", event.ToolOutput)
+			}
+
+		case types.EventTypeToolResultError:
+			// Display tool error
+			fmt.Fprintf(e.writer, "❌ Tool Error (%s): %v\n", event.ToolName, event.Error)
+
 		case types.EventTypeMessageStart:
-			// Start assistant response on new line
-			fmt.Fprintln(e.writer, "Assistant:")
+			// Reset flag for new message
+			e.messageStartPrinted = false
 
 		case types.EventTypeMessageContent:
+			// Only print "Assistant:" label before first non-empty content
+			if event.Content != "" && !e.messageStartPrinted {
+				fmt.Fprintln(e.writer, "Assistant:")
+				e.messageStartPrinted = true
+			}
 			fmt.Fprint(e.writer, event.Content)
 
 		case types.EventTypeMessageEnd:

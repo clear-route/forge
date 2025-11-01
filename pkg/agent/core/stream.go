@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/entrhq/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/llm/parser"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -9,9 +10,12 @@ import (
 type streamState struct {
 	assistantContent string
 	thinkingContent  string
+	toolCallContent  string
 	role             string
 	messageStarted   bool
 	thinkingStarted  bool
+	toolCallStarted  bool
+	toolCallParser   *parser.ToolCallParser
 }
 
 // ProcessStream processes a stream of chunks, emitting events and calling
@@ -20,9 +24,11 @@ type streamState struct {
 func ProcessStream(
 	stream <-chan *llm.StreamChunk,
 	emitEvent func(*types.AgentEvent),
-	onComplete func(assistantContent, thinkingContent, role string),
+	onComplete func(assistantContent, thinkingContent, toolCallContent, role string),
 ) {
-	state := &streamState{}
+	state := &streamState{
+		toolCallParser: parser.NewToolCallParser(),
+	}
 
 	for chunk := range stream {
 		if chunk.IsError() {
@@ -53,6 +59,9 @@ func handleError(err error, state *streamState, emitEvent func(*types.AgentEvent
 	if state.thinkingStarted {
 		emitEvent(types.NewThinkingEndEvent())
 	}
+	if state.toolCallStarted {
+		emitEvent(types.NewToolCallEndEvent())
+	}
 	if state.messageStarted {
 		emitEvent(types.NewMessageEndEvent())
 	}
@@ -79,30 +88,89 @@ func handleThinkingContent(content string, state *streamState, emitEvent func(*t
 }
 
 // handleMessageContent processes message content
+// It also parses out tool call XML tags and emits them separately
 func handleMessageContent(content string, state *streamState, emitEvent func(*types.AgentEvent)) {
+	// End thinking if it was active
 	if state.thinkingStarted {
 		emitEvent(types.NewThinkingEndEvent())
 		state.thinkingStarted = false
 	}
-	if !state.messageStarted {
-		emitEvent(types.NewMessageStartEvent())
-		state.messageStarted = true
+
+	// Parse content for tool calls
+	toolCallContent, regularContent := state.toolCallParser.Parse(content)
+
+	// Handle tool call content
+	if toolCallContent != nil && toolCallContent.Content != "" {
+		handleToolCallContent(toolCallContent.Content, state, emitEvent)
 	}
-	emitEvent(types.NewMessageContentEvent(content))
-	state.assistantContent += content
+
+	// Handle regular message content
+	if regularContent != nil && regularContent.Content != "" {
+		// End tool call if it was active
+		if state.toolCallStarted {
+			emitEvent(types.NewToolCallEndEvent())
+			state.toolCallStarted = false
+		}
+
+		if !state.messageStarted {
+			emitEvent(types.NewMessageStartEvent())
+			state.messageStarted = true
+		}
+		emitEvent(types.NewMessageContentEvent(regularContent.Content))
+		state.assistantContent += regularContent.Content
+	}
+}
+
+// handleToolCallContent processes tool call XML content
+func handleToolCallContent(content string, state *streamState, emitEvent func(*types.AgentEvent)) {
+	// End message if it was active
+	if state.messageStarted {
+		emitEvent(types.NewMessageEndEvent())
+		state.messageStarted = false
+	}
+
+	if !state.toolCallStarted {
+		emitEvent(types.NewToolCallStartEvent())
+		state.toolCallStarted = true
+	}
+	emitEvent(types.NewToolCallContentEvent(content))
+	state.toolCallContent += content
 }
 
 // finalize ends the stream processing
-func finalize(state *streamState, emitEvent func(*types.AgentEvent), onComplete func(string, string, string)) {
+func finalize(state *streamState, emitEvent func(*types.AgentEvent), onComplete func(string, string, string, string)) {
+	// Flush any remaining content from tool call parser
+	toolCallContent, regularContent := state.toolCallParser.Flush()
+	if toolCallContent != nil && toolCallContent.Content != "" {
+		handleToolCallContent(toolCallContent.Content, state, emitEvent)
+	}
+	if regularContent != nil && regularContent.Content != "" {
+		if state.toolCallStarted {
+			emitEvent(types.NewToolCallEndEvent())
+			state.toolCallStarted = false
+		}
+		if !state.messageStarted {
+			emitEvent(types.NewMessageStartEvent())
+			state.messageStarted = true
+		}
+		emitEvent(types.NewMessageContentEvent(regularContent.Content))
+		state.assistantContent += regularContent.Content
+	}
+
+	// End any active sections
 	if state.thinkingStarted {
 		emitEvent(types.NewThinkingEndEvent())
+	}
+	if state.toolCallStarted {
+		emitEvent(types.NewToolCallEndEvent())
 	}
 	if state.messageStarted {
 		emitEvent(types.NewMessageEndEvent())
 	}
+
 	role := state.role
 	if role == "" {
 		role = string(types.RoleAssistant)
 	}
-	onComplete(state.assistantContent, state.thinkingContent, role)
+	onComplete(state.assistantContent, state.thinkingContent, state.toolCallContent, role)
 }

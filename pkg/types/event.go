@@ -7,6 +7,9 @@ const (
 	EventTypeThinkingStart   AgentEventType = "thinking_start"    // EventTypeThinkingStart indicates the agent is starting to think/reason.
 	EventTypeThinkingContent AgentEventType = "thinking_content"  // EventTypeThinkingContent indicates content from the agent's thinking process.
 	EventTypeThinkingEnd     AgentEventType = "thinking_end"      // EventTypeThinkingEnd indicates the agent has finished thinking.
+	EventTypeToolCallStart   AgentEventType = "tool_call_start"   // EventTypeToolCallStart indicates the agent is starting to format a tool call.
+	EventTypeToolCallContent AgentEventType = "tool_call_content" // EventTypeToolCallContent indicates content from the tool call XML.
+	EventTypeToolCallEnd     AgentEventType = "tool_call_end"     // EventTypeToolCallEnd indicates the agent has finished the tool call XML.
 	EventTypeMessageStart    AgentEventType = "message_start"     // EventTypeMessageStart indicates the agent is starting to compose a message.
 	EventTypeMessageContent  AgentEventType = "message_content"   // EventTypeMessageContent indicates content from the agent's message.
 	EventTypeMessageEnd      AgentEventType = "message_end"       // EventTypeMessageEnd indicates the agent has finished composing the message.
@@ -70,6 +73,31 @@ func NewThinkingContentEvent(content string) *AgentEvent {
 func NewThinkingEndEvent() *AgentEvent {
 	return &AgentEvent{
 		Type:     EventTypeThinkingEnd,
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewToolCallStartEvent creates a tool call start event.
+func NewToolCallStartEvent() *AgentEvent {
+	return &AgentEvent{
+		Type:     EventTypeToolCallStart,
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewToolCallContentEvent creates a tool call content event.
+func NewToolCallContentEvent(content string) *AgentEvent {
+	return &AgentEvent{
+		Type:     EventTypeToolCallContent,
+		Content:  content,
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewToolCallEndEvent creates a tool call end event.
+func NewToolCallEndEvent() *AgentEvent {
+	return &AgentEvent{
+		Type:     EventTypeToolCallEnd,
 		Metadata: make(map[string]interface{}),
 	}
 }
