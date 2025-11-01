@@ -11,9 +11,13 @@
 
 - 🔌 **Pluggable Architecture**: Interface-based design for maximum flexibility
 - 🤖 **LLM Provider Abstraction**: Support for OpenAI-compatible APIs with extensibility for custom providers
+- 🛠️ **Tool System**: Agent loop with tool execution and custom tool registration
+- 🧠 **Chain-of-Thought**: Built-in thinking/reasoning capabilities for transparent agent behavior
+- 💾 **Memory Management**: Conversation history and context management
+- 🔄 **Event-Driven**: Real-time streaming of thinking, tool calls, and messages
 - 🚀 **Execution Plane Abstraction**: Run agents in different environments (CLI, API, custom)
 - 📦 **Library-First Design**: Import as a Go module in your own applications
-- 🧪 **Well-Tested**: Comprehensive test coverage with continuous integration
+- 🧪 **Well-Tested**: Comprehensive test coverage (196+ tests passing)
 - 📖 **Well-Documented**: Clear documentation and examples
 
 ## Installation
@@ -47,12 +51,12 @@ func main() {
         log.Fatal(err)
     }
     
-    // 2. Create an agent with the provider
+    // 2. Create an agent with custom instructions
     ag := agent.NewDefaultAgent(provider,
-        agent.WithSystemPrompt("You are a helpful AI assistant."),
+        agent.WithCustomInstructions("You are a helpful AI assistant."),
     )
     
-    // 3. Create an executor
+    // 3. Create a CLI executor
     executor := cli.NewExecutor(ag,
         cli.WithPrompt("You: "),
     )
@@ -68,10 +72,17 @@ func main() {
 
 Forge is built with a clean, modular architecture:
 
-- **Agent Core** ([`pkg/agent`](pkg/agent)): Core agent interface and functionality
+- **Agent Core** ([`pkg/agent`](pkg/agent)): Agent loop, tools, prompts, and memory
 - **LLM Providers** ([`pkg/llm`](pkg/llm)): Pluggable LLM provider implementations
-- **Executors** ([`pkg/executor`](pkg/executor)): Different execution environments for agents
-- **Types** ([`pkg/types`](pkg/types)): Shared types and interfaces
+- **Executors** ([`pkg/executor`](pkg/executor)): Different execution environments (CLI, API, etc.)
+- **Types** ([`pkg/types`](pkg/types)): Shared types, events, and interfaces
+
+### Key Components
+
+- **Tools** ([`pkg/agent/tools`](pkg/agent/tools)): Tool interface and built-in tools (`task_completion`, `ask_question`, `converse`)
+- **Prompts** ([`pkg/agent/prompts`](pkg/agent/prompts)): Dynamic prompt assembly with tool schemas
+- **Memory** ([`pkg/agent/memory`](pkg/agent/memory)): Conversation history management
+- **Stream Processing** ([`pkg/agent/core`](pkg/agent/core)): Real-time parsing of thinking, tools, and messages
 
 See [`docs/architecture.md`](docs/architecture.md) for detailed architecture documentation.
 
@@ -80,15 +91,19 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 ```
 forge/
 ├── pkg/              # Public, importable packages
-│   ├── agent/        # Agent core
+│   ├── agent/        # Agent core with loop, tools, prompts, memory
+│   │   ├── tools/    # Tool system and built-in tools
+│   │   ├── prompts/  # Prompt assembly and formatting
+│   │   ├── memory/   # Conversation memory
+│   │   └── core/     # Stream processing
 │   ├── llm/          # LLM provider abstractions
+│   │   └── parser/   # Content parsers (thinking, tool calls)
 │   ├── executor/     # Execution plane abstractions
-│   └── types/        # Shared types
+│   │   └── cli/      # CLI executor implementation
+│   └── types/        # Shared types and events
 ├── internal/         # Private implementation
 ├── examples/         # Example applications
-│   ├── cli-chat/     # Basic CLI chat example
-│   ├── cli-chat-thinking/ # CLI chat with thinking mode
-│   └── simple-agent/ # Core types demonstration
+│   └── agent-chat/   # Complete agent example with custom tools
 ├── docs/            # Documentation
 └── .github/         # CI/CD workflows
 ```
@@ -97,26 +112,27 @@ forge/
 
 Check out the [`examples/`](examples/) directory for working examples:
 
-- **CLI Chat** ([`examples/cli-chat`](examples/cli-chat)): Basic conversational agent
-- **CLI Chat with Thinking** ([`examples/cli-chat-thinking`](examples/cli-chat-thinking)): Agent that shows reasoning process
-- **Simple Agent** ([`examples/simple-agent`](examples/simple-agent)): Core types demonstration
+- **Agent Chat** ([`examples/agent-chat`](examples/agent-chat)): Complete agent with tools, thinking, and custom tool registration
 
-### Running Examples
+### Running the Example
 
 ```bash
-# Run the CLI chat example
-cd examples/cli-chat
+cd examples/agent-chat
 export OPENAI_API_KEY="your-api-key"
 go run main.go
-
-# Run with thinking mode
-cd examples/cli-chat-thinking
-export OPENAI_API_KEY="your-api-key"
-go run main.go
-
-# Explore core types
-go run examples/simple-agent/main.go
 ```
+
+The example demonstrates:
+- Agent loop with tool execution
+- Chain-of-thought reasoning (shown in brackets)
+- Custom tool registration (calculator)
+- Built-in tools (`task_completion`, `ask_question`, `converse`)
+- Multi-turn conversations with memory
+
+Try asking:
+- "What is 15 * 23?"
+- "Calculate (100 + 50) / 3"
+- "What's 144 divided by 12, then add 5?"
 
 ## Development
 
@@ -168,12 +184,17 @@ By participating in this project, you agree to maintain a respectful and inclusi
 - [x] Streaming response support
 - [x] Basic CLI executor
 - [x] OpenAI provider implementation
-- [ ] Tool/function calling system
-- [ ] State persistence and memory management
+- [x] Tool/function calling system
+- [x] Agent loop with infinite iterations
+- [x] Chain-of-thought reasoning
+- [x] Memory management and conversation history
+- [x] Event-driven architecture
+- [x] Custom tool registration
+- [ ] Auto-pruning for memory management
+- [ ] Integration tests for full agent loop
 - [ ] Multi-agent coordination
 - [ ] Additional LLM provider implementations (Anthropic, Google, etc.)
 - [ ] Advanced executor implementations (HTTP API server, Slack bot, etc.)
-- [ ] Prompt template system
 - [ ] Agent collaboration and handoffs
 
 ## License

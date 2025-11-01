@@ -11,7 +11,7 @@ GOFMT=gofmt
 
 # Directories
 EXAMPLES_DIR=./examples
-SIMPLE_AGENT=$(EXAMPLES_DIR)/simple-agent
+AGENT_CHAT=$(EXAMPLES_DIR)/agent-chat
 
 help: ## Display this help screen
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -53,12 +53,13 @@ clean: ## Clean build artifacts
 examples: ## Build all example applications
 	@echo "Building examples..."
 	@mkdir -p .bin
-	$(GOBUILD) -o .bin/simple-agent $(SIMPLE_AGENT)
+	$(GOBUILD) -o .bin/agent-chat $(AGENT_CHAT)
 	@echo "Examples built in .bin/"
 
-run-example: ## Run the simple agent example
-	@echo "Running simple agent example..."
-	$(GOCMD) run $(SIMPLE_AGENT)/main.go
+run-example: ## Run the agent chat example
+	@echo "Running agent chat example..."
+	@echo "Note: Make sure OPENAI_API_KEY is set in your environment"
+	$(GOCMD) run $(AGENT_CHAT)/main.go
 
 install-tools: ## Install development tools
 	@echo "Installing development tools..."
