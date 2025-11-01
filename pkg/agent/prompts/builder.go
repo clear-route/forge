@@ -75,8 +75,10 @@ func (pb *PromptBuilder) Build() string {
 }
 
 // BuildMessages creates a complete message list including system prompt and conversation history
-func BuildMessages(systemPrompt string, history []*types.Message, userMessage string) []*types.Message {
-	messages := make([]*types.Message, 0, len(history)+2)
+// The errorContext parameter allows passing ephemeral error messages to the agent without
+// storing them in permanent memory - useful for self-healing error recovery
+func BuildMessages(systemPrompt string, history []*types.Message, userMessage string, errorContext string) []*types.Message {
+	messages := make([]*types.Message, 0, len(history)+3)
 
 	// Add system message
 	messages = append(messages, types.NewSystemMessage(systemPrompt))
@@ -86,6 +88,12 @@ func BuildMessages(systemPrompt string, history []*types.Message, userMessage st
 		if msg.Role != types.RoleSystem {
 			messages = append(messages, msg)
 		}
+	}
+
+	// Add error context as ephemeral user message if provided
+	// This is NOT stored in memory - only used for this iteration
+	if errorContext != "" {
+		messages = append(messages, types.NewUserMessage(errorContext))
 	}
 
 	// Add new user message if provided

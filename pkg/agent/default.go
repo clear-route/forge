@@ -37,6 +37,10 @@ type DefaultAgent struct {
 	// Running state
 	running bool
 	runMu   sync.Mutex
+
+	// Error recovery state
+	lastErrors [5]string // Ring buffer of last 5 error messages
+	errorIndex int       // Current position in ring buffer
 }
 
 // AgentOption is a function that configures an agent
@@ -227,105 +231,65 @@ func (a *DefaultAgent) processUserInput(ctx context.Context, content string) {
 }
 
 // runAgentLoop executes the agent loop with tools and thinking
-// The loop continues until a loop-breaking tool is used
+// The loop continues until a loop-breaking tool is used or circuit breaker triggers
 func (a *DefaultAgent) runAgentLoop(ctx context.Context) {
+	var errorContext string
+
 	for {
-		// Build system prompt with tool schemas
-		systemPrompt := a.buildSystemPrompt()
-
-		// Get conversation history
-		history := a.memory.GetAll()
-
-		// Build messages for this iteration
-		messages := prompts.BuildMessages(systemPrompt, history, "")
-
-		// Get response from LLM
-		stream, err := a.provider.StreamCompletion(ctx, messages)
-		if err != nil {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to start completion: %w", err)))
+		// Execute one iteration with optional error context from previous iteration
+		shouldContinue, nextErrorContext := a.executeIteration(ctx, errorContext)
+		if !shouldContinue {
+			// Loop-breaking tool was called or terminal error occurred
 			return
 		}
 
-		// Process stream and collect response
-		var assistantContent string
-		var toolCallContent string
-		core.ProcessStream(stream, a.emitEvent, func(content, thinking, toolCall, role string) {
-			assistantContent = content
-			toolCallContent = toolCall
-			// thinking and tool call content are already emitted via events in ProcessStream
-		})
-
-		// Check for tool call
-		if toolCallContent == "" {
-			// No tool call found - emit appropriate event and error
-			a.emitEvent(types.NewNoToolCallEvent())
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("no tool call found in response")))
-			return
-		}
-
-		// Parse the tool call JSON from the extracted content
-		// toolCallContent already has just the JSON (without <tool> tags)
-		// Parse directly as JSON instead of wrapping with XML tags
-		var toolCall tools.ToolCall
-		if err := json.Unmarshal([]byte(toolCallContent), &toolCall); err != nil {
-			// Log the actual content to help debug
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call JSON (len=%d, content: %q): %w", len(toolCallContent), toolCallContent, err)))
-			return
-		}
-
-		// Validate required fields
-		if toolCall.ToolName == "" {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool_name is required in tool call")))
-			return
-		}
-
-		// Server name defaults to "local" if not specified
-		if toolCall.ServerName == "" {
-			toolCall.ServerName = "local"
-		}
-
-		// Add assistant's full response to memory (content + tool call)
-		fullResponse := assistantContent
-		if toolCallContent != "" {
-			fullResponse += "<tool>" + toolCallContent + "</tool>"
-		}
-		a.memory.Add(&types.Message{
-			Role:    types.RoleAssistant,
-			Content: fullResponse,
-		})
-
-		// Execute the tool
-		tool, exists := a.getTool(toolCall.ToolName)
-		if !exists {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("unknown tool: %s", toolCall.ToolName)))
-			return
-		}
-
-		// Emit tool call event
-		// Convert RawMessage to map for event
-		var argsMap map[string]interface{}
-		if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
-			argsMap = make(map[string]interface{})
-		}
-		a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
-
-		// Execute tool
-		result, toolErr := tool.Execute(ctx, toolCall.Arguments)
-		if toolErr != nil {
-			a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool execution failed: %w", toolErr)))
-			return
-		}
-		a.emitEvent(types.NewToolResultEvent(toolCall.ToolName, result))
-
-		// Check if this is a loop-breaking tool
-		if tool.IsLoopBreaking() {
-			return
-		}
-
-		// For non-breaking tools, add result to memory and continue loop
-		a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
+		// Update error context for next iteration
+		errorContext = nextErrorContext
 	}
+}
+
+// executeIteration performs a single iteration of the agent loop
+// Returns (shouldContinue, errorContext) where:
+//   - shouldContinue: false if loop should terminate (loop-breaking tool or terminal error)
+//   - errorContext: error message to pass to next iteration, or empty string if successful
+func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string) (bool, string) {
+	// Build system prompt with tool schemas
+	systemPrompt := a.buildSystemPrompt()
+
+	// Get conversation history
+	history := a.memory.GetAll()
+
+	// Build messages for this iteration with optional error context
+	messages := prompts.BuildMessages(systemPrompt, history, "", errorContext)
+
+	// Get response from LLM
+	stream, err := a.provider.StreamCompletion(ctx, messages)
+	if err != nil {
+		// Terminal error - LLM/API failures should stop the loop
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to start completion: %w", err)))
+		return false, ""
+	}
+
+	// Process stream and collect response
+	var assistantContent string
+	var toolCallContent string
+	core.ProcessStream(stream, a.emitEvent, func(content, thinking, toolCall, role string) {
+		assistantContent = content
+		toolCallContent = toolCall
+	})
+
+	// Add assistant's response to memory
+	fullResponse := assistantContent
+	if toolCallContent != "" {
+		fullResponse += "<tool>" + toolCallContent + "</tool>"
+	}
+	a.memory.Add(&types.Message{
+		Role:    types.RoleAssistant,
+		Content: fullResponse,
+	})
+
+	// Process the tool call (parse, validate, execute)
+	return a.processToolCall(ctx, toolCallContent)
 }
 
 // buildSystemPrompt constructs the system prompt with tool schemas and custom instructions
@@ -396,4 +360,159 @@ func (a *DefaultAgent) getTool(name string) (tools.Tool, bool) {
 
 	tool, exists := a.tools[name]
 	return tool, exists
+}
+
+// trackError adds an error to the ring buffer and checks if we've hit the circuit breaker
+// Returns true if the circuit breaker should trigger (5 identical consecutive errors)
+func (a *DefaultAgent) trackError(errMsg string) bool {
+	// Add to ring buffer
+	a.lastErrors[a.errorIndex] = errMsg
+	a.errorIndex = (a.errorIndex + 1) % 5
+
+	// Check if all 5 are identical and non-empty
+	if a.lastErrors[0] == "" {
+		return false // Not enough errors yet
+	}
+
+	first := a.lastErrors[0]
+	for i := 1; i < 5; i++ {
+		if a.lastErrors[i] != first {
+			return false
+		}
+	}
+
+	return true // All 5 errors are identical
+}
+
+// resetErrorTracking clears the error ring buffer after a successful iteration
+func (a *DefaultAgent) resetErrorTracking() {
+	for i := range a.lastErrors {
+		a.lastErrors[i] = ""
+	}
+	a.errorIndex = 0
+}
+
+// processToolCall handles parsing, validation, and execution of tool calls
+// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
+func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
+	// Check if tool call exists
+	if toolCallContent == "" {
+		a.emitEvent(types.NewNoToolCallEvent())
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type: prompts.ErrorTypeNoToolCall,
+		})
+
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive no tool call errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("no tool call found in response")))
+		return true, errMsg
+	}
+
+	// Parse the tool call JSON
+	var toolCall tools.ToolCall
+	if err := json.Unmarshal([]byte(toolCallContent), &toolCall); err != nil {
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type:    prompts.ErrorTypeInvalidJSON,
+			Error:   err,
+			Content: toolCallContent,
+		})
+
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive parse errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call JSON: %w", err)))
+		return true, errMsg
+	}
+
+	// Validate required fields
+	if toolCall.ToolName == "" {
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type: prompts.ErrorTypeMissingToolName,
+		})
+
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive missing tool name errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool_name is required in tool call")))
+		return true, errMsg
+	}
+
+	// Server name defaults to "local" if not specified
+	if toolCall.ServerName == "" {
+		toolCall.ServerName = "local"
+	}
+
+	// Execute the tool
+	return a.executeTool(ctx, toolCall)
+}
+
+// executeTool handles tool lookup, execution, and result processing
+// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
+func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall) (bool, string) {
+	// Look up the tool
+	tool, exists := a.getTool(toolCall.ToolName)
+	if !exists {
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type:           prompts.ErrorTypeUnknownTool,
+			ToolName:       toolCall.ToolName,
+			AvailableTools: a.GetTools(),
+		})
+
+		// Track error and check circuit breaker
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive unknown tool errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("unknown tool: %s", toolCall.ToolName)))
+		return true, errMsg // Continue with error context
+	}
+
+	// Emit tool call event
+	var argsMap map[string]interface{}
+	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
+		argsMap = make(map[string]interface{})
+	}
+	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
+
+	// Execute the tool
+	result, toolErr := tool.Execute(ctx, toolCall.Arguments)
+	if toolErr != nil {
+		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type:     prompts.ErrorTypeToolExecution,
+			ToolName: toolCall.ToolName,
+			Error:    toolErr,
+		})
+
+		// Track error and check circuit breaker
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive tool execution errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool execution failed: %w", toolErr)))
+		return true, errMsg // Continue with error context
+	}
+
+	a.emitEvent(types.NewToolResultEvent(toolCall.ToolName, result))
+
+	// Success! Reset error tracking
+	a.resetErrorTracking()
+
+	// Check if this is a loop-breaking tool
+	if tool.IsLoopBreaking() {
+		return false, "" // Stop loop
+	}
+
+	// For non-breaking tools, add result to memory and continue loop
+	a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
+	return true, "" // Continue with no error
 }

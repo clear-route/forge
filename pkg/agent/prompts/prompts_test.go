@@ -129,7 +129,7 @@ func TestBuildMessages(t *testing.T) {
 		}
 		userMessage := "How are you?"
 
-		messages := BuildMessages(systemPrompt, history, userMessage)
+		messages := BuildMessages(systemPrompt, history, userMessage, "")
 
 		// Should have: system + 2 history + new user = 4 messages
 		if len(messages) != 4 {
@@ -160,7 +160,7 @@ func TestBuildMessages(t *testing.T) {
 			types.NewUserMessage("Hello"),
 		}
 
-		messages := BuildMessages(systemPrompt, history, "")
+		messages := BuildMessages(systemPrompt, history, "", "")
 
 		// Should have: new system + 1 user (old system skipped) = 2 messages
 		if len(messages) != 2 {

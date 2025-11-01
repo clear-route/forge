@@ -15,6 +15,7 @@
 - 🧠 **Chain-of-Thought**: Built-in thinking/reasoning capabilities for transparent agent behavior
 - 💾 **Memory Management**: Conversation history and context management
 - 🔄 **Event-Driven**: Real-time streaming of thinking, tool calls, and messages
+- 🔁 **Self-Healing Error Recovery**: Automatic error recovery with circuit breaker pattern
 - 🚀 **Execution Plane Abstraction**: Run agents in different environments (CLI, API, custom)
 - 📦 **Library-First Design**: Import as a Go module in your own applications
 - 🧪 **Well-Tested**: Comprehensive test coverage (196+ tests passing)
@@ -190,6 +191,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 - [x] Memory management and conversation history
 - [x] Event-driven architecture
 - [x] Custom tool registration
+- [x] Self-healing error recovery with circuit breaker
 - [ ] Auto-pruning for memory management
 - [ ] Integration tests for full agent loop
 - [ ] Multi-agent coordination
