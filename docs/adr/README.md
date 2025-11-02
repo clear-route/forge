@@ -63,6 +63,7 @@ Proposed → Accepted → [Deprecated or Superseded]
 | Number | Title | Status |
 |--------|-------|--------|
 | [0001](0001-record-architecture-decisions.md) | Record Architecture Decisions | Accepted |
+| [0002](0002-xml-format-for-tool-calls.md) | Use XML Format for Tool Calls | Accepted |
 
 ## Resources
 
