@@ -1,7 +1,7 @@
 # 4. Agent-Level Content Processing
 
 **Status:** Accepted
-**Date:** 2024-10-29
+**Date:** 2025-10-29
 **Deciders:** Forge Core Team
 **Technical Story:** Defining the boundary between provider content delivery and agent content processing/orchestration
 

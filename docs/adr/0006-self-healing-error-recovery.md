@@ -1,8 +1,9 @@
-# ADR-0006: Self-Healing Error Recovery with Circuit Breaker
+# 6. Self-Healing Error Recovery with Circuit Breaker
 
-**Status:** Accepted  
-**Date:** 2024-10-29  
-**Last Updated:** 2025-11-02
+**Status:** Accepted
+**Date:** 2025-10-29
+**Deciders:** Forge Core Team
+**Technical Story:** Enabling agents to recover from errors without infinite loops
 
 ## Context
 

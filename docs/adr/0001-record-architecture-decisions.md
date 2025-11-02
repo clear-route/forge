@@ -1,7 +1,7 @@
 # 1. Record Architecture Decisions
 
 **Status:** Accepted
-**Date:** 2024-11-02
+**Date:** 2025-11-02
 **Deciders:** Forge Core Team
 **Technical Story:** Setting up ADR process for Forge project to document architectural decisions
 
