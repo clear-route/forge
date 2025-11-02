@@ -64,6 +64,8 @@ Proposed → Accepted → [Deprecated or Superseded]
 |--------|-------|--------|
 | [0001](0001-record-architecture-decisions.md) | Record Architecture Decisions | Accepted |
 | [0002](0002-xml-format-for-tool-calls.md) | Use XML Format for Tool Calls | Accepted |
+| [0003](0003-provider-abstraction-layer.md) | Provider Abstraction Layer | Accepted |
+| [0004](0004-agent-content-processing.md) | Agent-Level Content Processing | Accepted |
 
 ## Resources
 

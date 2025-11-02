@@ -226,4 +226,4 @@ This is the first ADR, establishing the process for future decisions.
 
 This ADR establishes the foundation for documenting architectural decisions in the Forge project. As we create more ADRs, we'll refine the process and template based on what works best for our team.
 
-**Last Updated:** 2024-11-02
+**Last Updated:** 2025-11-02

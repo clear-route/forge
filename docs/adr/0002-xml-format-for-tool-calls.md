@@ -294,4 +294,4 @@ If we ever need to change this format:
 3. Update documentation and examples
 4. Deprecate old format after transition period
 
-**Last Updated:** 2024-11-02
+**Last Updated:** 2025-11-02
