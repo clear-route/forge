@@ -9,7 +9,7 @@ func TestToolCallParser_SimpleToolCall(t *testing.T) {
 
 	// Single chunk with complete tool call
 	tc, rc := parser.Parse("<tool>{\"name\": \"test\"}</tool>")
-	
+
 	if tc == nil {
 		t.Fatal("Expected tool call, got nil")
 	}
@@ -26,10 +26,10 @@ func TestToolCallParser_StreamedToolCall(t *testing.T) {
 
 	// Simulate streaming chunks - tags split across chunks
 	chunks := []string{
-		"<too",            // Partial opening tag
-		"l>",              // Rest of opening tag
-		"data",            // Content
-		"</tool>",         // Closing tag
+		"<too",    // Partial opening tag
+		"l>",      // Rest of opening tag
+		"data",    // Content
+		"</tool>", // Closing tag
 	}
 
 	var toolCallContent string
@@ -92,7 +92,7 @@ func TestToolCallParser_ContentBeforeAndAfter(t *testing.T) {
 
 	// Single parse with content before and after tool call
 	tc, rc := parser.Parse("prefix <tool>data</tool> suffix")
-	
+
 	if tc == nil || tc.Content != "data" {
 		t.Errorf("Expected tool call 'data', got %v", tc)
 	}
@@ -106,7 +106,7 @@ func TestToolCallParser_IncompleteTagAtBoundary(t *testing.T) {
 
 	// Chunk ends with incomplete tag
 	toolCall, regular := parser.Parse("Some text <")
-	
+
 	// Should buffer the '<' and return text before it
 	if regular == nil || regular.Content != "Some text " {
 		t.Errorf("Expected 'Some text ', got %v", regular)
