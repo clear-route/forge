@@ -69,6 +69,7 @@ Proposed → Accepted → [Deprecated or Superseded]
 | [0005](0005-channel-based-agent-communication.md) | Channel-Based Agent Communication | Accepted |
 | [0006](0006-self-healing-error-recovery.md) | Self-Healing Error Recovery with Circuit Breaker | Accepted |
 | [0007](0007-memory-system-design.md) | Memory System Design | Accepted |
+| [0008](0008-agent-controlled-loop-termination.md) | Agent-Controlled Loop Termination | Accepted |
 
 ## Resources
 
