@@ -67,6 +67,7 @@ Proposed → Accepted → [Deprecated or Superseded]
 | [0003](0003-provider-abstraction-layer.md) | Provider Abstraction Layer | Accepted |
 | [0004](0004-agent-content-processing.md) | Agent-Level Content Processing | Accepted |
 | [0005](0005-channel-based-agent-communication.md) | Channel-Based Agent Communication | Accepted |
+| [0006](0006-self-healing-error-recovery.md) | Self-Healing Error Recovery with Circuit Breaker | Accepted |
 
 ## Resources
 
