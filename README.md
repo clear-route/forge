@@ -19,15 +19,13 @@
 - 🚀 **Execution Plane Abstraction**: Run agents in different environments (CLI, API, custom)
 - 📦 **Library-First Design**: Import as a Go module in your own applications
 - 🧪 **Well-Tested**: Comprehensive test coverage (196+ tests passing)
-- 📖 **Well-Documented**: Clear documentation and examples
+- 📖 **Well-Documented**: Clear, comprehensive documentation
 
-## Installation
+## Quick Start
 
 ```bash
 go get github.com/entrhq/forge
 ```
-
-## Quick Start
 
 ```go
 package main
@@ -67,6 +65,39 @@ func main() {
 }
 ```
 
+## Documentation
+
+### 📚 [Complete Documentation](docs/)
+
+**Getting Started:**
+- [Installation](docs/getting-started/installation.md) - Set up Forge in your project
+- [Quick Start](docs/getting-started/quick-start.md) - Build your first agent in 5 minutes
+- [Your First Agent](docs/getting-started/your-first-agent.md) - Detailed step-by-step tutorial
+- [Understanding the Agent Loop](docs/getting-started/understanding-agent-loop.md) - Core concepts explained
+
+**Guides:**
+- [Building Custom Tools](docs/guides/building-custom-tools.md) - Extend agent capabilities
+- [Implementing LLM Providers](docs/guides/implementing-llm-providers.md) - Add new LLM support
+- [Creating Executors](docs/guides/creating-executors.md) - Custom execution environments
+- [Memory Management](docs/guides/memory-management.md) - Control conversation history
+- [Error Handling](docs/guides/error-handling.md) - Robust error recovery
+
+**Reference:**
+- [API Reference](docs/reference/) - Complete API documentation
+- [Built-in Tools](docs/reference/built-in-tools.md) - task_completion, ask_question, converse
+- [Configuration](docs/reference/configuration.md) - All configuration options
+
+**Architecture:**
+- [Architecture Overview](docs/architecture/overview.md) - System design and components
+- [Agent Loop](docs/architecture/agent-loop.md) - How the agent loop works
+- [Tool System](docs/architecture/tool-system.md) - Tool architecture details
+- [Design Decisions](docs/architecture/design-decisions.md) - Key architectural choices
+
+**Community:**
+- [FAQ](docs/community/faq.md) - Frequently asked questions
+- [Troubleshooting](docs/community/troubleshooting.md) - Common issues and solutions
+- [Best Practices](docs/community/best-practices.md) - Tips and recommendations
+
 ## Architecture
 
 Forge is built with a clean, modular architecture:
@@ -78,34 +109,12 @@ Forge is built with a clean, modular architecture:
 
 ### Key Components
 
-- **Tools** ([`pkg/agent/tools`](pkg/agent/tools)): Tool interface and built-in tools (`task_completion`, `ask_question`, `converse`)
+- **Tools** ([`pkg/agent/tools`](pkg/agent/tools)): Tool interface and built-in tools
 - **Prompts** ([`pkg/agent/prompts`](pkg/agent/prompts)): Dynamic prompt assembly with tool schemas
 - **Memory** ([`pkg/agent/memory`](pkg/agent/memory)): Conversation history management
 - **Stream Processing** ([`pkg/agent/core`](pkg/agent/core)): Real-time parsing of thinking, tools, and messages
 
-See [`docs/architecture.md`](docs/architecture.md) for detailed architecture documentation.
-
-## Project Structure
-
-```
-forge/
-├── pkg/              # Public, importable packages
-│   ├── agent/        # Agent core with loop, tools, prompts, memory
-│   │   ├── tools/    # Tool system and built-in tools
-│   │   ├── prompts/  # Prompt assembly and formatting
-│   │   ├── memory/   # Conversation memory
-│   │   └── core/     # Stream processing
-│   ├── llm/          # LLM provider abstractions
-│   │   └── parser/   # Content parsers (thinking, tool calls)
-│   ├── executor/     # Execution plane abstractions
-│   │   └── cli/      # CLI executor implementation
-│   └── types/        # Shared types and events
-├── internal/         # Private implementation
-├── examples/         # Example applications
-│   └── agent-chat/   # Complete agent example with custom tools
-├── docs/            # Documentation
-└── .github/         # CI/CD workflows
-```
+See [Architecture Overview](docs/architecture/overview.md) for detailed documentation.
 
 ## Examples
 
@@ -120,13 +129,6 @@ cd examples/agent-chat
 export OPENAI_API_KEY="your-api-key"
 go run main.go
 ```
-
-The example demonstrates:
-- Agent loop with tool execution
-- Chain-of-thought reasoning (shown in brackets)
-- Custom tool registration (calculator)
-- Built-in tools (`task_completion`, `ask_question`, `converse`)
-- Multi-turn conversations with memory
 
 Try asking:
 - "What is 15 * 23?"
@@ -172,11 +174,15 @@ make fmt
 
 ## Contributing
 
-We welcome contributions! Please see [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Code of Conduct
 
-By participating in this project, you agree to maintain a respectful and inclusive environment.
+By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+### Security
+
+For security issues, please see our [Security Policy](SECURITY.md).
 
 ## Roadmap
 
@@ -197,9 +203,11 @@ By participating in this project, you agree to maintain a respectful and inclusi
 - [ ] Advanced executor implementations (HTTP API server, Slack bot, etc.)
 - [ ] Agent collaboration and handoffs
 
+See [Roadmap](docs/community/roadmap.md) for detailed plans.
+
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [`LICENSE`](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
@@ -210,3 +218,11 @@ Built as part of the Entr Agent Platform.
 **Status**: 🚧 Under Active Development
 
 This framework is currently in early development. APIs may change as we iterate on the design.
+
+## Links
+
+- [Documentation](docs/) - Complete documentation
+- [Examples](examples/) - Working code examples
+- [Contributing](CONTRIBUTING.md) - How to contribute
+- [Changelog](CHANGELOG.md) - Version history
+- [Issues](https://github.com/entrhq/forge/issues) - Report bugs or request features
