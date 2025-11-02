@@ -25,7 +25,6 @@
 //	    )
 //
 //	    executor := cli.NewExecutor(ag,
-//	        cli.WithPrompt("You: "),
 //	        cli.WithShowThinking(true),
 //	    )
 //
@@ -56,7 +55,6 @@ type Executor struct {
 
 	// Display options
 	showThinking bool
-	prompt       string
 
 	// State tracking
 	messageStartPrinted bool
@@ -69,13 +67,6 @@ type ExecutorOption func(*Executor)
 func WithShowThinking(show bool) ExecutorOption {
 	return func(e *Executor) {
 		e.showThinking = show
-	}
-}
-
-// WithPrompt sets a custom prompt string.
-func WithPrompt(prompt string) ExecutorOption {
-	return func(e *Executor) {
-		e.prompt = prompt
 	}
 }
 
@@ -93,7 +84,6 @@ func NewExecutor(agent agent.Agent, opts ...ExecutorOption) *Executor {
 		reader:       bufio.NewReader(os.Stdin),
 		writer:       os.Stdout,
 		showThinking: true, // Show thinking by default
-		prompt:       "> ",
 	}
 
 	for _, opt := range opts {
@@ -135,7 +125,7 @@ func (e *Executor) Run(ctx context.Context) error {
 		}
 
 		// Read user input
-		fmt.Fprint(e.writer, e.prompt)
+		fmt.Fprint(e.writer, "> ")
 		input, err := e.reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {

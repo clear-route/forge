@@ -58,9 +58,7 @@ func main() {
     )
     
     // 3. Create a CLI executor
-    executor := cli.NewExecutor(ag,
-        cli.WithPrompt("You: "),
-    )
+    executor := cli.NewExecutor(ag)
     
     // 4. Run the agent
     if err := executor.Run(context.Background()); err != nil {

@@ -5,7 +5,7 @@
 //
 //	provider, _ := openai.NewProvider(apiKey, openai.WithModel("gpt-4o"))
 //	agent := agent.NewDefaultAgent(provider, agent.WithSystemPrompt("You are helpful."))
-//	executor := cli.NewExecutor(agent, cli.WithPrompt("You: "))
+//	executor := cli.NewExecutor(agent)
 //	executor.Run(context.Background())
 package executor
 

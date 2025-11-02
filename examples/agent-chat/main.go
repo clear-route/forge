@@ -122,9 +122,7 @@ func main() {
 	fmt.Println()
 
 	// Create CLI executor
-	executor := cli.NewExecutor(ag,
-		cli.WithPrompt("You: "),
-	)
+	executor := cli.NewExecutor(ag)
 
 	// Run the conversation
 	ctx := context.Background()

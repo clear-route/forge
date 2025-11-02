@@ -18,7 +18,7 @@ After reviewing the current codebase, the overall architecture is **solid and we
    // Consumer code is very clean - only 4 steps!
    provider := openai.NewProvider(apiKey, openai.WithModel("gpt-4o"))
    agent := agent.NewDefaultAgent(provider, agent.WithSystemPrompt("..."))
-   executor := cli.NewExecutor(agent, cli.WithPrompt("You: "))
+   executor := cli.NewExecutor(agent)
    executor.Run(ctx)
    ```
 
@@ -164,9 +164,7 @@ agent := agent.NewDefaultAgent(provider,
     agent.WithSystemPrompt("You are helpful."),
 )
 
-executor := cli.NewExecutor(agent,
-    cli.WithPrompt("You: "),
-)
+executor := cli.NewExecutor(agent)
 
 executor.Run(context.Background())
 ```
