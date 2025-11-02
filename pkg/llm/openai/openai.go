@@ -79,11 +79,7 @@ func WithModel(model string) ProviderOption {
 // This enables using Azure OpenAI, local models, or other compatible services.
 func WithBaseURL(baseURL string) ProviderOption {
 	return func(p *Provider) {
-		// Store in modelInfo metadata for reference
-		if p.modelInfo.Metadata == nil {
-			p.modelInfo.Metadata = make(map[string]interface{})
-		}
-		p.modelInfo.Metadata["base_url"] = baseURL
+		p.baseURL = baseURL
 	}
 }
 
@@ -117,14 +113,12 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 		return nil, fmt.Errorf("OpenAI API key is required (provide via parameter or OPENAI_API_KEY environment variable)")
 	}
 
-	// Check for custom base URL from environment
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-
 	// Create provider with defaults
 	p := &Provider{
 		model:      "gpt-4o", // Default model
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
+		baseURL:    "https://api.openai.com/v1", // Default base URL
 	}
 
 	// Apply options (may override baseURL via WithBaseURL)
@@ -132,17 +126,11 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 		opt(p)
 	}
 
-	// Check if baseURL was set via options (stored in metadata)
-	if p.modelInfo != nil && p.modelInfo.Metadata != nil {
-		if customURL, ok := p.modelInfo.Metadata["base_url"].(string); ok {
-			baseURL = customURL
+	// If baseURL wasn't set by options, check environment variable
+	if p.baseURL == "https://api.openai.com/v1" {
+		if envBaseURL := os.Getenv("OPENAI_BASE_URL"); envBaseURL != "" {
+			p.baseURL = envBaseURL
 		}
-	}
-
-	// Store base URL
-	p.baseURL = baseURL
-	if p.baseURL == "" {
-		p.baseURL = "https://api.openai.com/v1"
 	}
 
 	// Initialize model info (if not already set by options)
@@ -157,9 +145,9 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 	p.modelInfo.SupportsStreaming = true
 	p.modelInfo.MaxTokens = 8192 // Default, varies by model
 
-	// Store base URL in metadata if set
-	if baseURL != "" {
-		p.modelInfo.Metadata["base_url"] = baseURL
+	// Store base URL in metadata if not default
+	if p.baseURL != "https://api.openai.com/v1" {
+		p.modelInfo.Metadata["base_url"] = p.baseURL
 	}
 
 	return p, nil

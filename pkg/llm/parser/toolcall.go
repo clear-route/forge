@@ -9,6 +9,7 @@ import (
 type ToolCallParser struct {
 	buffer      strings.Builder
 	inToolCall  bool
+	inTag       bool // true when we're buffering a potential tag (saw '<' but not yet '>')
 	toolContent strings.Builder
 }
 
@@ -45,13 +46,13 @@ func (p *ToolCallParser) Parse(content string) (toolCallContent, regularContent 
 	for _, char := range content {
 		p.buffer.WriteRune(char)
 
-		if char == '<' && !p.inToolCall {
+		if char == '<' {
 			chunk := p.handleTagStart()
 			toolCallContent, regularContent = p.appendContent(toolCallContent, regularContent, chunk)
 			continue
 		}
 
-		if char == '>' {
+		if char == '>' && p.inTag {
 			chunk := p.handleTagEnd()
 			toolCallContent, regularContent = p.appendContent(toolCallContent, regularContent, chunk)
 			continue
@@ -66,22 +67,34 @@ func (p *ToolCallParser) Parse(content string) (toolCallContent, regularContent 
 
 // handleTagStart processes the start of a potential tag
 func (p *ToolCallParser) handleTagStart() *ParsedContent {
-	// Flush everything before '<' as regular content
-	text := p.buffer.String()
-	p.buffer.Reset()
-	p.buffer.WriteRune('<')
+	// If we were buffering non-tag content, emit it first
+	if p.buffer.Len() > 1 && !p.inTag {
+		text := p.buffer.String()[:p.buffer.Len()-1] // Exclude the '<'
 
-	if len(text) > 1 {
+		p.buffer.Reset()
+		p.buffer.WriteRune('<')
+		p.inTag = true
+
+		// If we're in a tool call, add to tool content
+		if p.inToolCall {
+			p.toolContent.WriteString(text)
+			return nil
+		}
+
+		// Otherwise return as regular content
 		return &ParsedContent{
 			Type:    ContentTypeRegular,
-			Content: text[:len(text)-1],
+			Content: text,
 		}
 	}
+
+	p.inTag = true
 	return nil
 }
 
-// handleTagEnd processes the end of a potential tag
+// handleTagEnd processes the end of a tag
 func (p *ToolCallParser) handleTagEnd() *ParsedContent {
+	p.inTag = false
 	tag := p.buffer.String()
 	p.buffer.Reset()
 
@@ -110,28 +123,23 @@ func (p *ToolCallParser) handleTagEnd() *ParsedContent {
 
 // flushBufferIfNotInTag flushes buffered content if we're not in the middle of parsing a tag
 func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
-	if p.buffer.Len() == 0 {
-		return nil
-	}
-
-	// If we're in a tool call, add buffer to tool content
-	if p.inToolCall {
-		p.toolContent.WriteString(p.buffer.String())
+	if !p.inTag && p.buffer.Len() > 0 {
+		text := p.buffer.String()
 		p.buffer.Reset()
-		return nil
-	}
 
-	// If buffer doesn't start with '<', it's regular content
-	text := p.buffer.String()
-	if !strings.HasPrefix(text, "<") {
-		p.buffer.Reset()
+		// If we're in a tool call, add to tool content
+		if p.inToolCall {
+			p.toolContent.WriteString(text)
+			return nil
+		}
+
+		// Otherwise return as regular content
 		return &ParsedContent{
 			Type:    ContentTypeRegular,
 			Content: text,
 		}
 	}
 
-	// Buffer starts with '<' but hasn't found '>' yet - keep buffering
 	return nil
 }
 
@@ -196,4 +204,5 @@ func (p *ToolCallParser) Reset() {
 	p.buffer.Reset()
 	p.toolContent.Reset()
 	p.inToolCall = false
+	p.inTag = false
 }
