@@ -56,6 +56,11 @@ import (
 	"github.com/openai/openai-go"
 )
 
+const (
+	// DefaultBaseURL is the default OpenAI API base URL
+	DefaultBaseURL = "https://api.openai.com/v1"
+)
+
 // Provider implements the LLM provider interface for OpenAI-compatible APIs.
 type Provider struct {
 	httpClient *http.Client
@@ -118,7 +123,7 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 		model:      "gpt-4o", // Default model
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
-		baseURL:    "https://api.openai.com/v1", // Default base URL
+		baseURL:    DefaultBaseURL,
 	}
 
 	// Apply options (may override baseURL via WithBaseURL)
@@ -127,7 +132,7 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 	}
 
 	// If baseURL wasn't set by options, check environment variable
-	if p.baseURL == "https://api.openai.com/v1" {
+	if p.baseURL == DefaultBaseURL {
 		if envBaseURL := os.Getenv("OPENAI_BASE_URL"); envBaseURL != "" {
 			p.baseURL = envBaseURL
 		}
@@ -146,7 +151,7 @@ func NewProvider(apiKey string, opts ...ProviderOption) (*Provider, error) {
 	p.modelInfo.MaxTokens = 8192 // Default, varies by model
 
 	// Store base URL in metadata if not default
-	if p.baseURL != "https://api.openai.com/v1" {
+	if p.baseURL != DefaultBaseURL {
 		p.modelInfo.Metadata["base_url"] = p.baseURL
 	}
 

@@ -122,7 +122,7 @@ func TestToolCallParser_IncompleteTagAtBoundary(t *testing.T) {
 	}
 
 	// Send closing tag
-	toolCall, regular = parser.Parse("</tool>")
+	toolCall, _ = parser.Parse("</tool>")
 	if toolCall == nil || toolCall.Content != "content" {
 		t.Errorf("Expected tool call with 'content', got %v", toolCall)
 	}
