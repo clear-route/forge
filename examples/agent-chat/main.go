@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/entrhq/forge/pkg/agent"
-	"github.com/entrhq/forge/pkg/executor/cli"
+	"github.com/entrhq/forge/pkg/executor/tui"
 	"github.com/entrhq/forge/pkg/llm/openai"
 )
 
@@ -84,7 +84,9 @@ func main() {
 	// Get API key from environment
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("OPENAI_API_KEY environment variable is required")
+		log.Println("Error: OPENAI_API_KEY environment variable is required.")
+		log.Println("Please set it and try again.")
+		os.Exit(1)
 	}
 
 	// Create OpenAI provider
@@ -106,23 +108,8 @@ func main() {
 		log.Fatalf("Failed to register calculator tool: %v", err)
 	}
 
-	fmt.Println("🤖 Agent Chat Example")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("Features:")
-	fmt.Println("  • Agent loop with tool execution")
-	fmt.Println("  • Chain-of-thought reasoning (shown in brackets)")
-	fmt.Println("  • Custom calculator tool")
-	fmt.Println("  • Built-in tools: task_completion, ask_question, converse")
-	fmt.Println()
-	fmt.Println("Try asking:")
-	fmt.Println("  • What is 15 * 23?")
-	fmt.Println("  • Calculate (100 + 50) / 3")
-	fmt.Println("  • What's the square root of 144? (then add 5)")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
-
-	// Create CLI executor
-	executor := cli.NewExecutor(ag)
+	// Create TUI executor
+	executor := tui.NewExecutor(ag)
 
 	// Run the conversation
 	ctx := context.Background()
