@@ -188,15 +188,16 @@ For security issues, please see our [Security Policy](SECURITY.md).
 
 - [x] Streaming response support
 - [x] Basic CLI executor
+- [x] TUI executor (Gemini-inspired interface)
 - [x] OpenAI provider implementation
 - [x] Tool/function calling system
 - [x] Agent loop with infinite iterations
 - [x] Chain-of-thought reasoning
 - [x] Memory management and conversation history
+- [x] Token-based memory pruning
 - [x] Event-driven architecture
 - [x] Custom tool registration
 - [x] Self-healing error recovery with circuit breaker
-- [ ] Auto-pruning for memory management
 - [ ] Integration tests for full agent loop
 - [ ] Multi-agent coordination
 - [ ] Additional LLM provider implementations (Anthropic, Google, etc.)

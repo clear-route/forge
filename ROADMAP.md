@@ -10,12 +10,13 @@ Core functionality for building AI agents:
 
 - ✅ Agent loop with thinking and tool use
 - ✅ OpenAI provider (GPT-4, GPT-3.5)
-- ✅ Conversation memory with automatic pruning
+- ✅ Conversation memory with token-based pruning
 - ✅ Tool system with JSON Schema parameters
 - ✅ CLI executor
+- ✅ TUI executor (Gemini-inspired interface)
 - ✅ Built-in tools (task_completion, ask_question, converse)
 - ✅ Circuit breaker for error handling
-- ✅ Comprehensive test suite
+- ✅ Comprehensive test suite (113+ tests)
 
 ---
 
