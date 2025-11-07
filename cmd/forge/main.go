@@ -14,8 +14,11 @@ import (
 	"syscall"
 
 	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/executor/tui"
 	"github.com/entrhq/forge/pkg/llm/openai"
+	"github.com/entrhq/forge/pkg/security/workspace"
+	"github.com/entrhq/forge/pkg/tools/coding"
 )
 
 const (
@@ -75,7 +78,6 @@ func main() {
 
 	// Create context with signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
@@ -87,8 +89,9 @@ func main() {
 	}()
 
 	// Run the application
-	if err := run(ctx, config); err != nil {
-		log.Fatalf("Application error: %v", err)
+	if runErr := run(ctx, config); runErr != nil {
+		cancel()
+		log.Fatalf("Application error: %v", runErr)
 	}
 }
 
@@ -166,20 +169,28 @@ func run(ctx context.Context, config *Config) error {
 		agent.WithCustomInstructions(config.SystemPrompt),
 	)
 
-	// TODO: Register coding tools once they are implemented
-	// This will be done in the next phase of development
-	//
-	// Example:
-	// guard, err := workspace.NewGuard(config.WorkspaceDir)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to create workspace guard: %w", err)
-	// }
-	//
-	// readTool := coding.NewReadFileTool(guard)
-	// if err := ag.RegisterTool(readTool); err != nil {
-	// 	return fmt.Errorf("failed to register read tool: %w", err)
-	// }
-	// ... register other tools
+	// Create workspace security guard
+	guard, err := workspace.NewGuard(config.WorkspaceDir)
+	if err != nil {
+		return fmt.Errorf("failed to create workspace guard: %w", err)
+	}
+
+	// Register coding tools
+	codingTools := []struct {
+		name string
+		tool tools.Tool
+	}{
+		{"read_file", coding.NewReadFileTool(guard)},
+		{"write_file", coding.NewWriteFileTool(guard)},
+		{"list_files", coding.NewListFilesTool(guard)},
+		{"search_files", coding.NewSearchFilesTool(guard)},
+	}
+
+	for _, t := range codingTools {
+		if err := ag.RegisterTool(t.tool); err != nil {
+			return fmt.Errorf("failed to register %s tool: %w", t.name, err)
+		}
+	}
 
 	// Create TUI executor
 	executor := tui.NewExecutor(ag)

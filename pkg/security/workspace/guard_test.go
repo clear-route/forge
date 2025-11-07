@@ -15,9 +15,9 @@ func TestNewGuard(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	tests := []struct {
-		name        string
+		name         string
 		workspaceDir string
-		wantErr     bool
+		wantErr      bool
 	}{
 		{
 			name:         "valid existing directory",
