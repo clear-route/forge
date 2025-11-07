@@ -414,6 +414,9 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	// Parse the tool call JSON
 	var toolCall tools.ToolCall
 	if err := json.Unmarshal([]byte(toolCallContent), &toolCall); err != nil {
+		// Log the actual content for debugging
+		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed JSON content:\n%s\n", toolCallContent)))
+		
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:    prompts.ErrorTypeInvalidJSON,
 			Error:   err,

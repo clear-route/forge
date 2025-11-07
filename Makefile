@@ -70,6 +70,11 @@ install-tools: ## Install development tools
 		echo "golangci-lint already installed"; \
 	fi
 
+run: ## Run the forge TUI coding agent
+	@echo "Running forge..."
+	@echo "Note: Make sure OPENAI_API_KEY is set in your environment"
+	$(GOCMD) run ./cmd/forge/main.go
+
 dev: run-example ## Run in development mode (alias for run-example)
 
 all: tidy fmt lint test examples ## Run all checks and build examples

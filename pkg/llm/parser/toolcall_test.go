@@ -187,11 +187,11 @@ func TestToolCallParser_FlushRegularContent(t *testing.T) {
 	// Parse incomplete tag
 	parser.Parse("text <incomplete")
 
-	// Flush should return buffered content as regular
+	// Flush should return all buffered content as regular
 	toolCall, regular := parser.Flush()
 
-	if regular == nil || regular.Content != "<incomplete" {
-		t.Errorf("Expected flushed regular content, got %v", regular)
+	if regular == nil || regular.Content != "text <incomplete" {
+		t.Errorf("Expected flushed regular content 'text <incomplete', got %v", regular)
 	}
 	if toolCall != nil {
 		t.Errorf("Expected no tool call content, got %v", toolCall)

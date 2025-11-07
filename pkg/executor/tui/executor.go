@@ -117,7 +117,9 @@ func initialModel() model {
 	ta.Prompt = "> "
 	ta.CharLimit = 0
 	ta.SetHeight(1)
+	ta.MaxHeight = 10 // Allow up to 10 lines
 	ta.ShowLineNumbers = false
+	ta.KeyMap.InsertNewline.SetEnabled(false) // Disable default Enter behavior
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ta.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(salmonPink)
 	ta.FocusedStyle.Text = lipgloss.NewStyle().Foreground(brightWhite)
@@ -174,6 +176,7 @@ func formatEntry(icon string, text string, style lipgloss.Style, width int, icon
 }
 
 // wordWrap manually wraps text at word boundaries without adding any padding
+// It also handles long strings without spaces by breaking them at character boundaries
 func wordWrap(text string, width int) string {
 	if width <= 0 {
 		width = 80
@@ -185,11 +188,35 @@ func wordWrap(text string, width int) string {
 	}
 
 	var result strings.Builder
-	currentLine := words[0]
+	currentLine := ""
 
-	for _, word := range words[1:] {
+	for _, word := range words {
+		// If a single word is longer than width, break it up
+		if len(word) > width {
+			// First, flush current line if it has content
+			if currentLine != "" {
+				result.WriteString(currentLine)
+				result.WriteString("\n")
+				currentLine = ""
+			}
+
+			// Break the long word into chunks
+			for len(word) > 0 {
+				chunkSize := width
+				if len(word) < chunkSize {
+					chunkSize = len(word)
+				}
+				result.WriteString(word[:chunkSize])
+				result.WriteString("\n")
+				word = word[chunkSize:]
+			}
+			continue
+		}
+
 		// Check if adding this word would exceed width
-		if len(currentLine)+1+len(word) > width {
+		if currentLine == "" {
+			currentLine = word
+		} else if len(currentLine)+1+len(word) > width {
 			// Write current line and start new one
 			result.WriteString(currentLine)
 			result.WriteString("\n")
@@ -200,8 +227,11 @@ func wordWrap(text string, width int) string {
 		}
 	}
 
-	// Write final line
-	result.WriteString(currentLine)
+	// Write final line if there's content
+	if currentLine != "" {
+		result.WriteString(currentLine)
+	}
+
 	return result.String()
 }
 
@@ -283,6 +313,27 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	m.viewport.GotoBottom()
 }
 
+// recalculateLayout recalculates viewport height based on current dimensions
+func (m *model) recalculateLayout() {
+	if !m.ready {
+		return
+	}
+
+	// Calculate heights for different sections
+	headerHeight := 10 // ASCII art (6) + tips (1) + status bar (1) + blank line (1) + spacing (1)
+	// Input height is dynamic based on textarea height (with border padding)
+	inputHeight := m.textarea.Height() + 2 // textarea height + border
+	statusBarHeight := 1
+
+	// Set viewport to fill remaining space
+	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight
+	if viewportHeight < 5 {
+		viewportHeight = 5
+	}
+
+	m.viewport.Height = viewportHeight
+}
+
 // Update is called when a message is received.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
@@ -290,17 +341,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vpCmd tea.Cmd
 	)
 
+	// Store old textarea height to detect changes
+	oldHeight := m.textarea.Height()
 	m.textarea, tiCmd = m.textarea.Update(msg)
-	m.viewport, vpCmd = m.viewport.Update(msg)
+	newHeight := m.textarea.Height()
+
+	// If textarea height changed, recalculate viewport height
+	if oldHeight != newHeight && m.ready {
+		m.recalculateLayout()
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		// Update viewport on window resize
+		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.width = msg.Width
 		m.height = msg.Height
 
 		// Calculate heights for different sections
-		headerHeight := 9 // ASCII art (6) + tips (1) + status bar (1) + spacing (1)
-		inputHeight := 3  // Input box with border
+		headerHeight := 10 // ASCII art (6) + tips (1) + status bar (1) + blank line (1) + spacing (1)
+		// Input height is dynamic based on textarea height (with border padding)
+		inputHeight := m.textarea.Height() + 2 // textarea height + border
 		statusBarHeight := 1
 
 		// Set viewport to fill remaining space
@@ -313,6 +374,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = viewportHeight
 		m.textarea.SetWidth(m.width - 8)
 		m.ready = true
+		m.recalculateLayout()
 		return m, nil
 
 	case agentErrMsg:
@@ -322,19 +384,93 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case *types.AgentEvent:
+		// Update viewport for agent events
+		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.handleAgentEvent(msg)
-		return m, nil
+		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		case tea.KeyEnter:
+			// Alt+Enter (Option+Enter on Mac) adds newline
+			// Plain Enter submits the message
+			if msg.Alt {
+				m.textarea.InsertString("\n")
+				m.updateTextAreaHeight()
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+			// Plain Enter submits
 			m.handleUserInput()
+			return m, tea.Batch(tiCmd, vpCmd)
+		default:
+			// Let viewport handle other keys (arrow keys, pgup/pgdn, etc. for scrolling)
+			m.viewport, vpCmd = m.viewport.Update(msg)
 		}
 	}
 
+	// Auto-adjust textarea height based on content after any key press
+	m.updateTextAreaHeight()
+
 	return m, tea.Batch(tiCmd, vpCmd)
+}
+
+// updateTextAreaHeight adjusts textarea height based on number of lines
+// including visual line wrapping
+func (m *model) updateTextAreaHeight() {
+	value := m.textarea.Value()
+	if value == "" {
+		if m.textarea.Height() != 1 {
+			m.textarea.SetHeight(1)
+			m.recalculateLayout()
+		}
+		return
+	}
+	
+	// Calculate visual lines accounting for wrapping
+	width := m.textarea.Width()
+	if width <= 0 {
+		width = 80 // default width
+	}
+	
+	// Account for prompt width ("> " = 2 chars)
+	effectiveWidth := width - 2
+	if effectiveWidth <= 0 {
+		effectiveWidth = 78
+	}
+	
+	// Split by actual newlines first
+	textLines := strings.Split(value, "\n")
+	visualLines := 0
+	
+	for _, line := range textLines {
+		if line == "" {
+			visualLines++ // Empty line still counts as 1 visual line
+		} else {
+			// Calculate how many visual lines this logical line takes
+			lineLen := len(line)
+			wrappedLines := (lineLen + effectiveWidth - 1) / effectiveWidth
+			if wrappedLines == 0 {
+				wrappedLines = 1
+			}
+			visualLines += wrappedLines
+		}
+	}
+	
+	// Clamp between 1 and MaxHeight
+	if visualLines < 1 {
+		visualLines = 1
+	}
+	if visualLines > m.textarea.MaxHeight {
+		visualLines = m.textarea.MaxHeight
+	}
+	
+	// Only update if height changed to avoid unnecessary recalculation
+	if visualLines != m.textarea.Height() {
+		m.textarea.SetHeight(visualLines)
+		m.recalculateLayout()
+	}
 }
 
 // handleUserInput processes user input and sends it to the agent
@@ -368,7 +504,7 @@ func (m model) View() string {
 ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
 
 	// Tips section
-	tips := tipsStyle.Render(`  Tips: Ask questions • Tools run automatically • Ctrl+C to exit`)
+	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+C to exit`)
 
 	// Top status bar
 	cwd, err := os.Getwd()
@@ -382,7 +518,7 @@ func (m model) View() string {
 
 	// Bottom status bar with three sections
 	bottomLeft := "~/forge"
-	bottomCenter := "Press Ctrl+C to exit"
+	bottomCenter := "Enter to send • Alt+Enter for new line"
 	bottomRight := "Forge Agent"
 
 	// Calculate spacing
@@ -410,6 +546,7 @@ func (m model) View() string {
 		header,
 		tips,
 		topStatus,
+		"", // Blank line for spacing
 		m.viewport.View(),
 		inputBox,
 		bottomBar,
