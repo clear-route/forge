@@ -184,6 +184,8 @@ func run(ctx context.Context, config *Config) error {
 		{"write_file", coding.NewWriteFileTool(guard)},
 		{"list_files", coding.NewListFilesTool(guard)},
 		{"search_files", coding.NewSearchFilesTool(guard)},
+		{"apply_diff", coding.NewApplyDiffTool(guard)},
+		{"execute_command", coding.NewExecuteCommandTool(guard)},
 	}
 
 	for _, t := range codingTools {
