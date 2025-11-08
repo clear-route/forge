@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/entrhq/forge/pkg/agent/core"
 	"github.com/entrhq/forge/pkg/agent/memory"
@@ -12,6 +13,8 @@ import (
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/types"
+
+	"github.com/google/uuid"
 )
 
 // DefaultAgent is a basic implementation of the Agent interface.
@@ -30,6 +33,11 @@ type DefaultAgent struct {
 	toolsMu sync.RWMutex
 	memory  memory.Memory
 
+	// Approval system
+	approvalTimeout time.Duration
+	pendingApproval *pendingApproval
+	approvalMu      sync.Mutex
+
 	// Control channels
 	cancelMu     sync.Mutex
 	cancelStream context.CancelFunc
@@ -41,6 +49,14 @@ type DefaultAgent struct {
 	// Error recovery state
 	lastErrors [5]string // Ring buffer of last 5 error messages
 	errorIndex int       // Current position in ring buffer
+}
+
+// pendingApproval tracks an approval request that is waiting for user response
+type pendingApproval struct {
+	approvalID string
+	toolName   string
+	toolCall   tools.ToolCall
+	response   chan *types.ApprovalResponse
 }
 
 // AgentOption is a function that configures an agent
@@ -75,13 +91,21 @@ func WithMetadata(metadata map[string]interface{}) AgentOption {
 	}
 }
 
+// WithApprovalTimeout sets the timeout for approval requests
+func WithApprovalTimeout(timeout time.Duration) AgentOption {
+	return func(a *DefaultAgent) {
+		a.approvalTimeout = timeout
+	}
+}
+
 // NewDefaultAgent creates a new DefaultAgent with the given provider and options.
 func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 	a := &DefaultAgent{
-		provider:   provider,
-		bufferSize: 10, // default buffer size
-		tools:      make(map[string]tools.Tool),
-		memory:     memory.NewConversationMemory(),
+		provider:        provider,
+		bufferSize:      10,                // default buffer size
+		approvalTimeout: 5 * time.Minute,   // default 5 minute approval timeout
+		tools:           make(map[string]tools.Tool),
+		memory:          memory.NewConversationMemory(),
 	}
 
 	// Register built-in tools
@@ -168,6 +192,15 @@ func (a *DefaultAgent) eventLoop(ctx context.Context) {
 
 			// Process the input
 			a.processInput(ctx, input)
+
+		case approval := <-a.channels.Approval:
+			if approval == nil {
+				// Channel closed
+				return
+			}
+
+			// Handle approval response
+			a.handleApprovalResponse(approval)
 		}
 	}
 }
@@ -478,6 +511,36 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 		return true, errMsg // Continue with error context
 	}
 
+	// Check if tool requires approval
+	if previewable, ok := tool.(tools.Previewable); ok {
+		// Generate preview
+		preview, err := previewable.GeneratePreview(ctx, toolCall.Arguments)
+		if err != nil {
+			// If preview generation fails, log error but continue with execution
+			// (degraded mode - execute without approval)
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
+		} else {
+			// Request approval from user
+			approved, timedOut := a.requestApproval(ctx, toolCall, preview)
+
+			if timedOut {
+				// Timeout - treat as rejection and continue loop
+				errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
+				a.memory.Add(types.NewUserMessage(errMsg))
+				return true, ""
+			}
+
+			if !approved {
+				// User rejected - continue loop without executing
+				errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
+				a.memory.Add(types.NewUserMessage(errMsg))
+				return true, ""
+			}
+
+			// User approved - continue with execution
+		}
+	}
+
 	// Emit tool call event
 	var argsMap map[string]interface{}
 	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
@@ -518,4 +581,87 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	// For non-breaking tools, add result to memory and continue loop
 	a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
 	return true, "" // Continue with no error
+}
+
+// handleApprovalResponse processes an approval response from the user
+func (a *DefaultAgent) handleApprovalResponse(response *types.ApprovalResponse) {
+	a.approvalMu.Lock()
+	defer a.approvalMu.Unlock()
+
+	// Check if we have a pending approval matching this response
+	if a.pendingApproval == nil || a.pendingApproval.approvalID != response.ApprovalID {
+		// No matching pending approval - ignore this response
+		return
+	}
+
+	// Send the response to the waiting goroutine
+	select {
+	case a.pendingApproval.response <- response:
+		// Response delivered
+	default:
+		// Response channel full or closed - shouldn't happen
+	}
+}
+
+// requestApproval sends an approval request and waits for user response
+// Returns (approved, timedOut) where:
+//   - approved: true if user approved, false if rejected
+//   - timedOut: true if the request timed out waiting for response
+func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
+	// Generate unique approval ID
+	approvalID := uuid.New().String()
+
+	// Create response channel for this approval
+	responseChannel := make(chan *types.ApprovalResponse, 1)
+
+	// Store pending approval
+	a.approvalMu.Lock()
+	a.pendingApproval = &pendingApproval{
+		approvalID: approvalID,
+		toolName:   toolCall.ToolName,
+		toolCall:   toolCall,
+		response:   responseChannel,
+	}
+	a.approvalMu.Unlock()
+
+	// Clean up pending approval when done
+	defer func() {
+		a.approvalMu.Lock()
+		a.pendingApproval = nil
+		a.approvalMu.Unlock()
+		close(responseChannel)
+	}()
+
+	// Parse tool input for event
+	var argsMap map[string]interface{}
+	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
+		argsMap = make(map[string]interface{})
+	}
+
+	// Emit approval request event
+	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
+
+	// Wait for response with timeout
+	timeout := time.NewTimer(a.approvalTimeout)
+	defer timeout.Stop()
+
+	select {
+	case <-ctx.Done():
+		// Context canceled
+		return false, false
+
+	case <-timeout.C:
+		// Timeout - emit timeout event and reject
+		a.emitEvent(types.NewToolApprovalTimeoutEvent(approvalID, toolCall.ToolName))
+		return false, true
+
+	case response := <-responseChannel:
+		// Got response from user
+		if response.IsGranted() {
+			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+			return true, false
+		}
+		a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
+		return false, false
+	}
 }

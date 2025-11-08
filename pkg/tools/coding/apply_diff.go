@@ -158,3 +158,134 @@ func (t *ApplyDiffTool) Execute(ctx context.Context, args json.RawMessage) (stri
 func (t *ApplyDiffTool) IsLoopBreaking() bool {
 	return false
 }
+
+// GeneratePreview implements the Previewable interface to show a diff preview.
+func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, args json.RawMessage) (*tools.ToolPreview, error) {
+	var input struct {
+		Path  string `json:"path"`
+		Edits []struct {
+			Search  string `json:"search"`
+			Replace string `json:"replace"`
+		} `json:"edits"`
+	}
+
+	if err := json.Unmarshal(args, &input); err != nil {
+		return nil, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	if input.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+
+	if len(input.Edits) == 0 {
+		return nil, fmt.Errorf("at least one edit is required")
+	}
+
+	// Resolve and validate path
+	absPath, err := t.guard.ResolvePath(input.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	if validateErr := t.guard.ValidatePath(input.Path); validateErr != nil {
+		return nil, fmt.Errorf("invalid path: %w", validateErr)
+	}
+
+	// Read current file content
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	originalContent := string(content)
+	modifiedContent := originalContent
+
+	// Apply edits to generate modified version
+	for i, edit := range input.Edits {
+		if edit.Search == "" {
+			return nil, fmt.Errorf("edit %d: search text cannot be empty", i+1)
+		}
+
+		if !strings.Contains(modifiedContent, edit.Search) {
+			return nil, fmt.Errorf("edit %d: search text not found in file", i+1)
+		}
+
+		count := strings.Count(modifiedContent, edit.Search)
+		if count > 1 {
+			return nil, fmt.Errorf("edit %d: search text appears %d times in file, must be unique", i+1, count)
+		}
+
+		modifiedContent = strings.Replace(modifiedContent, edit.Search, edit.Replace, 1)
+	}
+
+	// Generate diff
+	relPath, _ := t.guard.MakeRelative(absPath)
+	if relPath == "" {
+		relPath = input.Path
+	}
+
+	diffContent := GenerateUnifiedDiff(originalContent, modifiedContent, relPath)
+
+	// Detect file language from extension for syntax highlighting metadata
+	language := detectLanguage(relPath)
+
+	return &tools.ToolPreview{
+		Type:        tools.PreviewTypeDiff,
+		Title:       fmt.Sprintf("Apply %d edit(s) to %s", len(input.Edits), relPath),
+		Description: fmt.Sprintf("This will modify %s with %d search/replace operation(s)", relPath, len(input.Edits)),
+		Content:     diffContent,
+		Metadata: map[string]interface{}{
+			"file_path": relPath,
+			"language":  language,
+			"edit_count": len(input.Edits),
+		},
+	}, nil
+}
+
+// detectLanguage returns a language identifier based on file extension
+func detectLanguage(filename string) string {
+	ext := strings.ToLower(filename)
+	if strings.HasSuffix(ext, ".go") {
+		return "go"
+	}
+	if strings.HasSuffix(ext, ".py") {
+		return "python"
+	}
+	if strings.HasSuffix(ext, ".js") || strings.HasSuffix(ext, ".ts") {
+		return "javascript"
+	}
+	if strings.HasSuffix(ext, ".java") {
+		return "java"
+	}
+	if strings.HasSuffix(ext, ".rs") {
+		return "rust"
+	}
+	if strings.HasSuffix(ext, ".c") || strings.HasSuffix(ext, ".h") {
+		return "c"
+	}
+	if strings.HasSuffix(ext, ".cpp") || strings.HasSuffix(ext, ".hpp") {
+		return "cpp"
+	}
+	if strings.HasSuffix(ext, ".rb") {
+		return "ruby"
+	}
+	if strings.HasSuffix(ext, ".php") {
+		return "php"
+	}
+	if strings.HasSuffix(ext, ".html") {
+		return "html"
+	}
+	if strings.HasSuffix(ext, ".css") {
+		return "css"
+	}
+	if strings.HasSuffix(ext, ".json") {
+		return "json"
+	}
+	if strings.HasSuffix(ext, ".yaml") || strings.HasSuffix(ext, ".yml") {
+		return "yaml"
+	}
+	if strings.HasSuffix(ext, ".md") {
+		return "markdown"
+	}
+	return "text"
+}

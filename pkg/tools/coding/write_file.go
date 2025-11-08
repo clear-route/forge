@@ -122,3 +122,83 @@ func (t *WriteFileTool) Execute(ctx context.Context, arguments json.RawMessage) 
 func (t *WriteFileTool) IsLoopBreaking() bool {
 	return false
 }
+
+// GeneratePreview implements the Previewable interface to show what will be written.
+func (t *WriteFileTool) GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error) {
+	var input struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+
+	if err := json.Unmarshal(arguments, &input); err != nil {
+		return nil, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	if input.Path == "" {
+		return nil, fmt.Errorf("missing required parameter: path")
+	}
+
+	// Validate path
+	if err := t.guard.ValidatePath(input.Path); err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Resolve to absolute path
+	absPath, err := t.guard.ResolvePath(input.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	// Check if file exists
+	var previewContent string
+	var title, description string
+	var previewType tools.PreviewType
+
+	if _, statErr := os.Stat(absPath); statErr == nil {
+		// File exists - show diff
+		originalContent, readErr := os.ReadFile(absPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read existing file: %w", readErr)
+		}
+
+		relPath, _ := t.guard.MakeRelative(absPath)
+		if relPath == "" {
+			relPath = input.Path
+		}
+
+		previewContent = GenerateUnifiedDiff(string(originalContent), input.Content, relPath)
+		previewType = tools.PreviewTypeDiff
+		title = fmt.Sprintf("Overwrite %s", relPath)
+		description = fmt.Sprintf("This will overwrite the existing file %s", relPath)
+	} else {
+		// File doesn't exist - show new content
+		relPath, _ := t.guard.MakeRelative(absPath)
+		if relPath == "" {
+			relPath = input.Path
+		}
+
+		previewContent = input.Content
+		previewType = tools.PreviewTypeFileWrite
+		title = fmt.Sprintf("Create new file %s", relPath)
+		description = fmt.Sprintf("This will create a new file at %s", relPath)
+	}
+
+	relPath, _ := t.guard.MakeRelative(absPath)
+	if relPath == "" {
+		relPath = input.Path
+	}
+
+	language := detectLanguage(relPath)
+
+	return &tools.ToolPreview{
+		Type:        previewType,
+		Title:       title,
+		Description: description,
+		Content:     previewContent,
+		Metadata: map[string]interface{}{
+			"file_path": relPath,
+			"language":  language,
+			"size":      len(input.Content),
+		},
+	}, nil
+}

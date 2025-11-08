@@ -11,6 +11,10 @@ type AgentChannels struct {
 	// The agent emits various events (thinking, messages, tool calls, errors, etc.) on this channel.
 	Event chan *AgentEvent
 
+	// Approval is the channel for receiving approval responses from the executor.
+	// When the agent requests approval, the executor sends the user's decision here.
+	Approval chan *ApprovalResponse
+
 	// Shutdown is the channel for signaling the agent to shut down.
 	// The executor closes this channel to initiate graceful shutdown.
 	Shutdown chan struct{}
@@ -26,6 +30,7 @@ func NewAgentChannels(bufferSize int) *AgentChannels {
 	return &AgentChannels{
 		Input:    make(chan *Input, bufferSize),
 		Event:    make(chan *AgentEvent, bufferSize),
+		Approval: make(chan *ApprovalResponse, bufferSize),
 		Shutdown: make(chan struct{}),
 		Done:     make(chan struct{}),
 	}
@@ -35,5 +40,6 @@ func NewAgentChannels(bufferSize int) *AgentChannels {
 // to prevent send on closed channel panics.
 func (c *AgentChannels) Close() {
 	close(c.Event)
+	close(c.Approval)
 	close(c.Done)
 }

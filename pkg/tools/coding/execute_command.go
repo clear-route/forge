@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/entrhq/forge/pkg/agent/tools"
@@ -168,4 +169,63 @@ func (t *ExecuteCommandTool) captureOutput(cmd *exec.Cmd) (stdout, stderr []byte
 // IsLoopBreaking indicates this tool should not break the agent loop
 func (t *ExecuteCommandTool) IsLoopBreaking() bool {
 	return false
+}
+
+// GeneratePreview implements the Previewable interface to show command details before execution.
+func (t *ExecuteCommandTool) GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error) {
+	var input struct {
+		Command    string  `json:"command"`
+		Timeout    float64 `json:"timeout"`
+		WorkingDir string  `json:"working_dir"`
+	}
+
+	if err := json.Unmarshal(arguments, &input); err != nil {
+		return nil, fmt.Errorf("failed to parse input: %w", err)
+	}
+
+	if input.Command == "" {
+		return nil, fmt.Errorf("command cannot be empty")
+	}
+
+	// Determine working directory
+	workDir := t.guard.WorkspaceDir()
+	if input.WorkingDir != "" {
+		if validateErr := t.guard.ValidatePath(input.WorkingDir); validateErr != nil {
+			return nil, fmt.Errorf("invalid working directory: %w", validateErr)
+		}
+
+		absWorkDir, resolveErr := t.guard.ResolvePath(input.WorkingDir)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("failed to resolve working directory: %w", resolveErr)
+		}
+		workDir = absWorkDir
+	}
+
+	// Determine timeout
+	timeout := t.defaultTimeout
+	if input.Timeout > 0 {
+		timeout = time.Duration(input.Timeout * float64(time.Second))
+	}
+
+	// Build preview content
+	var preview strings.Builder
+	preview.WriteString("Command: ")
+	preview.WriteString(input.Command)
+	preview.WriteString("\n\n")
+	preview.WriteString("Working Directory: ")
+	preview.WriteString(workDir)
+	preview.WriteString("\n\n")
+	preview.WriteString(fmt.Sprintf("Timeout: %s\n", timeout))
+
+	return &tools.ToolPreview{
+		Type:        tools.PreviewTypeCommand,
+		Title:       "Execute Command",
+		Description: fmt.Sprintf("This will execute the command: %s", input.Command),
+		Content:     preview.String(),
+		Metadata: map[string]interface{}{
+			"command":     input.Command,
+			"working_dir": workDir,
+			"timeout":     timeout.Seconds(),
+		},
+	}, nil
 }
