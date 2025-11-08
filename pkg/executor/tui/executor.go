@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -103,6 +105,7 @@ type model struct {
 	content        *strings.Builder
 	thinkingBuffer *strings.Builder
 	messageBuffer  *strings.Builder
+	overlay        *overlayState
 	isThinking     bool
 	width          int
 	height         int
@@ -133,6 +136,7 @@ func initialModel() model {
 		content:        &strings.Builder{},
 		thinkingBuffer: &strings.Builder{},
 		messageBuffer:  &strings.Builder{},
+		overlay:        newOverlayState(),
 	}
 }
 
@@ -306,6 +310,67 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	case types.EventTypeTurnEnd:
 		// Turn end - no extra spacing needed
 		return
+
+	case types.EventTypeToolApprovalRequest:
+		// Show "Requesting approval" message before overlay
+		formatted := formatEntry("  ⏳ ", "Requesting tool approval...", toolStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
+		m.viewport.SetContent(m.content.String())
+		m.viewport.GotoBottom()
+		
+		// Handle tool approval request by showing overlay
+		if event.Preview != nil {
+			preview, ok := event.Preview.(*tools.ToolPreview)
+			if ok {
+				// Create response callback that will be called by the overlay
+				responseFunc := func(response *types.ApprovalResponse) {
+					log.Printf("DEBUG Executor: responseFunc called with decision=%v for approval %s", response.Decision, response.ApprovalID)
+					
+					// Send approval response to agent
+					log.Printf("DEBUG Executor: Sending response to approval channel...")
+					m.channels.Approval <- response
+					log.Printf("DEBUG Executor: Response sent successfully")
+					
+					// Close overlay and update viewport
+					log.Printf("DEBUG Executor: Deactivating overlay and updating viewport")
+					m.overlay.deactivate()
+					m.viewport.SetContent(m.content.String())
+					m.viewport.GotoBottom()
+					log.Printf("DEBUG Executor: Viewport updated, callback complete")
+				}
+
+				// Create and activate diff viewer overlay
+				diffViewer := NewDiffViewer(
+					event.ApprovalID,
+					event.ToolName,
+					preview,
+					m.width,
+					m.height,
+					responseFunc,
+				)
+				m.overlay.activate(OverlayModeDiffViewer, diffViewer)
+			}
+		}
+		return
+
+	case types.EventTypeToolApprovalGranted:
+		// Approval granted - show confirmation
+		formatted := formatEntry("  ✓ ", "Tool approved - executing...", toolStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
+
+	case types.EventTypeToolApprovalRejected:
+		// Approval rejected - log it
+		formatted := formatEntry("  ✗ ", "Tool rejected by user", errorStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
+
+	case types.EventTypeToolApprovalTimeout:
+		// Approval timeout - log it
+		formatted := formatEntry("  ⏱ ", "Tool approval timed out", errorStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
 	}
 
 	// Update viewport for all other event types
@@ -390,6 +455,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
+		// If overlay is active, forward all key messages to it
+		if m.overlay.isActive() {
+			var overlayCmd tea.Cmd
+			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			return m, overlayCmd
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -541,7 +613,7 @@ func (m model) View() string {
 	)
 
 	// Assemble the full UI
-	return lipgloss.JoinVertical(
+	baseView := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
 		tips,
@@ -551,4 +623,11 @@ func (m model) View() string {
 		inputBox,
 		bottomBar,
 	)
+
+	// If overlay is active, render it on top
+	if m.overlay.isActive() {
+		return renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+	}
+
+	return baseView
 }

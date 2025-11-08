@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -588,18 +589,28 @@ func (a *DefaultAgent) handleApprovalResponse(response *types.ApprovalResponse) 
 	a.approvalMu.Lock()
 	defer a.approvalMu.Unlock()
 
+	log.Printf("DEBUG Agent: handleApprovalResponse called for approval %s, decision=%v", response.ApprovalID, response.Decision)
+
 	// Check if we have a pending approval matching this response
 	if a.pendingApproval == nil || a.pendingApproval.approvalID != response.ApprovalID {
 		// No matching pending approval - ignore this response
+		if a.pendingApproval == nil {
+			log.Printf("DEBUG Agent: ERROR - No pending approval found!")
+		} else {
+			log.Printf("DEBUG Agent: ERROR - Approval ID mismatch! Expected %s, got %s", a.pendingApproval.approvalID, response.ApprovalID)
+		}
 		return
 	}
 
+	log.Printf("DEBUG Agent: Sending response to channel...")
 	// Send the response to the waiting goroutine
 	select {
 	case a.pendingApproval.response <- response:
 		// Response delivered
+		log.Printf("DEBUG Agent: Response delivered to waiting goroutine")
 	default:
 		// Response channel full or closed - shouldn't happen
+		log.Printf("DEBUG Agent: ERROR - Response channel full or closed!")
 	}
 }
 
@@ -645,22 +656,62 @@ func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolC
 	timeout := time.NewTimer(a.approvalTimeout)
 	defer timeout.Stop()
 
+	log.Printf("DEBUG Agent: Waiting for approval response for %s...", approvalID)
 	select {
 	case <-ctx.Done():
 		// Context canceled
+		log.Printf("DEBUG Agent: Context canceled while waiting for approval")
 		return false, false
 
 	case <-timeout.C:
 		// Timeout - emit timeout event and reject
+		log.Printf("DEBUG Agent: Approval request timed out for %s", approvalID)
 		a.emitEvent(types.NewToolApprovalTimeoutEvent(approvalID, toolCall.ToolName))
 		return false, true
 
-	case response := <-responseChannel:
-		// Got response from user
-		if response.IsGranted() {
+	case approval := <-a.channels.Approval:
+		// Got approval directly from executor (handles deadlock case)
+		log.Printf("DEBUG Agent: Received approval directly from channel: %v", approval)
+		if approval == nil {
+			log.Printf("DEBUG Agent: ERROR - Received nil approval")
+			return false, false
+		}
+		
+		// Verify it's for this approval request
+		if approval.ApprovalID != approvalID {
+			log.Printf("DEBUG Agent: WARNING - Received approval for different request (expected %s, got %s)", approvalID, approval.ApprovalID)
+			// Put it back for the right handler - but this shouldn't happen
+			// Just ignore and keep waiting
+			select {
+			case a.channels.Approval <- approval:
+			default:
+			}
+			// Continue waiting
+			return a.requestApproval(ctx, toolCall, preview)
+		}
+		
+		// Process the approval
+		log.Printf("DEBUG Agent: Processing approval: granted=%v", approval.IsGranted())
+		if approval.IsGranted() {
+			log.Printf("DEBUG Agent: Emitting ToolApprovalGranted event")
 			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+			log.Printf("DEBUG Agent: Returning approved=true")
 			return true, false
 		}
+		log.Printf("DEBUG Agent: Emitting ToolApprovalRejected event")
+		a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
+		return false, false
+
+	case response := <-responseChannel:
+		// Got response from internal channel (via handleApprovalResponse)
+		log.Printf("DEBUG Agent: Received response from internal channel: granted=%v", response.IsGranted())
+		if response.IsGranted() {
+			log.Printf("DEBUG Agent: Emitting ToolApprovalGranted event")
+			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+			log.Printf("DEBUG Agent: Returning approved=true")
+			return true, false
+		}
+		log.Printf("DEBUG Agent: Emitting ToolApprovalRejected event")
 		a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
 		return false, false
 	}

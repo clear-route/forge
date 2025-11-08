@@ -184,14 +184,19 @@ func TestToolCallParser_Flush(t *testing.T) {
 func TestToolCallParser_FlushRegularContent(t *testing.T) {
 	parser := NewToolCallParser()
 
-	// Parse incomplete tag
-	parser.Parse("text <incomplete")
+	// Parse incomplete tag - content is flushed immediately since it doesn't match <tool prefix
+	_, regular1 := parser.Parse("text <incomplete")
 
-	// Flush should return all buffered content as regular
-	toolCall, regular := parser.Flush()
+	// All content should be flushed during Parse since "<incomplete" doesn't match "<tool" prefix
+	if regular1 == nil || regular1.Content != "text <incomplete" {
+		t.Errorf("Expected parsed regular content 'text <incomplete', got %v", regular1)
+	}
 
-	if regular == nil || regular.Content != "text <incomplete" {
-		t.Errorf("Expected flushed regular content 'text <incomplete', got %v", regular)
+	// Flush should return nothing since everything was already emitted
+	toolCall, regular2 := parser.Flush()
+
+	if regular2 != nil {
+		t.Errorf("Expected no remaining regular content, got %v", regular2)
 	}
 	if toolCall != nil {
 		t.Errorf("Expected no tool call content, got %v", toolCall)

@@ -97,10 +97,13 @@ func (p *ToolCallParser) handleToolEnd() *ParsedContent {
 	p.buffer.Reset()
 	p.inToolCall = false
 
-	// Add any remaining content to tool content
+	// Add any remaining buffered content to tool content
 	p.toolContent.WriteString(textBefore)
 	content := p.toolContent.String()
 	p.toolContent.Reset()
+
+	// Trim any trailing whitespace or stray characters
+	content = strings.TrimSpace(content)
 
 	return &ParsedContent{
 		Type:    ContentTypeToolCall,
@@ -120,7 +123,9 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 	// This handles streaming where tags may be split across chunks
 	var flushText string
 	if p.inToolCall {
-		// Inside tool call, check for potential </tool> prefix
+		// Inside tool call - keep partial </tool> prefixes buffered
+		// Move everything else to toolContent but DON'T emit as events yet
+		// This prevents premature JSON parsing before </tool> arrives
 		if len(text) >= 6 && text[len(text)-6:] == "</tool" {
 			flushText = text[:len(text)-6]
 			p.buffer.Reset()
@@ -146,6 +151,8 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 			p.buffer.Reset()
 			p.buffer.WriteString("<")
 		} else {
+			// No partial closing tag detected
+			// Move to toolContent but don't emit yet (wait for </tool>)
 			flushText = text
 			p.buffer.Reset()
 		}
@@ -181,7 +188,8 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 		return nil
 	}
 
-	// If we're in a tool call, add to tool content
+	// If we're in a tool call, accumulate to toolContent but DON'T emit
+	// The content will only be emitted when we see the complete </tool> tag
 	if p.inToolCall {
 		p.toolContent.WriteString(flushText)
 		return nil
