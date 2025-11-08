@@ -49,8 +49,26 @@ func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, widt
 	vp := viewport.New(overlayWidth-4, viewportHeight)
 	vp.Style = lipgloss.NewStyle()
 
+	// Apply syntax highlighting to the diff content
+	content := ""
 	if preview != nil {
-		vp.SetContent(preview.Content)
+		// Extract language from metadata
+		language := ""
+		if preview.Metadata != nil {
+			if lang, ok := preview.Metadata["language"].(string); ok {
+				language = lang
+			}
+		}
+
+		// Apply syntax highlighting
+		highlightedContent, err := HighlightDiff(preview.Content, language)
+		if err != nil {
+			// Fall back to original content if highlighting fails
+			content = preview.Content
+		} else {
+			content = highlightedContent
+		}
+		vp.SetContent(content)
 	}
 
 	return &DiffViewer{

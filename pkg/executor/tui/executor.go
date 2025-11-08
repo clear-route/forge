@@ -97,18 +97,19 @@ type agentErrMsg struct{ err error }
 
 // model represents the state of the TUI application.
 type model struct {
-	viewport       viewport.Model
-	textarea       textarea.Model
-	agent          agent.Agent
-	channels       *types.AgentChannels
-	content        *strings.Builder
-	thinkingBuffer *strings.Builder
-	messageBuffer  *strings.Builder
-	overlay        *overlayState
-	isThinking     bool
-	width          int
-	height         int
-	ready          bool
+	viewport                 viewport.Model
+	textarea                 textarea.Model
+	agent                    agent.Agent
+	channels                 *types.AgentChannels
+	content                  *strings.Builder
+	thinkingBuffer           *strings.Builder
+	messageBuffer            *strings.Builder
+	overlay                  *overlayState
+	isThinking               bool
+	width                    int
+	height                   int
+	ready                    bool
+	hasMessageContentStarted bool
 
 	// Token usage tracking
 	totalPromptTokens     int
@@ -261,19 +262,12 @@ func (m *model) handleMessageContent(content string) bool {
 		return false
 	}
 
-	// Wrap the content to terminal width before adding
-	wrapWidth := m.width - 4
-	if wrapWidth <= 0 {
-		wrapWidth = 80
-	}
-	wrappedContent := wordWrap(content, wrapWidth)
+	// Buffer the content (like thinking does)
+	m.messageBuffer.WriteString(content)
 
-	// Buffer and display wrapped content (no "Assistant:" label needed as responses come through tools)
-	m.messageBuffer.WriteString(wrappedContent)
-	m.content.WriteString(wrappedContent)
-
-	// Update viewport immediately for streaming effect
-	m.viewport.SetContent(m.content.String())
+	// Stream message content as it arrives (like thinking does)
+	formatted := formatEntry("", m.messageBuffer.String(), lipgloss.NewStyle(), m.width, false)
+	m.viewport.SetContent(m.content.String() + formatted)
 	m.viewport.GotoBottom()
 	return true
 }
@@ -324,11 +318,22 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.messageBuffer.Reset()
 
 	case types.EventTypeMessageContent:
+		if strings.TrimSpace(event.Content) != "" && !m.hasMessageContentStarted {
+			m.content.WriteString("\n\n")
+			m.hasMessageContentStarted = true
+		}
 		if m.handleMessageContent(event.Content) {
 			return // Viewport already updated in handleMessageContent
 		}
 
 	case types.EventTypeMessageEnd:
+		// Finalize message content (like thinking does)
+		if m.messageBuffer.Len() > 0 && m.hasMessageContentStarted {
+			formatted := formatEntry("", m.messageBuffer.String(), lipgloss.NewStyle(), m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n\n")
+			m.hasMessageContentStarted = false
+		}
 		m.messageBuffer.Reset()
 
 	case types.EventTypeError:
