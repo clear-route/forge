@@ -68,48 +68,68 @@ func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelC
 }
 
 // Update handles messages for the command overlay
+//
+//nolint:gocyclo // Complex key handling logic is intentional for overlay UX
 func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if c.isRunning {
-			// Handle cancellation keys
-			switch msg.String() {
-			case "ctrl+c", "esc":
-				// Send cancellation request
-				if c.cancelChannel != nil {
-					c.cancelChannel <- &types.CancellationRequest{
-						ExecutionID: c.executionID,
-					}
+		// Debug: Always try to handle cancellation keys regardless of isRunning state
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
+			// Send cancellation request if running
+			if c.isRunning && c.cancelChannel != nil {
+				c.cancelChannel <- &types.CancellationRequest{
+					ExecutionID: c.executionID,
 				}
 				c.status = "Canceling..."
 				return c, nil
 			}
-		} else {
-			// Command is finished - any key closes the overlay
-			// Return nil to signal overlay should be closed
+			// If not running, close the overlay
 			return nil, nil
 		}
 
-		// Handle viewport scrolling (only while command is running)
-		switch msg.String() {
-		case "up", "k":
+		// Handle viewport scrolling
+		switch msg.Type {
+		case tea.KeyUp:
 			c.viewport, cmd = c.viewport.Update(msg)
 			return c, cmd
-		case "down", "j":
+		case tea.KeyDown:
 			c.viewport, cmd = c.viewport.Update(msg)
 			return c, cmd
-		case "pgup", "b":
+		case tea.KeyPgUp:
 			c.viewport, cmd = c.viewport.Update(msg)
 			return c, cmd
-		case "pgdown", "f":
+		case tea.KeyPgDown:
 			c.viewport, cmd = c.viewport.Update(msg)
 			return c, cmd
-		case "home", "g":
+		case tea.KeyHome:
 			c.viewport.GotoTop()
 			return c, nil
-		case "end", "G":
+		case tea.KeyEnd:
+			c.viewport.GotoBottom()
+			return c, nil
+		}
+
+		// Also handle vi-style keys with string matching
+		switch msg.String() {
+		case "k":
+			c.viewport, cmd = c.viewport.Update(msg)
+			return c, cmd
+		case "j":
+			c.viewport, cmd = c.viewport.Update(msg)
+			return c, cmd
+		case "b":
+			c.viewport, cmd = c.viewport.Update(msg)
+			return c, cmd
+		case "f":
+			c.viewport, cmd = c.viewport.Update(msg)
+			return c, cmd
+		case "g":
+			c.viewport.GotoTop()
+			return c, nil
+		case "G":
 			c.viewport.GotoBottom()
 			return c, nil
 		}
@@ -172,6 +192,8 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (O
 	case types.EventTypeCommandExecutionCanceled:
 		c.isRunning = false
 		c.status = "Canceled by user"
+		// Auto-close overlay on cancellation
+		return nil, nil
 	}
 
 	return c, nil

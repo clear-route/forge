@@ -44,6 +44,9 @@ type DefaultAgent struct {
 	cancelMu     sync.Mutex
 	cancelStream context.CancelFunc
 
+	// Command execution tracking
+	activeCommands sync.Map // executionID -> context.CancelFunc
+
 	// Running state
 	running bool
 	runMu   sync.Mutex
@@ -184,6 +187,26 @@ func (a *DefaultAgent) eventLoop(ctx context.Context) {
 		a.runMu.Lock()
 		a.running = false
 		a.runMu.Unlock()
+	}()
+
+	// Start a separate goroutine to handle cancellation requests
+	// This ensures cancellations are processed even when the main loop is blocked
+	cancelCtx, cancelStop := context.WithCancel(ctx)
+	defer cancelStop()
+
+	go func() {
+		for {
+			select {
+			case <-cancelCtx.Done():
+				return
+			case cancelReq := <-a.channels.Cancel:
+				if cancelReq == nil {
+					return
+				}
+				// Handle command cancellation request immediately
+				a.handleCommandCancellation(cancelReq)
+			}
+		}
 	}()
 
 	for {
@@ -583,11 +606,12 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	}
 	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
 
-	// Inject event emitter into context for tools that support streaming events
+	// Inject event emitter and command registry into context for tools that support streaming events
 	ctxWithEmitter := context.WithValue(ctx, coding.EventEmitterKey, coding.EventEmitter(a.emitEvent))
+	ctxWithRegistry := context.WithValue(ctxWithEmitter, coding.CommandRegistryKey, &a.activeCommands)
 
 	// Execute the tool
-	result, toolErr := tool.Execute(ctxWithEmitter, toolCall.Arguments)
+	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.Arguments)
 	if toolErr != nil {
 		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
@@ -638,6 +662,19 @@ func (a *DefaultAgent) handleApprovalResponse(response *types.ApprovalResponse) 
 		// Response delivered
 	default:
 		// Response channel full or closed - shouldn't happen
+	}
+}
+
+// handleCommandCancellation processes a command cancellation request
+func (a *DefaultAgent) handleCommandCancellation(req *types.CancellationRequest) {
+	// Look up the cancel function for this execution ID
+	if cancelFunc, ok := a.activeCommands.Load(req.ExecutionID); ok {
+		// Cancel the context (cancellation never returns an error)
+		if cf, ok := cancelFunc.(context.CancelFunc); ok {
+			cf()
+		}
+		// Remove from active commands
+		a.activeCommands.Delete(req.ExecutionID)
 	}
 }
 

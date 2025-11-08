@@ -62,6 +62,8 @@ func (t *ExecuteCommandTool) Schema() map[string]interface{} {
 }
 
 // Execute runs the command with streaming output support
+//
+//nolint:gocyclo // Complexity is acceptable for command execution logic
 func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var input struct {
 		Command    string  `json:"command"`
@@ -109,6 +111,12 @@ func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMess
 	// Generate execution ID for tracking
 	execID := fmt.Sprintf("cmd_%d", time.Now().UnixNano())
 
+	// Register this command's cancel function if we have a command registry
+	if registry, ok := ctx.Value(CommandRegistryKey).(*sync.Map); ok {
+		registry.Store(execID, cancel)
+		defer registry.Delete(execID)
+	}
+
 	// Emit command execution start event if emitter available
 	if emitEvent != nil {
 		emitEvent(types.NewCommandExecutionStartEvent(execID, input.Command, workDir))
@@ -136,8 +144,10 @@ func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMess
 	// Emit final state event
 	if emitEvent != nil {
 		durationStr := duration.String()
+
 		if execErr != nil {
-			if execCtx.Err() == context.DeadlineExceeded {
+			// Check if context was canceled (either by user or timeout)
+			if execCtx.Err() == context.Canceled || execCtx.Err() == context.DeadlineExceeded {
 				emitEvent(types.NewCommandExecutionCanceledEvent(execID, durationStr))
 			} else {
 				emitEvent(types.NewCommandExecutionFailedEvent(execID, exitCode, durationStr, execErr))
@@ -150,11 +160,15 @@ func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMess
 	// Format response
 	var result string
 	if execErr != nil {
-		// Check if timeout
-		if execCtx.Err() == context.DeadlineExceeded {
+		// Check if context was canceled or timed out
+		switch execCtx.Err() {
+		case context.Canceled:
+			result = fmt.Sprintf("Command was canceled by user after %s\n\nThe command execution was interrupted before completion.\n\nStdout:\n%s\n\nStderr:\n%s",
+				duration.String(), stdout, stderr)
+		case context.DeadlineExceeded:
 			result = fmt.Sprintf("Command timed out after %s\n\nStdout:\n%s\n\nStderr:\n%s",
 				duration.String(), stdout, stderr)
-		} else {
+		default:
 			result = fmt.Sprintf("Command failed with exit code %d\n\nStdout:\n%s\n\nStderr:\n%s",
 				exitCode, stdout, stderr)
 		}
@@ -279,6 +293,9 @@ type ContextKey string
 // EventEmitterKey is the context key for the event emitter
 const EventEmitterKey ContextKey = "event_emitter"
 
+// CommandRegistryKey is the context key for the command registry (sync.Map)
+const CommandRegistryKey ContextKey = "command_registry"
+
 // getEventEmitterFromContext retrieves the event emitter from context if available
 func getEventEmitterFromContext(ctx context.Context) EventEmitter {
 	if emitter, ok := ctx.Value(EventEmitterKey).(EventEmitter); ok {
@@ -288,7 +305,6 @@ func getEventEmitterFromContext(ctx context.Context) EventEmitter {
 }
 
 // runCommandStreaming executes a command with streaming output support
-// TODO: Use ctx for cancellation support
 func (t *ExecuteCommandTool) runCommandStreaming(ctx context.Context, cmd *exec.Cmd, execID string, emitEvent EventEmitter) (stdout, stderr string, exitCode int, err error) {
 	// Create pipes for stdout and stderr
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -311,6 +327,25 @@ func (t *ExecuteCommandTool) runCommandStreaming(ctx context.Context, cmd *exec.
 	var stdoutBuilder, stderrBuilder strings.Builder
 	var outputMu sync.Mutex
 
+	// Monitor context cancellation and kill process if needed
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Context was canceled - kill the process
+			if cmd.Process != nil {
+				// Use Kill() for immediate termination
+				// We intentionally ignore the error here because:
+				// 1. The process may have already exited
+				// 2. We're in cancellation mode and want to proceed regardless
+				//nolint:errcheck
+				cmd.Process.Kill()
+			}
+		case <-done:
+			// Command finished normally
+		}
+	}()
+
 	// Stream stdout
 	wg.Add(1)
 	go func() {
@@ -325,11 +360,14 @@ func (t *ExecuteCommandTool) runCommandStreaming(ctx context.Context, cmd *exec.
 		t.streamOutput(stderrPipe, "stderr", execID, emitEvent, &stderrBuilder, &outputMu)
 	}()
 
-	// Wait for streaming to complete
-	wg.Wait()
-
-	// Wait for command to finish
+	// Wait for command to finish (this closes the pipes)
 	execErr := cmd.Wait()
+
+	// Signal that command is done
+	close(done)
+
+	// Wait for streaming to complete (now that pipes are closed)
+	wg.Wait()
 
 	// Get final output
 	outputMu.Lock()
