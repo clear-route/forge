@@ -13,6 +13,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
+	"github.com/entrhq/forge/pkg/tools/coding"
 	"github.com/entrhq/forge/pkg/types"
 
 	"github.com/google/uuid"
@@ -582,8 +583,11 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	}
 	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
 
+	// Inject event emitter into context for tools that support streaming events
+	ctxWithEmitter := context.WithValue(ctx, coding.EventEmitterKey, coding.EventEmitter(a.emitEvent))
+
 	// Execute the tool
-	result, toolErr := tool.Execute(ctx, toolCall.Arguments)
+	result, toolErr := tool.Execute(ctxWithEmitter, toolCall.Arguments)
 	if toolErr != nil {
 		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
