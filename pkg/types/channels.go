@@ -15,6 +15,10 @@ type AgentChannels struct {
 	// When the agent requests approval, the executor sends the user's decision here.
 	Approval chan *ApprovalResponse
 
+	// Cancel is the channel for receiving cancellation requests from the executor.
+	// The executor sends cancellation requests here to interrupt running commands.
+	Cancel chan *CancellationRequest
+
 	// Shutdown is the channel for signaling the agent to shut down.
 	// The executor closes this channel to initiate graceful shutdown.
 	Shutdown chan struct{}
@@ -31,6 +35,7 @@ func NewAgentChannels(bufferSize int) *AgentChannels {
 		Input:    make(chan *Input, bufferSize),
 		Event:    make(chan *AgentEvent, bufferSize),
 		Approval: make(chan *ApprovalResponse, bufferSize),
+		Cancel:   make(chan *CancellationRequest, bufferSize),
 		Shutdown: make(chan struct{}),
 		Done:     make(chan struct{}),
 	}
@@ -41,5 +46,12 @@ func NewAgentChannels(bufferSize int) *AgentChannels {
 func (c *AgentChannels) Close() {
 	close(c.Event)
 	close(c.Approval)
+	close(c.Cancel)
 	close(c.Done)
+}
+
+// CancellationRequest represents a request to cancel a running command.
+type CancellationRequest struct {
+	// ExecutionID is the unique identifier of the command execution to cancel.
+	ExecutionID string
 }

@@ -26,8 +26,13 @@ const (
 	EventTypeToolApprovalRequest   AgentEventType = "tool_approval_request"   // EventTypeToolApprovalRequest indicates the agent is requesting approval for a tool execution.
 	EventTypeToolApprovalTimeout   AgentEventType = "tool_approval_timeout"   // EventTypeToolApprovalTimeout indicates an approval request has timed out.
 	EventTypeToolApprovalGranted   AgentEventType = "tool_approval_granted"   // EventTypeToolApprovalGranted indicates the user approved the tool execution.
-	EventTypeToolApprovalRejected  AgentEventType = "tool_approval_rejected"  // EventTypeToolApprovalRejected indicates the user rejected the tool execution.
-	EventTypeTokenUsage            AgentEventType = "token_usage"             // EventTypeTokenUsage indicates token usage information from an LLM completion.
+	EventTypeToolApprovalRejected     AgentEventType = "tool_approval_rejected"     // EventTypeToolApprovalRejected indicates the user rejected the tool execution.
+	EventTypeTokenUsage               AgentEventType = "token_usage"                // EventTypeTokenUsage indicates token usage information from an LLM completion.
+	EventTypeCommandExecutionStart    AgentEventType = "command_execution_start"    // EventTypeCommandExecutionStart indicates a command has started executing.
+	EventTypeCommandOutput            AgentEventType = "command_output"             // EventTypeCommandOutput indicates output from a running command.
+	EventTypeCommandExecutionComplete AgentEventType = "command_execution_complete" // EventTypeCommandExecutionComplete indicates a command finished successfully.
+	EventTypeCommandExecutionFailed   AgentEventType = "command_execution_failed"   // EventTypeCommandExecutionFailed indicates a command failed with an error.
+	EventTypeCommandExecutionCancelled AgentEventType = "command_execution_cancelled" // EventTypeCommandExecutionCancelled indicates a command was cancelled by the user.
 )
 
 // AgentEvent represents an event emitted by the agent during execution.
@@ -65,6 +70,9 @@ type AgentEvent struct {
 	// TokenUsage contains token usage information (for token usage events).
 	// Fields: PromptTokens, CompletionTokens, TotalTokens
 	TokenUsage *TokenUsage
+
+	// CommandExecution contains command execution information (for command execution events).
+	CommandExecution *CommandExecution
 }
 
 // TokenUsage contains token usage statistics from an LLM API call.
@@ -77,6 +85,30 @@ type TokenUsage struct {
 
 	// TotalTokens is the total number of tokens used (prompt + completion).
 	TotalTokens int
+}
+
+// CommandExecution contains information about command execution.
+type CommandExecution struct {
+	// Command is the shell command being executed.
+	Command string
+
+	// WorkingDir is the working directory for the command.
+	WorkingDir string
+
+	// Output is the buffered output chunk (for CommandOutput events).
+	Output string
+
+	// StreamType indicates whether output is from stdout or stderr.
+	StreamType string // "stdout" or "stderr"
+
+	// ExitCode is the command's exit code (for completion/failed events).
+	ExitCode int
+
+	// Duration is how long the command took to execute.
+	Duration string
+
+	// ExecutionID is a unique identifier for this command execution.
+	ExecutionID string
 }
 
 // NewThinkingStartEvent creates a thinking start event.
@@ -297,6 +329,72 @@ func NewTokenUsageEvent(promptTokens, completionTokens, totalTokens int) *AgentE
 	}
 }
 
+// NewCommandExecutionStartEvent creates a command execution start event.
+func NewCommandExecutionStartEvent(executionID, command, workingDir string) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeCommandExecutionStart,
+		CommandExecution: &CommandExecution{
+			ExecutionID: executionID,
+			Command:     command,
+			WorkingDir:  workingDir,
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewCommandOutputEvent creates a command output event.
+func NewCommandOutputEvent(executionID, output, streamType string) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeCommandOutput,
+		CommandExecution: &CommandExecution{
+			ExecutionID: executionID,
+			Output:      output,
+			StreamType:  streamType,
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewCommandExecutionCompleteEvent creates a command execution complete event.
+func NewCommandExecutionCompleteEvent(executionID string, exitCode int, duration string) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeCommandExecutionComplete,
+		CommandExecution: &CommandExecution{
+			ExecutionID: executionID,
+			ExitCode:    exitCode,
+			Duration:    duration,
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewCommandExecutionFailedEvent creates a command execution failed event.
+func NewCommandExecutionFailedEvent(executionID string, exitCode int, duration string, err error) *AgentEvent {
+	return &AgentEvent{
+		Type:  EventTypeCommandExecutionFailed,
+		Error: err,
+		CommandExecution: &CommandExecution{
+			ExecutionID: executionID,
+			ExitCode:    exitCode,
+			Duration:    duration,
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
+// NewCommandExecutionCancelledEvent creates a command execution cancelled event.
+func NewCommandExecutionCancelledEvent(executionID string, duration string) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeCommandExecutionCancelled,
+		CommandExecution: &CommandExecution{
+			ExecutionID: executionID,
+			Duration:    duration,
+			ExitCode:    -1, // Indicate cancellation
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
 // WithMetadata adds metadata to the event and returns the event for chaining.
 func (e *AgentEvent) WithMetadata(key string, value interface{}) *AgentEvent {
 	if e.Metadata == nil {
@@ -351,4 +449,13 @@ func (e *AgentEvent) IsApprovalEvent() bool {
 		e.Type == EventTypeToolApprovalTimeout ||
 		e.Type == EventTypeToolApprovalGranted ||
 		e.Type == EventTypeToolApprovalRejected
+}
+
+// IsCommandExecutionEvent returns true if this is any command execution-related event.
+func (e *AgentEvent) IsCommandExecutionEvent() bool {
+	return e.Type == EventTypeCommandExecutionStart ||
+		e.Type == EventTypeCommandOutput ||
+		e.Type == EventTypeCommandExecutionComplete ||
+		e.Type == EventTypeCommandExecutionFailed ||
+		e.Type == EventTypeCommandExecutionCancelled
 }
