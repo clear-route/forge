@@ -183,13 +183,6 @@ func (d *DiffViewer) View() string {
 	// Content width accounts for outer container border (2) + padding (4) = 6 chars
 	contentWidth := d.width - 6
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(salmonPink)
-
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(mutedGray)
-
 	title := "Tool Approval Required"
 	subtitle := fmt.Sprintf("%s: %s", d.toolName, d.preview.Title)
 
@@ -199,9 +192,9 @@ func (d *DiffViewer) View() string {
 	titlePadding := (contentWidth - titleLen) / 2
 	subtitlePadding := (contentWidth - subtitleLen) / 2
 
-	s.WriteString(strings.Repeat(" ", titlePadding) + titleStyle.Render(title))
+	s.WriteString(strings.Repeat(" ", titlePadding) + OverlayTitleStyle.Render(title))
 	s.WriteString("\n")
-	s.WriteString(strings.Repeat(" ", subtitlePadding) + subtitleStyle.Render(subtitle))
+	s.WriteString(strings.Repeat(" ", subtitlePadding) + OverlaySubtitleStyle.Render(subtitle))
 	s.WriteString("\n\n")
 
 	// Diff box has its own border (2) + padding (2), so reduce width further
@@ -214,36 +207,15 @@ func (d *DiffViewer) View() string {
 	s.WriteString(diffStyle.Render(d.viewport.View()))
 	s.WriteString("\n\n")
 
-	acceptStyle := lipgloss.NewStyle().
-		Bold(true).
-		Padding(0, 2)
-
-	rejectStyle := lipgloss.NewStyle().
-		Bold(true).
-		Padding(0, 2)
-
-	if d.selected == ApprovalChoiceAccept {
-		acceptStyle = acceptStyle.
-			Foreground(lipgloss.Color("#000000")).
-			Background(lipgloss.Color("#A8E6CF"))
-		rejectStyle = rejectStyle.
-			Foreground(mutedGray).
-			Background(darkBg)
-	} else {
-		acceptStyle = acceptStyle.
-			Foreground(mutedGray).
-			Background(darkBg)
-		rejectStyle = rejectStyle.
-			Foreground(lipgloss.Color("#000000")).
-			Background(lipgloss.Color("#FFB3BA"))
-	}
+	// Use shared button styles for consistency
+	acceptStyle := GetAcceptButtonStyle(d.selected == ApprovalChoiceAccept)
+	rejectStyle := GetRejectButtonStyle(d.selected == ApprovalChoiceReject)
 
 	acceptBtn := acceptStyle.Render("✓ Accept (Enter / Ctrl+A)")
 	rejectBtn := rejectStyle.Render("✗ Reject (Esc / Ctrl+R)")
 
-	// Create spacer with dark background to match container
-	spacerStyle := lipgloss.NewStyle().Background(darkBg)
-	spacer := spacerStyle.Render("  ")
+	// Use shared spacer utility for consistency
+	spacer := CreateStyledSpacer(2)
 
 	// Join buttons with styled spacer
 	buttonsRow := acceptBtn + spacer + rejectBtn
@@ -255,24 +227,14 @@ func (d *DiffViewer) View() string {
 	s.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
 	s.WriteString("\n")
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(mutedGray).
-		Italic(true)
-
 	hints := "↑↓ to scroll • ← → Tab to choose • Enter to submit"
 	hintsLen := len(hints)
 	hintsPadding := (contentWidth - hintsLen) / 2
 
-	s.WriteString(strings.Repeat(" ", hintsPadding) + hintStyle.Render(hints))
+	s.WriteString(strings.Repeat(" ", hintsPadding) + OverlayHelpStyle.Render(hints))
 
-	containerStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
-		Padding(1, 2).
-		Width(d.width).
-		Background(darkBg)
-
-	return containerStyle.Render(s.String())
+	// Use shared overlay container style for consistency (width only, height determined by content)
+	return CreateOverlayContainerStyle(d.width).Render(s.String())
 }
 
 func (d *DiffViewer) Focused() bool {

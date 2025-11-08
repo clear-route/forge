@@ -17,37 +17,7 @@ import (
 	"github.com/entrhq/forge/pkg/types"
 )
 
-var (
-	// Color palette with pastel salmon pink
-	salmonPink  = lipgloss.Color("#FFB3BA") // Soft pastel salmon pink
-	coralPink   = lipgloss.Color("#FFCCCB") // Lighter coral accent
-	mutedGray   = lipgloss.Color("#6B7280")
-	brightWhite = lipgloss.Color("#F9FAFB")
-	darkBg      = lipgloss.Color("#111827")
-
-	// Styles
-	headerStyle = lipgloss.NewStyle().
-			Foreground(salmonPink).
-			Bold(true)
-
-	tipsStyle = lipgloss.NewStyle().
-			Foreground(mutedGray)
-
-	statusBarStyle = lipgloss.NewStyle().
-			Foreground(mutedGray).
-			Background(darkBg).
-			Padding(0, 1)
-
-	inputBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(salmonPink).
-			Padding(0, 1)
-
-	userStyle     = lipgloss.NewStyle().Foreground(coralPink).Bold(true)
-	thinkingStyle = lipgloss.NewStyle().Foreground(mutedGray).Italic(true)
-	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8E6CF")) // Soft mint green
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB3BA")) // Match salmon for errors
-)
+// Colors and styles are now defined in styles.go for consistency across all TUI components
 
 // Executor is a TUI-based executor that provides an interactive,
 // Gemini-style interface for agent interaction.
@@ -308,6 +278,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	case types.EventTypeToolCall:
 		formatted := formatEntry("🔧 ", event.ToolName, toolStyle, m.width, false)
 		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
 
 	case types.EventTypeToolResult:
 		resultStr := fmt.Sprintf("%v", event.ToolOutput)
@@ -337,7 +308,8 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.messageBuffer.Reset()
 
 	case types.EventTypeError:
-		m.content.WriteString("\n" + errorStyle.Render(fmt.Sprintf("  ❌ Error: %v", event.Error)))
+		m.content.WriteString(errorStyle.Render(fmt.Sprintf("  ❌ Error: %v", event.Error)))
+		m.content.WriteString("\n\n")
 
 	case types.EventTypeTurnEnd:
 		// Turn end - no extra spacing needed
@@ -495,14 +467,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vpCmd tea.Cmd
 	)
 
-	// Store old textarea height to detect changes
-	oldHeight := m.textarea.Height()
-	m.textarea, tiCmd = m.textarea.Update(msg)
-	newHeight := m.textarea.Height()
+	// Only update textarea if no overlay is active
+	// This prevents the textarea from capturing scroll events when an overlay is open
+	if !m.overlay.isActive() {
+		// Store old textarea height to detect changes
+		oldHeight := m.textarea.Height()
+		m.textarea, tiCmd = m.textarea.Update(msg)
+		newHeight := m.textarea.Height()
 
-	// If textarea height changed, recalculate viewport height
-	if oldHeight != newHeight && m.ready {
-		m.recalculateLayout()
+		// If textarea height changed, recalculate viewport height
+		if oldHeight != newHeight && m.ready {
+			m.recalculateLayout()
+		}
 	}
 
 	switch msg := msg.(type) {

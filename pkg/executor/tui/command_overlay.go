@@ -10,27 +10,11 @@ import (
 	"github.com/entrhq/forge/pkg/types"
 )
 
+// Command overlay-specific styles that extend the shared overlay styles
 var (
-	// Command overlay styles
-	commandOverlayStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(salmonPink).
-				Padding(1, 2).
-				Width(80).
-				Height(30)
-
-	commandHeaderStyle = lipgloss.NewStyle().
-				Foreground(salmonPink).
-				Bold(true).
-				MarginBottom(1)
-
 	commandStatusStyle = lipgloss.NewStyle().
-				Foreground(mutedGray).
-				Italic(true)
-
-	commandHelpStyle = lipgloss.NewStyle().
-				Foreground(mutedGray).
-				MarginTop(1)
+		Foreground(mutedGray).
+		Italic(true)
 )
 
 // CommandExecutionOverlay displays streaming command output with cancellation support
@@ -134,6 +118,11 @@ func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 			return c, nil
 		}
 
+	case tea.MouseMsg:
+		// Handle mouse events (especially scroll wheel) for viewport scrolling
+		c.viewport, cmd = c.viewport.Update(msg)
+		return c, cmd
+
 	case *types.AgentEvent:
 		// Handle command execution events
 		if msg.IsCommandExecutionEvent() {
@@ -201,8 +190,9 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (O
 
 // View renders the command overlay
 func (c *CommandExecutionOverlay) View() string {
-	// Build header
-	header := commandHeaderStyle.Render("Command Execution")
+	// Build header using shared overlay title style with margin
+	headerStyle := OverlayTitleStyle.MarginBottom(1)
+	header := headerStyle.Render("Command Execution")
 
 	// Build command info
 	commandInfo := fmt.Sprintf("Command: %s", c.command)
@@ -216,12 +206,13 @@ func (c *CommandExecutionOverlay) View() string {
 	// Build output viewport
 	outputView := c.viewport.View()
 
-	// Build help text
+	// Build help text using shared overlay help style with margin
+	helpStyle := OverlayHelpStyle.MarginTop(1)
 	var helpText string
 	if c.isRunning {
-		helpText = commandHelpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page")
+		helpText = helpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page")
 	} else {
-		helpText = commandHelpStyle.Render("Press Esc key to close")
+		helpText = helpStyle.Render("Press Esc key to close")
 	}
 
 	// Combine all parts
@@ -235,11 +226,8 @@ func (c *CommandExecutionOverlay) View() string {
 		helpText,
 	)
 
-	// Apply overall styling
-	return commandOverlayStyle.
-		Width(c.width).
-		Height(c.height).
-		Render(content)
+	// Use shared overlay container style for consistency (width only, height determined by content)
+	return CreateOverlayContainerStyle(c.width).Render(content)
 }
 
 // Focused returns whether this overlay should handle input
@@ -255,12 +243,4 @@ func (c *CommandExecutionOverlay) Width() int {
 // Height returns the overlay height
 func (c *CommandExecutionOverlay) Height() int {
 	return c.height
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

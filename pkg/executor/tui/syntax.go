@@ -29,15 +29,7 @@ type DiffLine struct {
 	Marker  string // The diff marker (+, -, space, @@)
 }
 
-// Color definitions for diff markers and backgrounds
-var (
-	diffAddColor      = lipgloss.Color("#90EE90") // Green for additions
-	diffDeleteColor   = lipgloss.Color("#FFB3BA") // Red for deletions
-	diffHunkColor     = lipgloss.Color("#87CEEB") // Cyan for hunk headers
-	diffHeaderColor   = lipgloss.Color("#FFA07A") // Orange for file headers
-	diffAddBgColor    = lipgloss.Color("#2d4a2b") // Dark green background for added lines
-	diffDeleteBgColor = lipgloss.Color("#4a2d2d") // Dark red background for deleted lines
-)
+// Color definitions for diff markers and backgrounds are now in styles.go
 
 // HighlightDiff applies syntax highlighting to unified diff content
 // It preserves diff markers while highlighting the code portions
