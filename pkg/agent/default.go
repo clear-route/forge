@@ -12,6 +12,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/llm"
+	"github.com/entrhq/forge/pkg/llm/tokenizer"
 	"github.com/entrhq/forge/pkg/types"
 
 	"github.com/google/uuid"
@@ -49,6 +50,13 @@ type DefaultAgent struct {
 	// Error recovery state
 	lastErrors [5]string // Ring buffer of last 5 error messages
 	errorIndex int       // Current position in ring buffer
+
+	// Token usage tracking
+	tokenizer             *tokenizer.Tokenizer
+	totalPromptTokens     int
+	totalCompletionTokens int
+	totalTokens           int
+	tokensMu              sync.Mutex
 }
 
 // pendingApproval tracks an approval request that is waiting for user response
@@ -100,12 +108,20 @@ func WithApprovalTimeout(timeout time.Duration) AgentOption {
 
 // NewDefaultAgent creates a new DefaultAgent with the given provider and options.
 func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
+	// Create tokenizer for client-side token counting
+	tok, err := tokenizer.New()
+	if err != nil {
+		// Fall back to nil tokenizer if initialization fails
+		tok = nil
+	}
+
 	a := &DefaultAgent{
 		provider:        provider,
 		bufferSize:      10,                // default buffer size
 		approvalTimeout: 5 * time.Minute,   // default 5 minute approval timeout
 		tools:           make(map[string]tools.Tool),
 		memory:          memory.NewConversationMemory(),
+		tokenizer:       tok,
 	}
 
 	// Register built-in tools
@@ -295,6 +311,12 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 	// Build messages for this iteration with optional error context
 	messages := prompts.BuildMessages(systemPrompt, history, "", errorContext)
 
+	// Count input tokens if tokenizer is available
+	var promptTokens int
+	if a.tokenizer != nil {
+		promptTokens = a.tokenizer.CountMessagesTokens(messages)
+	}
+
 	// Get response from LLM
 	stream, err := a.provider.StreamCompletion(ctx, messages)
 	if err != nil {
@@ -310,6 +332,22 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 		assistantContent = content
 		toolCallContent = toolCall
 	})
+
+	// Count completion tokens if tokenizer is available
+	var completionTokens int
+	if a.tokenizer != nil {
+		fullResponse := assistantContent
+		if toolCallContent != "" {
+			fullResponse += toolCallContent
+		}
+		completionTokens = a.tokenizer.CountTokens(fullResponse)
+	}
+
+	// Emit token usage event if we have token counts
+	if promptTokens > 0 || completionTokens > 0 {
+		totalTokens := promptTokens + completionTokens
+		a.emitEvent(types.NewTokenUsageEvent(promptTokens, completionTokens, totalTokens))
+	}
 
 	// Add assistant's response to memory
 	fullResponse := assistantContent

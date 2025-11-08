@@ -27,6 +27,7 @@ const (
 	EventTypeToolApprovalTimeout   AgentEventType = "tool_approval_timeout"   // EventTypeToolApprovalTimeout indicates an approval request has timed out.
 	EventTypeToolApprovalGranted   AgentEventType = "tool_approval_granted"   // EventTypeToolApprovalGranted indicates the user approved the tool execution.
 	EventTypeToolApprovalRejected  AgentEventType = "tool_approval_rejected"  // EventTypeToolApprovalRejected indicates the user rejected the tool execution.
+	EventTypeTokenUsage            AgentEventType = "token_usage"             // EventTypeTokenUsage indicates token usage information from an LLM completion.
 )
 
 // AgentEvent represents an event emitted by the agent during execution.
@@ -60,6 +61,22 @@ type AgentEvent struct {
 
 	// Preview holds preview data for approval requests.
 	Preview interface{}
+
+	// TokenUsage contains token usage information (for token usage events).
+	// Fields: PromptTokens, CompletionTokens, TotalTokens
+	TokenUsage *TokenUsage
+}
+
+// TokenUsage contains token usage statistics from an LLM API call.
+type TokenUsage struct {
+	// PromptTokens is the number of tokens in the input/prompt.
+	PromptTokens int
+
+	// CompletionTokens is the number of tokens in the generated completion/response.
+	CompletionTokens int
+
+	// TotalTokens is the total number of tokens used (prompt + completion).
+	TotalTokens int
 }
 
 // NewThinkingStartEvent creates a thinking start event.
@@ -264,6 +281,19 @@ func NewToolApprovalRejectedEvent(approvalID, toolName string) *AgentEvent {
 		ApprovalID: approvalID,
 		ToolName:   toolName,
 		Metadata:   make(map[string]interface{}),
+	}
+}
+
+// NewTokenUsageEvent creates a token usage event.
+func NewTokenUsageEvent(promptTokens, completionTokens, totalTokens int) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeTokenUsage,
+		TokenUsage: &TokenUsage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			TotalTokens:      totalTokens,
+		},
+		Metadata: make(map[string]interface{}),
 	}
 }
 

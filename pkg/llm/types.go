@@ -12,6 +12,20 @@ const (
 	ContentTypeThinking ContentType = "thinking"
 )
 
+// UsageInfo contains token usage information from an LLM API call.
+// This tracks how many tokens were used in the request and response.
+type UsageInfo struct {
+	// PromptTokens is the number of tokens in the input/prompt.
+	PromptTokens int
+
+	// CompletionTokens is the number of tokens in the generated completion/response.
+	CompletionTokens int
+
+	// TotalTokens is the total number of tokens used (prompt + completion).
+	// Some providers may calculate this differently (e.g., including system tokens).
+	TotalTokens int
+}
+
 // StreamChunk represents a single chunk from an LLM streaming response.
 // This is a provider-layer type focused purely on LLM output, with no
 // coupling to agent-level events or orchestration.
@@ -35,6 +49,11 @@ type StreamChunk struct {
 	// Error contains any error that occurred during streaming.
 	// When set, this is typically the last chunk sent before closing the channel.
 	Error error
+
+	// Usage contains token usage information for this completion.
+	// This is typically only present in the final chunk (when Finished=true).
+	// May be nil if the provider doesn't support usage tracking or if it's not the final chunk.
+	Usage *UsageInfo
 }
 
 // IsError returns true if this chunk contains an error.

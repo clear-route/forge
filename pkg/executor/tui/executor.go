@@ -109,6 +109,11 @@ type model struct {
 	width          int
 	height         int
 	ready          bool
+
+	// Token usage tracking
+	totalPromptTokens     int
+	totalCompletionTokens int
+	totalTokens           int
 }
 
 // initialModel returns the initial state of the TUI.
@@ -142,6 +147,17 @@ func initialModel() model {
 // Init is the first function that will be called.
 func (m model) Init() tea.Cmd {
 	return textarea.Blink
+}
+
+// formatTokenCount formats a token count with K/M suffixes for readability
+func formatTokenCount(count int) string {
+	if count >= 1000000 {
+		return fmt.Sprintf("%.1fM", float64(count)/1000000)
+	}
+	if count >= 1000 {
+		return fmt.Sprintf("%.1fK", float64(count)/1000)
+	}
+	return fmt.Sprintf("%d", count)
 }
 
 // formatEntry formats and wraps an entry with icon/emoji and text
@@ -364,6 +380,15 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		formatted := formatEntry("  ⏱ ", "Tool approval timed out", errorStyle, m.width, false)
 		m.content.WriteString(formatted)
 		m.content.WriteString("\n")
+
+	case types.EventTypeTokenUsage:
+		// Update token usage counts
+		if event.TokenUsage != nil {
+			m.totalPromptTokens += event.TokenUsage.PromptTokens
+			m.totalCompletionTokens += event.TokenUsage.CompletionTokens
+			m.totalTokens += event.TokenUsage.TotalTokens
+		}
+		return // Don't update viewport for token events
 	}
 
 	// Update viewport for all other event types
@@ -584,7 +609,15 @@ func (m model) View() string {
 	// Bottom status bar with three sections
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
+	
+	// Right section includes token usage if available
 	bottomRight := "Forge Agent"
+	if m.totalTokens > 0 {
+		bottomRight = fmt.Sprintf("◆ %s System / %s Completion / %s Total tokens",
+			formatTokenCount(m.totalPromptTokens),
+			formatTokenCount(m.totalCompletionTokens),
+			formatTokenCount(m.totalTokens))
+	}
 
 	// Calculate spacing
 	totalUsed := len(bottomLeft) + len(bottomCenter) + len(bottomRight)
