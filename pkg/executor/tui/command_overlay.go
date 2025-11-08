@@ -221,7 +221,7 @@ func (c *CommandExecutionOverlay) View() string {
 	if c.isRunning {
 		helpText = commandHelpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page")
 	} else {
-		helpText = commandHelpStyle.Render("Press any key to close")
+		helpText = commandHelpStyle.Render("Press Esc key to close")
 	}
 
 	// Combine all parts

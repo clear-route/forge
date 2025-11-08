@@ -32,10 +32,7 @@ type DiffViewer struct {
 
 func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, width, height int, responseFunc func(*types.ApprovalResponse)) *DiffViewer {
 	// Make overlay wide - 90% of screen width
-	overlayWidth := int(float64(width) * 0.9)
-	if overlayWidth < 80 {
-		overlayWidth = 80
-	}
+	overlayWidth := max(int(float64(width)*0.9), 80)
 
 	// Fixed viewport height: max 10 lines for diff content
 	const maxViewportHeight = 10
@@ -188,21 +185,23 @@ func (d *DiffViewer) View() string {
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(salmonPink).
-		Align(lipgloss.Center).
-		Width(contentWidth)
+		Foreground(salmonPink)
 
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(mutedGray).
-		Align(lipgloss.Center).
-		Width(contentWidth)
+		Foreground(mutedGray)
 
 	title := "Tool Approval Required"
 	subtitle := fmt.Sprintf("%s: %s", d.toolName, d.preview.Title)
 
-	s.WriteString(titleStyle.Render(title))
+	// Manually center by calculating padding
+	titleLen := len(title)
+	subtitleLen := len(subtitle)
+	titlePadding := (contentWidth - titleLen) / 2
+	subtitlePadding := (contentWidth - subtitleLen) / 2
+
+	s.WriteString(strings.Repeat(" ", titlePadding) + titleStyle.Render(title))
 	s.WriteString("\n")
-	s.WriteString(subtitleStyle.Render(subtitle))
+	s.WriteString(strings.Repeat(" ", subtitlePadding) + subtitleStyle.Render(subtitle))
 	s.WriteString("\n\n")
 
 	// Diff box has its own border (2) + padding (2), so reduce width further
@@ -217,8 +216,7 @@ func (d *DiffViewer) View() string {
 
 	acceptStyle := lipgloss.NewStyle().
 		Bold(true).
-		Padding(0, 2).
-		MarginRight(2)
+		Padding(0, 2)
 
 	rejectStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -229,10 +227,12 @@ func (d *DiffViewer) View() string {
 			Foreground(lipgloss.Color("#000000")).
 			Background(lipgloss.Color("#A8E6CF"))
 		rejectStyle = rejectStyle.
-			Foreground(mutedGray)
+			Foreground(mutedGray).
+			Background(darkBg)
 	} else {
 		acceptStyle = acceptStyle.
-			Foreground(mutedGray)
+			Foreground(mutedGray).
+			Background(darkBg)
 		rejectStyle = rejectStyle.
 			Foreground(lipgloss.Color("#000000")).
 			Background(lipgloss.Color("#FFB3BA"))
@@ -241,21 +241,29 @@ func (d *DiffViewer) View() string {
 	acceptBtn := acceptStyle.Render("✓ Accept (Enter / Ctrl+A)")
 	rejectBtn := rejectStyle.Render("✗ Reject (Esc / Ctrl+R)")
 
-	buttonsRow := lipgloss.JoinHorizontal(lipgloss.Left, acceptBtn, rejectBtn)
-	buttonsStyle := lipgloss.NewStyle().
-		Align(lipgloss.Center).
-		Width(contentWidth)
+	// Create spacer with dark background to match container
+	spacerStyle := lipgloss.NewStyle().Background(darkBg)
+	spacer := spacerStyle.Render("  ")
+	
+	// Join buttons with styled spacer
+	buttonsRow := acceptBtn + spacer + rejectBtn
 
-	s.WriteString(buttonsStyle.Render(buttonsRow))
+	// Manually center buttons
+	buttonsLen := lipgloss.Width(buttonsRow)
+	buttonsPadding := (contentWidth - buttonsLen) / 2
+
+	s.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
 	s.WriteString("\n")
 
 	hintStyle := lipgloss.NewStyle().
 		Foreground(mutedGray).
-		Italic(true).
-		Align(lipgloss.Center).
-		Width(contentWidth)
+		Italic(true)
 
-	s.WriteString(hintStyle.Render("↑↓ to scroll • ← → Tab to choose • Enter to submit"))
+	hints := "↑↓ to scroll • ← → Tab to choose • Enter to submit"
+	hintsLen := len(hints)
+	hintsPadding := (contentWidth - hintsLen) / 2
+
+	s.WriteString(strings.Repeat(" ", hintsPadding) + hintStyle.Render(hints))
 
 	containerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
