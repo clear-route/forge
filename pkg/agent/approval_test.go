@@ -14,12 +14,12 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name              string
-		sendResponse      bool
-		responseDecision  types.ApprovalDecision
-		timeout           time.Duration
-		expectApproved    bool
-		expectTimedOut    bool
+		name             string
+		sendResponse     bool
+		responseDecision types.ApprovalDecision
+		timeout          time.Duration
+		expectApproved   bool
+		expectTimedOut   bool
 	}{
 		{
 			name:             "approval granted",
@@ -38,11 +38,11 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 			expectTimedOut:   false,
 		},
 		{
-			name:             "approval timeout",
-			sendResponse:     false,
-			timeout:          100 * time.Millisecond,
-			expectApproved:   false,
-			expectTimedOut:   true,
+			name:           "approval timeout",
+			sendResponse:   false,
+			timeout:        100 * time.Millisecond,
+			expectApproved: false,
+			expectTimedOut: true,
 		},
 	}
 

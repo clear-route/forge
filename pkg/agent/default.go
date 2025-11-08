@@ -52,11 +52,7 @@ type DefaultAgent struct {
 	errorIndex int       // Current position in ring buffer
 
 	// Token usage tracking
-	tokenizer             *tokenizer.Tokenizer
-	totalPromptTokens     int
-	totalCompletionTokens int
-	totalTokens           int
-	tokensMu              sync.Mutex
+	tokenizer *tokenizer.Tokenizer
 }
 
 // pendingApproval tracks an approval request that is waiting for user response
@@ -117,8 +113,8 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 
 	a := &DefaultAgent{
 		provider:        provider,
-		bufferSize:      10,                // default buffer size
-		approvalTimeout: 5 * time.Minute,   // default 5 minute approval timeout
+		bufferSize:      10,              // default buffer size
+		approvalTimeout: 5 * time.Minute, // default 5 minute approval timeout
 		tools:           make(map[string]tools.Tool),
 		memory:          memory.NewConversationMemory(),
 		tokenizer:       tok,
@@ -487,7 +483,7 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	if err := json.Unmarshal([]byte(toolCallContent), &toolCall); err != nil {
 		// Log the actual content for debugging
 		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed JSON content:\n%s\n", toolCallContent)))
-		
+
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:    prompts.ErrorTypeInvalidJSON,
 			Error:   err,
@@ -698,7 +694,7 @@ func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolC
 		if approval == nil {
 			return false, false
 		}
-		
+
 		// Verify it's for this approval request
 		if approval.ApprovalID != approvalID {
 			// Put it back for the right handler - but this shouldn't happen
@@ -710,7 +706,7 @@ func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolC
 			// Continue waiting
 			return a.requestApproval(ctx, toolCall, preview)
 		}
-		
+
 		// Process the approval
 		if approval.IsGranted() {
 			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))

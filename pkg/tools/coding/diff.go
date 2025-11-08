@@ -79,11 +79,9 @@ func findChanges(original, modified []string) []diffChange {
 				currentChange.lines = append(currentChange.lines, "+"+modLine)
 				currentChange.modifiedCount++
 			}
-		} else {
-			if currentChange != nil {
-				changes = append(changes, *currentChange)
-				currentChange = nil
-			}
+		} else if currentChange != nil {
+			changes = append(changes, *currentChange)
+			currentChange = nil
 		}
 	}
 

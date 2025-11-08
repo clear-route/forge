@@ -4,35 +4,35 @@ package types
 type AgentEventType string
 
 const (
-	EventTypeThinkingStart   AgentEventType = "thinking_start"    // EventTypeThinkingStart indicates the agent is starting to think/reason.
-	EventTypeThinkingContent AgentEventType = "thinking_content"  // EventTypeThinkingContent indicates content from the agent's thinking process.
-	EventTypeThinkingEnd     AgentEventType = "thinking_end"      // EventTypeThinkingEnd indicates the agent has finished thinking.
-	EventTypeToolCallStart   AgentEventType = "tool_call_start"   // EventTypeToolCallStart indicates the agent is starting to format a tool call.
-	EventTypeToolCallContent AgentEventType = "tool_call_content" // EventTypeToolCallContent indicates content from the tool call XML.
-	EventTypeToolCallEnd     AgentEventType = "tool_call_end"     // EventTypeToolCallEnd indicates the agent has finished the tool call XML.
-	EventTypeMessageStart    AgentEventType = "message_start"     // EventTypeMessageStart indicates the agent is starting to compose a message.
-	EventTypeMessageContent  AgentEventType = "message_content"   // EventTypeMessageContent indicates content from the agent's message.
-	EventTypeMessageEnd      AgentEventType = "message_end"       // EventTypeMessageEnd indicates the agent has finished composing the message.
-	EventTypeToolCall        AgentEventType = "tool_call"         // EventTypeToolCall indicates the agent is calling a tool.
-	EventTypeToolResult      AgentEventType = "tool_result"       // EventTypeToolResult indicates a successful tool call result.
-	EventTypeToolResultError AgentEventType = "tool_result_error" // EventTypeToolResultError indicates a tool call resulted in an error.
-	EventTypeNoToolCall      AgentEventType = "no_tool_call"      // EventTypeNoToolCall indicates the agent decided not to call any tools.
-	EventTypeApiCallStart    AgentEventType = "api_call_start"    // EventTypeApiCallStart indicates the agent is making an API call.
-	EventTypeApiCallEnd      AgentEventType = "api_call_end"      // EventTypeApiCallEnd indicates an API call has completed.
-	EventTypeToolsUpdate     AgentEventType = "tools_update"      // EventTypeToolsUpdate indicates the agent's available tools have been updated.
-	EventTypeUpdateBusy            AgentEventType = "update_busy"             // EventTypeUpdateBusy indicates a change in the agent's busy status.
-	EventTypeTurnEnd               AgentEventType = "turn_end"                // EventTypeTurnEnd indicates the agent has finished processing the current turn.
-	EventTypeError                 AgentEventType = "error"                   // EventTypeError indicates an error occurred during agent processing.
-	EventTypeToolApprovalRequest   AgentEventType = "tool_approval_request"   // EventTypeToolApprovalRequest indicates the agent is requesting approval for a tool execution.
-	EventTypeToolApprovalTimeout   AgentEventType = "tool_approval_timeout"   // EventTypeToolApprovalTimeout indicates an approval request has timed out.
-	EventTypeToolApprovalGranted   AgentEventType = "tool_approval_granted"   // EventTypeToolApprovalGranted indicates the user approved the tool execution.
+	EventTypeThinkingStart            AgentEventType = "thinking_start"             // EventTypeThinkingStart indicates the agent is starting to think/reason.
+	EventTypeThinkingContent          AgentEventType = "thinking_content"           // EventTypeThinkingContent indicates content from the agent's thinking process.
+	EventTypeThinkingEnd              AgentEventType = "thinking_end"               // EventTypeThinkingEnd indicates the agent has finished thinking.
+	EventTypeToolCallStart            AgentEventType = "tool_call_start"            // EventTypeToolCallStart indicates the agent is starting to format a tool call.
+	EventTypeToolCallContent          AgentEventType = "tool_call_content"          // EventTypeToolCallContent indicates content from the tool call XML.
+	EventTypeToolCallEnd              AgentEventType = "tool_call_end"              // EventTypeToolCallEnd indicates the agent has finished the tool call XML.
+	EventTypeMessageStart             AgentEventType = "message_start"              // EventTypeMessageStart indicates the agent is starting to compose a message.
+	EventTypeMessageContent           AgentEventType = "message_content"            // EventTypeMessageContent indicates content from the agent's message.
+	EventTypeMessageEnd               AgentEventType = "message_end"                // EventTypeMessageEnd indicates the agent has finished composing the message.
+	EventTypeToolCall                 AgentEventType = "tool_call"                  // EventTypeToolCall indicates the agent is calling a tool.
+	EventTypeToolResult               AgentEventType = "tool_result"                // EventTypeToolResult indicates a successful tool call result.
+	EventTypeToolResultError          AgentEventType = "tool_result_error"          // EventTypeToolResultError indicates a tool call resulted in an error.
+	EventTypeNoToolCall               AgentEventType = "no_tool_call"               // EventTypeNoToolCall indicates the agent decided not to call any tools.
+	EventTypeApiCallStart             AgentEventType = "api_call_start"             // EventTypeApiCallStart indicates the agent is making an API call.
+	EventTypeApiCallEnd               AgentEventType = "api_call_end"               // EventTypeApiCallEnd indicates an API call has completed.
+	EventTypeToolsUpdate              AgentEventType = "tools_update"               // EventTypeToolsUpdate indicates the agent's available tools have been updated.
+	EventTypeUpdateBusy               AgentEventType = "update_busy"                // EventTypeUpdateBusy indicates a change in the agent's busy status.
+	EventTypeTurnEnd                  AgentEventType = "turn_end"                   // EventTypeTurnEnd indicates the agent has finished processing the current turn.
+	EventTypeError                    AgentEventType = "error"                      // EventTypeError indicates an error occurred during agent processing.
+	EventTypeToolApprovalRequest      AgentEventType = "tool_approval_request"      // EventTypeToolApprovalRequest indicates the agent is requesting approval for a tool execution.
+	EventTypeToolApprovalTimeout      AgentEventType = "tool_approval_timeout"      // EventTypeToolApprovalTimeout indicates an approval request has timed out.
+	EventTypeToolApprovalGranted      AgentEventType = "tool_approval_granted"      // EventTypeToolApprovalGranted indicates the user approved the tool execution.
 	EventTypeToolApprovalRejected     AgentEventType = "tool_approval_rejected"     // EventTypeToolApprovalRejected indicates the user rejected the tool execution.
 	EventTypeTokenUsage               AgentEventType = "token_usage"                // EventTypeTokenUsage indicates token usage information from an LLM completion.
 	EventTypeCommandExecutionStart    AgentEventType = "command_execution_start"    // EventTypeCommandExecutionStart indicates a command has started executing.
 	EventTypeCommandOutput            AgentEventType = "command_output"             // EventTypeCommandOutput indicates output from a running command.
 	EventTypeCommandExecutionComplete AgentEventType = "command_execution_complete" // EventTypeCommandExecutionComplete indicates a command finished successfully.
 	EventTypeCommandExecutionFailed   AgentEventType = "command_execution_failed"   // EventTypeCommandExecutionFailed indicates a command failed with an error.
-	EventTypeCommandExecutionCancelled AgentEventType = "command_execution_cancelled" // EventTypeCommandExecutionCancelled indicates a command was cancelled by the user.
+	EventTypeCommandExecutionCanceled AgentEventType = "command_execution_canceled" // EventTypeCommandExecutionCanceled indicates a command was canceled by the user.
 )
 
 // AgentEvent represents an event emitted by the agent during execution.
@@ -382,10 +382,10 @@ func NewCommandExecutionFailedEvent(executionID string, exitCode int, duration s
 	}
 }
 
-// NewCommandExecutionCancelledEvent creates a command execution cancelled event.
-func NewCommandExecutionCancelledEvent(executionID string, duration string) *AgentEvent {
+// NewCommandExecutionCanceledEvent creates a command execution canceled event.
+func NewCommandExecutionCanceledEvent(executionID string, duration string) *AgentEvent {
 	return &AgentEvent{
-		Type: EventTypeCommandExecutionCancelled,
+		Type: EventTypeCommandExecutionCanceled,
 		CommandExecution: &CommandExecution{
 			ExecutionID: executionID,
 			Duration:    duration,
@@ -457,5 +457,5 @@ func (e *AgentEvent) IsCommandExecutionEvent() bool {
 		e.Type == EventTypeCommandOutput ||
 		e.Type == EventTypeCommandExecutionComplete ||
 		e.Type == EventTypeCommandExecutionFailed ||
-		e.Type == EventTypeCommandExecutionCancelled
+		e.Type == EventTypeCommandExecutionCanceled
 }

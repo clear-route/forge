@@ -20,13 +20,13 @@ func TestApplyDiffTool_GeneratePreview(t *testing.T) {
 
 	testFile := filepath.Join(tempDir, "test.go")
 	originalContent := "package main\n\nfunc hello() {\n\tprintln(\"world\")\n}\n"
-	if err := os.WriteFile(testFile, []byte(originalContent), 0600); err != nil {
-		t.Fatalf("failed to write test file: %v", err)
+	if writeErr := os.WriteFile(testFile, []byte(originalContent), 0600); writeErr != nil {
+		t.Fatalf("failed to write test file: %v", writeErr)
 	}
 
-	guard, err := workspace.NewGuard(tempDir)
-	if err != nil {
-		t.Fatalf("failed to create guard: %v", err)
+	guard, guardErr := workspace.NewGuard(tempDir)
+	if guardErr != nil {
+		t.Fatalf("failed to create guard: %v", guardErr)
 	}
 	tool := NewApplyDiffTool(guard)
 

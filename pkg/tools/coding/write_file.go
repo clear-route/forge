@@ -161,8 +161,8 @@ func (t *WriteFileTool) GeneratePreview(ctx context.Context, arguments json.RawM
 			return nil, fmt.Errorf("failed to read existing file: %w", readErr)
 		}
 
-		relPath, _ := t.guard.MakeRelative(absPath)
-		if relPath == "" {
+		relPath, relErr := t.guard.MakeRelative(absPath)
+		if relErr != nil || relPath == "" {
 			relPath = input.Path
 		}
 
@@ -172,8 +172,8 @@ func (t *WriteFileTool) GeneratePreview(ctx context.Context, arguments json.RawM
 		description = fmt.Sprintf("This will overwrite the existing file %s", relPath)
 	} else {
 		// File doesn't exist - show new content
-		relPath, _ := t.guard.MakeRelative(absPath)
-		if relPath == "" {
+		relPath, relErr := t.guard.MakeRelative(absPath)
+		if relErr != nil || relPath == "" {
 			relPath = input.Path
 		}
 
@@ -183,8 +183,8 @@ func (t *WriteFileTool) GeneratePreview(ctx context.Context, arguments json.RawM
 		description = fmt.Sprintf("This will create a new file at %s", relPath)
 	}
 
-	relPath, _ := t.guard.MakeRelative(absPath)
-	if relPath == "" {
+	relPath, relErr := t.guard.MakeRelative(absPath)
+	if relErr != nil || relPath == "" {
 		relPath = input.Path
 	}
 

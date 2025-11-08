@@ -219,8 +219,8 @@ func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, args json.RawMessag
 	}
 
 	// Generate diff
-	relPath, _ := t.guard.MakeRelative(absPath)
-	if relPath == "" {
+	relPath, err := t.guard.MakeRelative(absPath)
+	if err != nil || relPath == "" {
 		relPath = input.Path
 	}
 
@@ -235,8 +235,8 @@ func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, args json.RawMessag
 		Description: fmt.Sprintf("This will modify %s with %d search/replace operation(s)", relPath, len(input.Edits)),
 		Content:     diffContent,
 		Metadata: map[string]interface{}{
-			"file_path": relPath,
-			"language":  language,
+			"file_path":  relPath,
+			"language":   language,
 			"edit_count": len(input.Edits),
 		},
 	}, nil
@@ -244,48 +244,33 @@ func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, args json.RawMessag
 
 // detectLanguage returns a language identifier based on file extension
 func detectLanguage(filename string) string {
+	// Map of file extensions to language names
+	langMap := map[string]string{
+		".go":   "go",
+		".py":   "python",
+		".js":   "javascript",
+		".ts":   "javascript",
+		".java": "java",
+		".rs":   "rust",
+		".c":    "c",
+		".h":    "c",
+		".cpp":  "cpp",
+		".hpp":  "cpp",
+		".rb":   "ruby",
+		".php":  "php",
+		".html": "html",
+		".css":  "css",
+		".json": "json",
+		".yaml": "yaml",
+		".yml":  "yaml",
+		".md":   "markdown",
+	}
+
 	ext := strings.ToLower(filename)
-	if strings.HasSuffix(ext, ".go") {
-		return "go"
-	}
-	if strings.HasSuffix(ext, ".py") {
-		return "python"
-	}
-	if strings.HasSuffix(ext, ".js") || strings.HasSuffix(ext, ".ts") {
-		return "javascript"
-	}
-	if strings.HasSuffix(ext, ".java") {
-		return "java"
-	}
-	if strings.HasSuffix(ext, ".rs") {
-		return "rust"
-	}
-	if strings.HasSuffix(ext, ".c") || strings.HasSuffix(ext, ".h") {
-		return "c"
-	}
-	if strings.HasSuffix(ext, ".cpp") || strings.HasSuffix(ext, ".hpp") {
-		return "cpp"
-	}
-	if strings.HasSuffix(ext, ".rb") {
-		return "ruby"
-	}
-	if strings.HasSuffix(ext, ".php") {
-		return "php"
-	}
-	if strings.HasSuffix(ext, ".html") {
-		return "html"
-	}
-	if strings.HasSuffix(ext, ".css") {
-		return "css"
-	}
-	if strings.HasSuffix(ext, ".json") {
-		return "json"
-	}
-	if strings.HasSuffix(ext, ".yaml") || strings.HasSuffix(ext, ".yml") {
-		return "yaml"
-	}
-	if strings.HasSuffix(ext, ".md") {
-		return "markdown"
+	for suffix, lang := range langMap {
+		if strings.HasSuffix(ext, suffix) {
+			return lang
+		}
 	}
 	return "text"
 }

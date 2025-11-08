@@ -233,14 +233,15 @@ func wordWrap(text string, width int) string {
 		}
 
 		// Check if adding this word would exceed width
-		if currentLine == "" {
+		switch {
+		case currentLine == "":
 			currentLine = word
-		} else if len(currentLine)+1+len(word) > width {
+		case len(currentLine)+1+len(word) > width:
 			// Write current line and start new one
 			result.WriteString(currentLine)
 			result.WriteString("\n")
 			currentLine = word
-		} else {
+		default:
 			// Add word to current line
 			currentLine += " " + word
 		}
@@ -271,6 +272,10 @@ func (m *model) handleMessageContent(content string) bool {
 }
 
 // handleAgentEvent processes a single agent event and updates the model
+// handleAgentEvent routes agent events to appropriate handlers. High complexity is inherent
+// to event routing logic that must handle 15+ distinct event types with different behaviors.
+//
+//nolint:gocyclo
 func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	switch event.Type {
 	case types.EventTypeThinkingStart:
@@ -333,7 +338,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString("\n")
 		m.viewport.SetContent(m.content.String())
 		m.viewport.GotoBottom()
-		
+
 		// Handle tool approval request by showing overlay
 		if event.Preview != nil {
 			preview, ok := event.Preview.(*tools.ToolPreview)
@@ -342,7 +347,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 				responseFunc := func(response *types.ApprovalResponse) {
 					// Send approval response to agent
 					m.channels.Approval <- response
-					
+
 					// Close overlay and update viewport
 					m.overlay.deactivate()
 					m.viewport.SetContent(m.content.String())
@@ -437,7 +442,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
-		m.viewport, vpCmd = m.viewport.Update(msg)
+		m.viewport, _ = m.viewport.Update(msg)
 		m.width = msg.Width
 		m.height = msg.Height
 
@@ -517,23 +522,23 @@ func (m *model) updateTextAreaHeight() {
 		}
 		return
 	}
-	
+
 	// Calculate visual lines accounting for wrapping
 	width := m.textarea.Width()
 	if width <= 0 {
 		width = 80 // default width
 	}
-	
+
 	// Account for prompt width ("> " = 2 chars)
 	effectiveWidth := width - 2
 	if effectiveWidth <= 0 {
 		effectiveWidth = 78
 	}
-	
+
 	// Split by actual newlines first
 	textLines := strings.Split(value, "\n")
 	visualLines := 0
-	
+
 	for _, line := range textLines {
 		if line == "" {
 			visualLines++ // Empty line still counts as 1 visual line
@@ -547,7 +552,7 @@ func (m *model) updateTextAreaHeight() {
 			visualLines += wrappedLines
 		}
 	}
-	
+
 	// Clamp between 1 and MaxHeight
 	if visualLines < 1 {
 		visualLines = 1
@@ -555,7 +560,7 @@ func (m *model) updateTextAreaHeight() {
 	if visualLines > m.textarea.MaxHeight {
 		visualLines = m.textarea.MaxHeight
 	}
-	
+
 	// Only update if height changed to avoid unnecessary recalculation
 	if visualLines != m.textarea.Height() {
 		m.textarea.SetHeight(visualLines)
@@ -609,7 +614,7 @@ func (m model) View() string {
 	// Bottom status bar with three sections
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
-	
+
 	// Right section includes token usage if available
 	bottomRight := "Forge Agent"
 	if m.totalTokens > 0 {
