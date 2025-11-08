@@ -70,24 +70,42 @@ func findChanges(original, modified []string) []diffChange {
 				}
 			}
 
+			// Collect all deleted and added lines separately for block-style diff
 			if i < len(original) {
-				currentChange.lines = append(currentChange.lines, "-"+origLine)
 				currentChange.originalCount++
 			}
-
 			if i < len(modified) {
-				currentChange.lines = append(currentChange.lines, "+"+modLine)
 				currentChange.modifiedCount++
 			}
 		} else if currentChange != nil {
+			// Finalize the change block
+			finalizeChangeBlock(currentChange, original, modified)
 			changes = append(changes, *currentChange)
 			currentChange = nil
 		}
 	}
 
 	if currentChange != nil {
+		finalizeChangeBlock(currentChange, original, modified)
 		changes = append(changes, *currentChange)
 	}
 
 	return changes
+}
+
+// finalizeChangeBlock groups all deletions together followed by all additions (block-style)
+func finalizeChangeBlock(change *diffChange, original, modified []string) {
+	// Add all deleted lines first (red block)
+	for i := 0; i < change.originalCount; i++ {
+		if change.originalStart+i < len(original) {
+			change.lines = append(change.lines, "-"+original[change.originalStart+i])
+		}
+	}
+
+	// Then add all added lines (green block)
+	for i := 0; i < change.modifiedCount; i++ {
+		if change.modifiedStart+i < len(modified) {
+			change.lines = append(change.lines, "+"+modified[change.modifiedStart+i])
+		}
+	}
 }

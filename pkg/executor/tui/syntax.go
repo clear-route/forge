@@ -179,33 +179,39 @@ func highlightDiffLine(line DiffLine, lexer chroma.Lexer, formatter chroma.Forma
 	highlightedContent = strings.TrimSuffix(highlightedContent, "\n")
 
 	// Build the complete line with marker, syntax-highlighted content, and background
-	var lineStyle lipgloss.Style
 	var marker string
+	var contentWithBg string
 
 	switch line.Type {
 	case DiffLineAddition:
+		// Styled marker with background
 		marker = lipgloss.NewStyle().
 			Foreground(diffAddColor).
 			Background(diffAddBgColor).
 			Bold(true).
-			Render("+")
-		// Apply background to the entire line
-		lineStyle = lipgloss.NewStyle().Background(diffAddBgColor)
+			Render("+ ")
+		// Apply background to content while preserving Chroma's syntax colors
+		contentWithBg = lipgloss.NewStyle().
+			Background(diffAddBgColor).
+			Render(highlightedContent)
 	case DiffLineDeletion:
+		// Styled marker with background
 		marker = lipgloss.NewStyle().
 			Foreground(diffDeleteColor).
 			Background(diffDeleteBgColor).
 			Bold(true).
-			Render("-")
-		// Apply background to the entire line
-		lineStyle = lipgloss.NewStyle().Background(diffDeleteBgColor)
+			Render("- ")
+		// Apply background to content while preserving Chroma's syntax colors
+		contentWithBg = lipgloss.NewStyle().
+			Background(diffDeleteBgColor).
+			Render(highlightedContent)
 	default:
-		marker = " "
-		lineStyle = lipgloss.NewStyle()
+		marker = "  "
+		contentWithBg = highlightedContent
 	}
 
-	// Combine marker with highlighted content and apply line background
-	return lineStyle.Render(marker + highlightedContent), nil
+	// Combine marker with background-styled content
+	return marker + contentWithBg, nil
 }
 
 // applyDiffColorsOnly applies only diff marker colors without syntax highlighting

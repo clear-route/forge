@@ -300,13 +300,13 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			formatted := formatEntry("💭 ", m.thinkingBuffer.String(), thinkingStyle, m.width, false)
 			m.content.WriteString(formatted)
 		}
+		m.content.WriteString("\n\n")
 		m.isThinking = false
 		m.thinkingBuffer.Reset()
 
 	case types.EventTypeToolCall:
 		formatted := formatEntry("🔧 ", event.ToolName, toolStyle, m.width, false)
 		m.content.WriteString(formatted)
-		m.content.WriteString("\n")
 
 	case types.EventTypeToolResult:
 		resultStr := fmt.Sprintf("%v", event.ToolOutput)
@@ -319,7 +319,6 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 
 	case types.EventTypeMessageContent:
 		if strings.TrimSpace(event.Content) != "" && !m.hasMessageContentStarted {
-			m.content.WriteString("\n\n")
 			m.hasMessageContentStarted = true
 		}
 		if m.handleMessageContent(event.Content) {
