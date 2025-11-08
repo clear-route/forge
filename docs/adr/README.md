@@ -70,6 +70,12 @@ Proposed → Accepted → [Deprecated or Superseded]
 | [0006](0006-self-healing-error-recovery.md) | Self-Healing Error Recovery with Circuit Breaker | Accepted |
 | [0007](0007-memory-system-design.md) | Memory System Design | Accepted |
 | [0008](0008-agent-controlled-loop-termination.md) | Agent-Controlled Loop Termination | Accepted |
+| [0009](0009-tui-executor-design.md) | TUI Executor Design | Accepted |
+| [0010](0010-tool-approval-mechanism.md) | Tool Approval Mechanism | Accepted |
+| [0011](0011-coding-tools-architecture.md) | Coding Tools Architecture | Accepted |
+| [0012](0012-enhanced-tui-executor.md) | Enhanced TUI Executor | Accepted |
+| [0013](0013-streaming-command-execution.md) | Streaming Command Execution with Interactive Overlay | Accepted |
+| [0014](0014-composable-context-management.md) | Composable Context Management with Strategy Pattern | Proposed |
 
 ## Resources
 
