@@ -5,7 +5,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -325,19 +324,13 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			if ok {
 				// Create response callback that will be called by the overlay
 				responseFunc := func(response *types.ApprovalResponse) {
-					log.Printf("DEBUG Executor: responseFunc called with decision=%v for approval %s", response.Decision, response.ApprovalID)
-					
 					// Send approval response to agent
-					log.Printf("DEBUG Executor: Sending response to approval channel...")
 					m.channels.Approval <- response
-					log.Printf("DEBUG Executor: Response sent successfully")
 					
 					// Close overlay and update viewport
-					log.Printf("DEBUG Executor: Deactivating overlay and updating viewport")
 					m.overlay.deactivate()
 					m.viewport.SetContent(m.content.String())
 					m.viewport.GotoBottom()
-					log.Printf("DEBUG Executor: Viewport updated, callback complete")
 				}
 
 				// Create and activate diff viewer overlay

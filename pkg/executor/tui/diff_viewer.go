@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -54,10 +53,6 @@ func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, widt
 		vp.SetContent(preview.Content)
 	}
 
-	// DEBUG: Log overlay dimensions
-	log.Printf("DEBUG DiffViewer: screen=%dx%d overlay=%dx%d viewport=%dx%d",
-		width, height, overlayWidth, overlayHeight, overlayWidth-4, viewportHeight)
-
 	return &DiffViewer{
 		viewport:     vp,
 		approvalID:   approvalID,
@@ -106,20 +101,14 @@ func (d *DiffViewer) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 
 		case "enter":
 			// Enter submits the selected choice
-			log.Printf("DEBUG DiffViewer: Enter key pressed, selected=%d", d.selected)
 			if d.responseFunc != nil {
 				var decision types.ApprovalDecision
 				if d.selected == ApprovalChoiceAccept {
 					decision = types.ApprovalGranted
-					log.Printf("DEBUG DiffViewer: Calling responseFunc with GRANTED for approval %s", d.approvalID)
 				} else {
 					decision = types.ApprovalRejected
-					log.Printf("DEBUG DiffViewer: Calling responseFunc with REJECTED for approval %s", d.approvalID)
 				}
 				d.responseFunc(types.NewApprovalResponse(d.approvalID, decision))
-				log.Printf("DEBUG DiffViewer: responseFunc completed, returning")
-			} else {
-				log.Printf("DEBUG DiffViewer: ERROR - responseFunc is nil!")
 			}
 			return d, nil
 
