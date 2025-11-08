@@ -20,9 +20,14 @@ const (
 	EventTypeApiCallStart    AgentEventType = "api_call_start"    // EventTypeApiCallStart indicates the agent is making an API call.
 	EventTypeApiCallEnd      AgentEventType = "api_call_end"      // EventTypeApiCallEnd indicates an API call has completed.
 	EventTypeToolsUpdate     AgentEventType = "tools_update"      // EventTypeToolsUpdate indicates the agent's available tools have been updated.
-	EventTypeUpdateBusy      AgentEventType = "update_busy"       // EventTypeUpdateBusy indicates a change in the agent's busy status.
-	EventTypeTurnEnd         AgentEventType = "turn_end"          // EventTypeTurnEnd indicates the agent has finished processing the current turn.
-	EventTypeError           AgentEventType = "error"             // EventTypeError indicates an error occurred during agent processing.
+	EventTypeUpdateBusy            AgentEventType = "update_busy"             // EventTypeUpdateBusy indicates a change in the agent's busy status.
+	EventTypeTurnEnd               AgentEventType = "turn_end"                // EventTypeTurnEnd indicates the agent has finished processing the current turn.
+	EventTypeError                 AgentEventType = "error"                   // EventTypeError indicates an error occurred during agent processing.
+	EventTypeToolApprovalRequest   AgentEventType = "tool_approval_request"   // EventTypeToolApprovalRequest indicates the agent is requesting approval for a tool execution.
+	EventTypeToolApprovalTimeout   AgentEventType = "tool_approval_timeout"   // EventTypeToolApprovalTimeout indicates an approval request has timed out.
+	EventTypeToolApprovalGranted   AgentEventType = "tool_approval_granted"   // EventTypeToolApprovalGranted indicates the user approved the tool execution.
+	EventTypeToolApprovalRejected  AgentEventType = "tool_approval_rejected"  // EventTypeToolApprovalRejected indicates the user rejected the tool execution.
+	EventTypeTokenUsage            AgentEventType = "token_usage"             // EventTypeTokenUsage indicates token usage information from an LLM completion.
 )
 
 // AgentEvent represents an event emitted by the agent during execution.
@@ -50,6 +55,28 @@ type AgentEvent struct {
 
 	// IsBusy indicates if the agent is busy (for busy status events).
 	IsBusy bool
+
+	// ApprovalID is a unique identifier for approval requests/responses.
+	ApprovalID string
+
+	// Preview holds preview data for approval requests.
+	Preview interface{}
+
+	// TokenUsage contains token usage information (for token usage events).
+	// Fields: PromptTokens, CompletionTokens, TotalTokens
+	TokenUsage *TokenUsage
+}
+
+// TokenUsage contains token usage statistics from an LLM API call.
+type TokenUsage struct {
+	// PromptTokens is the number of tokens in the input/prompt.
+	PromptTokens int
+
+	// CompletionTokens is the number of tokens in the generated completion/response.
+	CompletionTokens int
+
+	// TotalTokens is the total number of tokens used (prompt + completion).
+	TotalTokens int
 }
 
 // NewThinkingStartEvent creates a thinking start event.
@@ -215,6 +242,61 @@ func NewErrorEvent(err error) *AgentEvent {
 	}
 }
 
+// NewToolApprovalRequestEvent creates a tool approval request event.
+func NewToolApprovalRequestEvent(approvalID, toolName string, toolInput map[string]interface{}, preview interface{}) *AgentEvent {
+	return &AgentEvent{
+		Type:       EventTypeToolApprovalRequest,
+		ApprovalID: approvalID,
+		ToolName:   toolName,
+		ToolInput:  toolInput,
+		Preview:    preview,
+		Metadata:   make(map[string]interface{}),
+	}
+}
+
+// NewToolApprovalTimeoutEvent creates a tool approval timeout event.
+func NewToolApprovalTimeoutEvent(approvalID, toolName string) *AgentEvent {
+	return &AgentEvent{
+		Type:       EventTypeToolApprovalTimeout,
+		ApprovalID: approvalID,
+		ToolName:   toolName,
+		Metadata:   make(map[string]interface{}),
+	}
+}
+
+// NewToolApprovalGrantedEvent creates a tool approval granted event.
+func NewToolApprovalGrantedEvent(approvalID, toolName string) *AgentEvent {
+	return &AgentEvent{
+		Type:       EventTypeToolApprovalGranted,
+		ApprovalID: approvalID,
+		ToolName:   toolName,
+		Metadata:   make(map[string]interface{}),
+	}
+}
+
+// NewToolApprovalRejectedEvent creates a tool approval rejected event.
+func NewToolApprovalRejectedEvent(approvalID, toolName string) *AgentEvent {
+	return &AgentEvent{
+		Type:       EventTypeToolApprovalRejected,
+		ApprovalID: approvalID,
+		ToolName:   toolName,
+		Metadata:   make(map[string]interface{}),
+	}
+}
+
+// NewTokenUsageEvent creates a token usage event.
+func NewTokenUsageEvent(promptTokens, completionTokens, totalTokens int) *AgentEvent {
+	return &AgentEvent{
+		Type: EventTypeTokenUsage,
+		TokenUsage: &TokenUsage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			TotalTokens:      totalTokens,
+		},
+		Metadata: make(map[string]interface{}),
+	}
+}
+
 // WithMetadata adds metadata to the event and returns the event for chaining.
 func (e *AgentEvent) WithMetadata(key string, value interface{}) *AgentEvent {
 	if e.Metadata == nil {
@@ -261,4 +343,12 @@ func (e *AgentEvent) IsContentEvent() bool {
 // IsErrorEvent returns true if this is an error event.
 func (e *AgentEvent) IsErrorEvent() bool {
 	return e.Type == EventTypeError
+}
+
+// IsApprovalEvent returns true if this is any approval-related event.
+func (e *AgentEvent) IsApprovalEvent() bool {
+	return e.Type == EventTypeToolApprovalRequest ||
+		e.Type == EventTypeToolApprovalTimeout ||
+		e.Type == EventTypeToolApprovalGranted ||
+		e.Type == EventTypeToolApprovalRejected
 }

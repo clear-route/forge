@@ -33,7 +33,7 @@ type ParsedContent struct {
 }
 
 // Parse processes a content chunk and returns separate chunks for tool calls and regular content.
-// It handles <tool> tags that may span multiple chunks by buffering from '<' to '>'.
+// It handles <tool> tags that may span multiple chunks by buffering potential tags.
 //
 // Returns:
 //   - toolCallContent: Non-nil if tool call content is found
@@ -45,102 +45,161 @@ func (p *ToolCallParser) Parse(content string) (toolCallContent, regularContent 
 
 	for _, char := range content {
 		p.buffer.WriteRune(char)
+		bufStr := p.buffer.String()
 
-		if char == '<' {
-			chunk := p.handleTagStart()
+		// Check for complete <tool> tag
+		if !p.inToolCall && len(bufStr) >= 6 && bufStr[len(bufStr)-6:] == "<tool>" {
+			chunk := p.handleToolStart()
 			toolCallContent, regularContent = p.appendContent(toolCallContent, regularContent, chunk)
 			continue
 		}
 
-		if char == '>' && p.inTag {
-			chunk := p.handleTagEnd()
+		// Check for complete </tool> tag
+		if p.inToolCall && len(bufStr) >= 7 && bufStr[len(bufStr)-7:] == "</tool>" {
+			chunk := p.handleToolEnd()
 			toolCallContent, regularContent = p.appendContent(toolCallContent, regularContent, chunk)
 			continue
 		}
 	}
 
+	// Flush any buffered content that's not part of a potential tag
 	chunk := p.flushBufferIfNotInTag()
 	toolCallContent, regularContent = p.appendContent(toolCallContent, regularContent, chunk)
 
 	return toolCallContent, regularContent
 }
 
-// handleTagStart processes the start of a potential tag
-func (p *ToolCallParser) handleTagStart() *ParsedContent {
-	// If we were buffering non-tag content, emit it first
-	if p.buffer.Len() > 1 && !p.inTag {
-		text := p.buffer.String()[:p.buffer.Len()-1] // Exclude the '<'
+// handleToolStart processes the start of <tool> tag
+func (p *ToolCallParser) handleToolStart() *ParsedContent {
+	// Get content before <tool>
+	bufStr := p.buffer.String()
+	textBefore := bufStr[:len(bufStr)-6] // Everything except "<tool>"
 
-		p.buffer.Reset()
-		p.buffer.WriteRune('<')
-		p.inTag = true
+	p.buffer.Reset()
+	p.inToolCall = true
+	p.toolContent.Reset()
 
-		// If we're in a tool call, add to tool content
-		if p.inToolCall {
-			p.toolContent.WriteString(text)
-			return nil
-		}
-
-		// Otherwise return as regular content
+	if textBefore != "" {
 		return &ParsedContent{
 			Type:    ContentTypeRegular,
-			Content: text,
+			Content: textBefore,
 		}
 	}
-
-	p.inTag = true
 	return nil
 }
 
-// handleTagEnd processes the end of a tag
-func (p *ToolCallParser) handleTagEnd() *ParsedContent {
-	p.inTag = false
-	tag := p.buffer.String()
-	p.buffer.Reset()
+// handleToolEnd processes the end of </tool> tag
+func (p *ToolCallParser) handleToolEnd() *ParsedContent {
+	// Get content before </tool>
+	bufStr := p.buffer.String()
+	textBefore := bufStr[:len(bufStr)-7] // Everything except "</tool>"
 
-	if tag == "<tool>" {
-		p.inToolCall = true
-		p.toolContent.Reset()
+	p.buffer.Reset()
+	p.inToolCall = false
+
+	// Add any remaining buffered content to tool content
+	p.toolContent.WriteString(textBefore)
+	content := p.toolContent.String()
+	p.toolContent.Reset()
+
+	// Trim any trailing whitespace or stray characters
+	content = strings.TrimSpace(content)
+
+	return &ParsedContent{
+		Type:    ContentTypeToolCall,
+		Content: content,
+	}
+}
+
+// flushBufferIfNotInTag flushes buffered content, keeping potential tag prefixes in buffer
+func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
+	if p.buffer.Len() == 0 {
 		return nil
 	}
 
-	if tag == "</tool>" {
-		p.inToolCall = false
-		content := p.toolContent.String()
-		p.toolContent.Reset()
-		return &ParsedContent{
-			Type:    ContentTypeToolCall,
-			Content: content,
+	text := p.buffer.String()
+
+	// Keep potential tag prefixes in the buffer
+	// This handles streaming where tags may be split across chunks
+	var flushText string
+	if p.inToolCall {
+		// Inside tool call - keep partial </tool> prefixes buffered
+		// Move everything else to toolContent but DON'T emit as events yet
+		// This prevents premature JSON parsing before </tool> arrives
+		if len(text) >= 6 && text[len(text)-6:] == "</tool" {
+			flushText = text[:len(text)-6]
+			p.buffer.Reset()
+			p.buffer.WriteString("</tool")
+		} else if len(text) >= 5 && text[len(text)-5:] == "</too" {
+			flushText = text[:len(text)-5]
+			p.buffer.Reset()
+			p.buffer.WriteString("</too")
+		} else if len(text) >= 4 && text[len(text)-4:] == "</to" {
+			flushText = text[:len(text)-4]
+			p.buffer.Reset()
+			p.buffer.WriteString("</to")
+		} else if len(text) >= 3 && text[len(text)-3:] == "</t" {
+			flushText = text[:len(text)-3]
+			p.buffer.Reset()
+			p.buffer.WriteString("</t")
+		} else if len(text) >= 2 && text[len(text)-2:] == "</" {
+			flushText = text[:len(text)-2]
+			p.buffer.Reset()
+			p.buffer.WriteString("</")
+		} else if len(text) >= 1 && text[len(text)-1:] == "<" {
+			flushText = text[:len(text)-1]
+			p.buffer.Reset()
+			p.buffer.WriteString("<")
+		} else {
+			// No partial closing tag detected
+			// Move to toolContent but don't emit yet (wait for </tool>)
+			flushText = text
+			p.buffer.Reset()
+		}
+	} else {
+		// Not in tool call, check for potential <tool> prefix
+		if len(text) >= 5 && text[len(text)-5:] == "<tool" {
+			flushText = text[:len(text)-5]
+			p.buffer.Reset()
+			p.buffer.WriteString("<tool")
+		} else if len(text) >= 4 && text[len(text)-4:] == "<too" {
+			flushText = text[:len(text)-4]
+			p.buffer.Reset()
+			p.buffer.WriteString("<too")
+		} else if len(text) >= 3 && text[len(text)-3:] == "<to" {
+			flushText = text[:len(text)-3]
+			p.buffer.Reset()
+			p.buffer.WriteString("<to")
+		} else if len(text) >= 2 && text[len(text)-2:] == "<t" {
+			flushText = text[:len(text)-2]
+			p.buffer.Reset()
+			p.buffer.WriteString("<t")
+		} else if len(text) >= 1 && text[len(text)-1:] == "<" {
+			flushText = text[:len(text)-1]
+			p.buffer.Reset()
+			p.buffer.WriteString("<")
+		} else {
+			flushText = text
+			p.buffer.Reset()
 		}
 	}
 
-	// Not a tool tag, treat as regular content
+	if flushText == "" {
+		return nil
+	}
+
+	// If we're in a tool call, accumulate to toolContent but DON'T emit
+	// The content will only be emitted when we see the complete </tool> tag
+	if p.inToolCall {
+		p.toolContent.WriteString(flushText)
+		return nil
+	}
+
+	// Otherwise return as regular content
 	return &ParsedContent{
 		Type:    ContentTypeRegular,
-		Content: tag,
+		Content: flushText,
 	}
-}
-
-// flushBufferIfNotInTag flushes buffered content if we're not in the middle of parsing a tag
-func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
-	if !p.inTag && p.buffer.Len() > 0 {
-		text := p.buffer.String()
-		p.buffer.Reset()
-
-		// If we're in a tool call, add to tool content
-		if p.inToolCall {
-			p.toolContent.WriteString(text)
-			return nil
-		}
-
-		// Otherwise return as regular content
-		return &ParsedContent{
-			Type:    ContentTypeRegular,
-			Content: text,
-		}
-	}
-
-	return nil
 }
 
 // appendContent appends new content to existing content based on type

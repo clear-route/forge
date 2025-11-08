@@ -71,10 +71,11 @@ Parameters:
 5. The 'arguments' field MUST be valid JSON. If a tool requires a JSON string, it must be properly escaped
 6. The JSON payload MUST be directly embedded within the '<tool>' tags. DO NOT wrap it in markdown code fences or backticks
 7. **MANDATORY:** You MUST always include the server_name field. Omitting it will cause execution failure
+8. The JSON must be compact without unnecessary whitespace to avoid parsing issues
 
-**CRITICAL INSTRUCTION:** Every single one of your responses MUST end with a valid tool call. There are no exceptions. 
+**CRITICAL INSTRUCTION:** Every single one of your responses MUST end with a valid tool call. There are no exceptions.
 - If a task is complete, use 'task_completion'
-- If you need information from the user, use 'ask_question'  
+- If you need information from the user, use 'ask_question'
 - If you are just conversing, use 'converse'
 - If you are performing an action, use the appropriate operational tool
 

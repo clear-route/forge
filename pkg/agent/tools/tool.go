@@ -41,6 +41,48 @@ type ToolCall struct {
 	Arguments  json.RawMessage `json:"arguments"`
 }
 
+// Previewable is an optional interface that tools can implement to provide
+// a preview of their changes before execution. This enables the approval flow
+// where users can review and approve/reject tool actions.
+type Previewable interface {
+	// GeneratePreview creates a preview of what this tool will do with the given arguments.
+	// Returns a ToolPreview containing the preview data and metadata.
+	GeneratePreview(ctx context.Context, arguments json.RawMessage) (*ToolPreview, error)
+}
+
+// ToolPreview represents a preview of what a tool will do.
+// It contains enough information to show the user what changes will be made.
+type ToolPreview struct {
+	// Type indicates the kind of preview (diff, command, file_write, etc.)
+	Type PreviewType
+
+	// Title is a short description of the action
+	Title string
+
+	// Description provides additional context about the action
+	Description string
+
+	// Content contains the preview data (diff text, command to run, etc.)
+	Content string
+
+	// Metadata holds additional preview information (file path, language, etc.)
+	Metadata map[string]interface{}
+}
+
+// PreviewType indicates the kind of preview being shown
+type PreviewType string
+
+const (
+	// PreviewTypeDiff represents a file diff preview
+	PreviewTypeDiff PreviewType = "diff"
+
+	// PreviewTypeCommand represents a command execution preview
+	PreviewTypeCommand PreviewType = "command"
+
+	// PreviewTypeFileWrite represents a file write/creation preview
+	PreviewTypeFileWrite PreviewType = "file_write"
+)
+
 // BaseToolSchema creates a common JSON schema structure for a tool
 // with the given properties and required fields
 func BaseToolSchema(properties map[string]interface{}, required []string) map[string]interface{} {
