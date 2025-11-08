@@ -394,6 +394,57 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			m.totalTokens += event.TokenUsage.TotalTokens
 		}
 		return // Don't update viewport for token events
+
+	case types.EventTypeCommandExecutionStart:
+		// Show command execution started message
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  🚀 ", fmt.Sprintf("Executing: %s", event.CommandExecution.Command), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+			m.viewport.SetContent(m.content.String())
+			m.viewport.GotoBottom()
+
+			// Create and activate command execution overlay
+			overlay := NewCommandExecutionOverlay(
+				event.CommandExecution.Command,
+				event.CommandExecution.WorkingDir,
+				event.CommandExecution.ExecutionID,
+				m.channels.Cancel,
+			)
+			m.overlay.activate(OverlayModeCommandOutput, overlay)
+		}
+		return
+
+	case types.EventTypeCommandOutput:
+		// Output events are handled by the overlay itself
+		return
+
+	case types.EventTypeCommandExecutionComplete:
+		// Command completed successfully
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  ✓ ", fmt.Sprintf("Command completed (exit code: %d, duration: %s)",
+				event.CommandExecution.ExitCode, event.CommandExecution.Duration), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+		// Note: Overlay stays open until user dismisses it
+
+	case types.EventTypeCommandExecutionFailed:
+		// Command failed
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  ✗ ", fmt.Sprintf("Command failed (exit code: %d, duration: %s)",
+				event.CommandExecution.ExitCode, event.CommandExecution.Duration), errorStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+		// Note: Overlay stays open until user dismisses it
+
+	case types.EventTypeCommandExecutionCanceled:
+		// Command was canceled
+		formatted := formatEntry("  ⏹ ", "Command canceled by user", toolStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
+		// Note: Overlay stays open until user dismisses it
 	}
 
 	// Update viewport for all other event types
@@ -472,6 +523,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case *types.AgentEvent:
+		// If overlay is active and it's a command execution event, forward to overlay
+		if m.overlay.isActive() && msg.IsCommandExecutionEvent() {
+			var overlayCmd tea.Cmd
+			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			// Still handle the event in the main model too
+			m.handleAgentEvent(msg)
+			return m, tea.Batch(tiCmd, vpCmd, overlayCmd)
+		}
+
 		// Update viewport for agent events
 		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.handleAgentEvent(msg)
@@ -481,7 +541,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If overlay is active, forward all key messages to it
 		if m.overlay.isActive() {
 			var overlayCmd tea.Cmd
-			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg)
+
+			// Check if overlay returned nil (signals to close)
+			if updatedOverlay == nil {
+				m.overlay.deactivate()
+				m.viewport.SetContent(m.content.String())
+				m.viewport.GotoBottom()
+				return m, overlayCmd
+			}
+
+			m.overlay.overlay = updatedOverlay
 			return m, overlayCmd
 		}
 
