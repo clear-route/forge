@@ -485,7 +485,10 @@ func (m *model) recalculateLayout() {
 	m.viewport.Height = viewportHeight
 }
 
-// Update is called when a message is received.
+// Update is called when a message is received. High complexity is inherent to the
+// Bubble Tea Update pattern which must handle multiple message types and UI states.
+//
+//nolint:gocyclo
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
@@ -696,12 +699,12 @@ func (m model) View() string {
 
 	// ASCII art header with gradient effect
 	header := headerStyle.Render(`
-███████╗ ██████╗ ██████╗  ██████╗ ███████╗
-██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
-█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
-██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
-██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
-╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
+	███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+	██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+	█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+	██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+	██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+	╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
 
 	// Tips section
 	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+C to exit`)

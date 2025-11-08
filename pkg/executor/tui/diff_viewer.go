@@ -244,7 +244,7 @@ func (d *DiffViewer) View() string {
 	// Create spacer with dark background to match container
 	spacerStyle := lipgloss.NewStyle().Background(darkBg)
 	spacer := spacerStyle.Render("  ")
-	
+
 	// Join buttons with styled spacer
 	buttonsRow := acceptBtn + spacer + rejectBtn
 
