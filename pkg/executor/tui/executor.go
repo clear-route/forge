@@ -77,6 +77,7 @@ func (e *Executor) Run(ctx context.Context) error {
 	e.program = tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 
 	go func() {
@@ -546,6 +547,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update viewport for agent events
 		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.handleAgentEvent(msg)
+		return m, tea.Batch(tiCmd, vpCmd)
+
+	case tea.MouseMsg:
+		// Handle mouse events (especially scroll wheel) for viewport
+		// If overlay is active, forward mouse events to it
+		if m.overlay.isActive() {
+			var overlayCmd tea.Cmd
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg)
+
+			// Check if overlay returned nil (signals to close)
+			if updatedOverlay == nil {
+				m.overlay.deactivate()
+				m.viewport.SetContent(m.content.String())
+				m.viewport.GotoBottom()
+				return m, overlayCmd
+			}
+
+			m.overlay.overlay = updatedOverlay
+			return m, overlayCmd
+		}
+
+		// Route mouse events to viewport for scrolling
+		m.viewport, vpCmd = m.viewport.Update(msg)
 		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
