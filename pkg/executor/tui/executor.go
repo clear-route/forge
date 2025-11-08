@@ -261,9 +261,16 @@ func (m *model) handleMessageContent(content string) bool {
 		return false
 	}
 
-	// Buffer and display content directly (no "Assistant:" label needed as responses come through tools)
-	m.messageBuffer.WriteString(content)
-	m.content.WriteString(content)
+	// Wrap the content to terminal width before adding
+	wrapWidth := m.width - 4
+	if wrapWidth <= 0 {
+		wrapWidth = 80
+	}
+	wrappedContent := wordWrap(content, wrapWidth)
+
+	// Buffer and display wrapped content (no "Assistant:" label needed as responses come through tools)
+	m.messageBuffer.WriteString(wrappedContent)
+	m.content.WriteString(wrappedContent)
 
 	// Update viewport immediately for streaming effect
 	m.viewport.SetContent(m.content.String())
