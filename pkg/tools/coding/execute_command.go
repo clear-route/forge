@@ -1,15 +1,19 @@
 package coding
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/security/workspace"
+	"github.com/entrhq/forge/pkg/types"
 )
 
 // ExecuteCommandTool executes shell commands in the workspace directory
@@ -57,7 +61,9 @@ func (t *ExecuteCommandTool) Schema() map[string]interface{} {
 	)
 }
 
-// Execute runs the command
+// Execute runs the command with streaming output support
+//
+//nolint:gocyclo // Complexity is acceptable for command execution logic
 func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var input struct {
 		Command    string  `json:"command"`
@@ -99,22 +105,70 @@ func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMess
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Execute command
+	// Check if we have an event emitter in context (for streaming support)
+	emitEvent := getEventEmitterFromContext(ctx)
+
+	// Generate execution ID for tracking
+	execID := fmt.Sprintf("cmd_%d", time.Now().UnixNano())
+
+	// Register this command's cancel function if we have a command registry
+	if registry, ok := ctx.Value(CommandRegistryKey).(*sync.Map); ok {
+		registry.Store(execID, cancel)
+		defer registry.Delete(execID)
+	}
+
+	// Emit command execution start event if emitter available
+	if emitEvent != nil {
+		emitEvent(types.NewCommandExecutionStartEvent(execID, input.Command, workDir))
+	}
+
+	// Execute command with streaming
 	start := time.Now()
 	cmd := exec.CommandContext(execCtx, "sh", "-c", input.Command)
 	cmd.Dir = workDir
 
-	stdout, stderr, exitCode, execErr := t.runCommand(cmd)
+	var stdout, stderr string
+	var exitCode int
+	var execErr error
+
+	if emitEvent != nil {
+		// Execute with streaming output
+		stdout, stderr, exitCode, execErr = t.runCommandStreaming(execCtx, cmd, execID, emitEvent)
+	} else {
+		// Fall back to non-streaming execution
+		stdout, stderr, exitCode, execErr = t.runCommand(cmd)
+	}
+
 	duration := time.Since(start)
+
+	// Emit final state event
+	if emitEvent != nil {
+		durationStr := duration.String()
+
+		if execErr != nil {
+			// Check if context was canceled (either by user or timeout)
+			if execCtx.Err() == context.Canceled || execCtx.Err() == context.DeadlineExceeded {
+				emitEvent(types.NewCommandExecutionCanceledEvent(execID, durationStr))
+			} else {
+				emitEvent(types.NewCommandExecutionFailedEvent(execID, exitCode, durationStr, execErr))
+			}
+		} else {
+			emitEvent(types.NewCommandExecutionCompleteEvent(execID, exitCode, durationStr))
+		}
+	}
 
 	// Format response
 	var result string
 	if execErr != nil {
-		// Check if timeout
-		if execCtx.Err() == context.DeadlineExceeded {
+		// Check if context was canceled or timed out
+		switch execCtx.Err() {
+		case context.Canceled:
+			result = fmt.Sprintf("Command was canceled by user after %s\n\nThe command execution was interrupted before completion.\n\nStdout:\n%s\n\nStderr:\n%s",
+				duration.String(), stdout, stderr)
+		case context.DeadlineExceeded:
 			result = fmt.Sprintf("Command timed out after %s\n\nStdout:\n%s\n\nStderr:\n%s",
 				duration.String(), stdout, stderr)
-		} else {
+		default:
 			result = fmt.Sprintf("Command failed with exit code %d\n\nStdout:\n%s\n\nStderr:\n%s",
 				exitCode, stdout, stderr)
 		}
@@ -228,4 +282,126 @@ func (t *ExecuteCommandTool) GeneratePreview(ctx context.Context, arguments json
 			"timeout":     timeout.Seconds(),
 		},
 	}, nil
+}
+
+// EventEmitter is a function type for emitting agent events
+type EventEmitter func(*types.AgentEvent)
+
+// ContextKey is a type for context keys to avoid collisions
+type ContextKey string
+
+// EventEmitterKey is the context key for the event emitter
+const EventEmitterKey ContextKey = "event_emitter"
+
+// CommandRegistryKey is the context key for the command registry (sync.Map)
+const CommandRegistryKey ContextKey = "command_registry"
+
+// getEventEmitterFromContext retrieves the event emitter from context if available
+func getEventEmitterFromContext(ctx context.Context) EventEmitter {
+	if emitter, ok := ctx.Value(EventEmitterKey).(EventEmitter); ok {
+		return emitter
+	}
+	return nil
+}
+
+// runCommandStreaming executes a command with streaming output support
+func (t *ExecuteCommandTool) runCommandStreaming(ctx context.Context, cmd *exec.Cmd, execID string, emitEvent EventEmitter) (stdout, stderr string, exitCode int, err error) {
+	// Create pipes for stdout and stderr
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", "", -1, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return "", "", -1, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return "", "", -1, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	// Use WaitGroup to wait for both goroutines to finish
+	var wg sync.WaitGroup
+	var stdoutBuilder, stderrBuilder strings.Builder
+	var outputMu sync.Mutex
+
+	// Monitor context cancellation and kill process if needed
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Context was canceled - kill the process
+			if cmd.Process != nil {
+				// Use Kill() for immediate termination
+				// We intentionally ignore the error here because:
+				// 1. The process may have already exited
+				// 2. We're in cancellation mode and want to proceed regardless
+				//nolint:errcheck
+				cmd.Process.Kill()
+			}
+		case <-done:
+			// Command finished normally
+		}
+	}()
+
+	// Stream stdout
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t.streamOutput(stdoutPipe, "stdout", execID, emitEvent, &stdoutBuilder, &outputMu)
+	}()
+
+	// Stream stderr
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t.streamOutput(stderrPipe, "stderr", execID, emitEvent, &stderrBuilder, &outputMu)
+	}()
+
+	// Wait for command to finish (this closes the pipes)
+	execErr := cmd.Wait()
+
+	// Signal that command is done
+	close(done)
+
+	// Wait for streaming to complete (now that pipes are closed)
+	wg.Wait()
+
+	// Get final output
+	outputMu.Lock()
+	stdout = stdoutBuilder.String()
+	stderr = stderrBuilder.String()
+	outputMu.Unlock()
+
+	// Determine exit code
+	if execErr != nil {
+		if exitErr, ok := execErr.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+		return stdout, stderr, exitCode, execErr
+	}
+
+	return stdout, stderr, 0, nil
+}
+
+// streamOutput reads from a pipe and emits chunked output events
+func (t *ExecuteCommandTool) streamOutput(pipe io.ReadCloser, streamType, execID string, emitEvent EventEmitter, builder *strings.Builder, mu *sync.Mutex) {
+	scanner := bufio.NewScanner(pipe)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		line := scanner.Text() + "\n"
+
+		// Append to full output
+		mu.Lock()
+		builder.WriteString(line)
+		mu.Unlock()
+
+		// Emit output event
+		emitEvent(types.NewCommandOutputEvent(execID, line, streamType))
+	}
 }

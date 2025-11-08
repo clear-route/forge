@@ -112,6 +112,11 @@ func (p *ToolCallParser) handleToolEnd() *ParsedContent {
 }
 
 // flushBufferIfNotInTag flushes buffered content, keeping potential tag prefixes in buffer
+// flushBufferIfNotInTag handles the complex state machine for detecting XML tag boundaries
+// in streaming content. High complexity is inherent to the XML parsing state machine that must
+// detect partial opening/closing tags across chunk boundaries.
+//
+//nolint:gocyclo
 func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 	if p.buffer.Len() == 0 {
 		return nil
@@ -126,31 +131,32 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 		// Inside tool call - keep partial </tool> prefixes buffered
 		// Move everything else to toolContent but DON'T emit as events yet
 		// This prevents premature JSON parsing before </tool> arrives
-		if len(text) >= 6 && text[len(text)-6:] == "</tool" {
+		switch {
+		case len(text) >= 6 && text[len(text)-6:] == "</tool":
 			flushText = text[:len(text)-6]
 			p.buffer.Reset()
 			p.buffer.WriteString("</tool")
-		} else if len(text) >= 5 && text[len(text)-5:] == "</too" {
+		case len(text) >= 5 && text[len(text)-5:] == "</too":
 			flushText = text[:len(text)-5]
 			p.buffer.Reset()
 			p.buffer.WriteString("</too")
-		} else if len(text) >= 4 && text[len(text)-4:] == "</to" {
+		case len(text) >= 4 && text[len(text)-4:] == "</to":
 			flushText = text[:len(text)-4]
 			p.buffer.Reset()
 			p.buffer.WriteString("</to")
-		} else if len(text) >= 3 && text[len(text)-3:] == "</t" {
+		case len(text) >= 3 && text[len(text)-3:] == "</t":
 			flushText = text[:len(text)-3]
 			p.buffer.Reset()
 			p.buffer.WriteString("</t")
-		} else if len(text) >= 2 && text[len(text)-2:] == "</" {
+		case len(text) >= 2 && text[len(text)-2:] == "</":
 			flushText = text[:len(text)-2]
 			p.buffer.Reset()
 			p.buffer.WriteString("</")
-		} else if len(text) >= 1 && text[len(text)-1:] == "<" {
+		case len(text) >= 1 && text[len(text)-1:] == "<":
 			flushText = text[:len(text)-1]
 			p.buffer.Reset()
 			p.buffer.WriteString("<")
-		} else {
+		default:
 			// No partial closing tag detected
 			// Move to toolContent but don't emit yet (wait for </tool>)
 			flushText = text
@@ -158,27 +164,28 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 		}
 	} else {
 		// Not in tool call, check for potential <tool> prefix
-		if len(text) >= 5 && text[len(text)-5:] == "<tool" {
+		switch {
+		case len(text) >= 5 && text[len(text)-5:] == "<tool":
 			flushText = text[:len(text)-5]
 			p.buffer.Reset()
 			p.buffer.WriteString("<tool")
-		} else if len(text) >= 4 && text[len(text)-4:] == "<too" {
+		case len(text) >= 4 && text[len(text)-4:] == "<too":
 			flushText = text[:len(text)-4]
 			p.buffer.Reset()
 			p.buffer.WriteString("<too")
-		} else if len(text) >= 3 && text[len(text)-3:] == "<to" {
+		case len(text) >= 3 && text[len(text)-3:] == "<to":
 			flushText = text[:len(text)-3]
 			p.buffer.Reset()
 			p.buffer.WriteString("<to")
-		} else if len(text) >= 2 && text[len(text)-2:] == "<t" {
+		case len(text) >= 2 && text[len(text)-2:] == "<t":
 			flushText = text[:len(text)-2]
 			p.buffer.Reset()
 			p.buffer.WriteString("<t")
-		} else if len(text) >= 1 && text[len(text)-1:] == "<" {
+		case len(text) >= 1 && text[len(text)-1:] == "<":
 			flushText = text[:len(text)-1]
 			p.buffer.Reset()
 			p.buffer.WriteString("<")
-		} else {
+		default:
 			flushText = text
 			p.buffer.Reset()
 		}

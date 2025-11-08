@@ -17,37 +17,7 @@ import (
 	"github.com/entrhq/forge/pkg/types"
 )
 
-var (
-	// Color palette with pastel salmon pink
-	salmonPink  = lipgloss.Color("#FFB3BA") // Soft pastel salmon pink
-	coralPink   = lipgloss.Color("#FFCCCB") // Lighter coral accent
-	mutedGray   = lipgloss.Color("#6B7280")
-	brightWhite = lipgloss.Color("#F9FAFB")
-	darkBg      = lipgloss.Color("#111827")
-
-	// Styles
-	headerStyle = lipgloss.NewStyle().
-			Foreground(salmonPink).
-			Bold(true)
-
-	tipsStyle = lipgloss.NewStyle().
-			Foreground(mutedGray)
-
-	statusBarStyle = lipgloss.NewStyle().
-			Foreground(mutedGray).
-			Background(darkBg).
-			Padding(0, 1)
-
-	inputBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(salmonPink).
-			Padding(0, 1)
-
-	userStyle     = lipgloss.NewStyle().Foreground(coralPink).Bold(true)
-	thinkingStyle = lipgloss.NewStyle().Foreground(mutedGray).Italic(true)
-	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8E6CF")) // Soft mint green
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB3BA")) // Match salmon for errors
-)
+// Colors and styles are now defined in styles.go for consistency across all TUI components
 
 // Executor is a TUI-based executor that provides an interactive,
 // Gemini-style interface for agent interaction.
@@ -77,6 +47,7 @@ func (e *Executor) Run(ctx context.Context) error {
 	e.program = tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 
 	go func() {
@@ -97,18 +68,19 @@ type agentErrMsg struct{ err error }
 
 // model represents the state of the TUI application.
 type model struct {
-	viewport       viewport.Model
-	textarea       textarea.Model
-	agent          agent.Agent
-	channels       *types.AgentChannels
-	content        *strings.Builder
-	thinkingBuffer *strings.Builder
-	messageBuffer  *strings.Builder
-	overlay        *overlayState
-	isThinking     bool
-	width          int
-	height         int
-	ready          bool
+	viewport                 viewport.Model
+	textarea                 textarea.Model
+	agent                    agent.Agent
+	channels                 *types.AgentChannels
+	content                  *strings.Builder
+	thinkingBuffer           *strings.Builder
+	messageBuffer            *strings.Builder
+	overlay                  *overlayState
+	isThinking               bool
+	width                    int
+	height                   int
+	ready                    bool
+	hasMessageContentStarted bool
 
 	// Token usage tracking
 	totalPromptTokens     int
@@ -233,14 +205,15 @@ func wordWrap(text string, width int) string {
 		}
 
 		// Check if adding this word would exceed width
-		if currentLine == "" {
+		switch {
+		case currentLine == "":
 			currentLine = word
-		} else if len(currentLine)+1+len(word) > width {
+		case len(currentLine)+1+len(word) > width:
 			// Write current line and start new one
 			result.WriteString(currentLine)
 			result.WriteString("\n")
 			currentLine = word
-		} else {
+		default:
 			// Add word to current line
 			currentLine += " " + word
 		}
@@ -260,17 +233,21 @@ func (m *model) handleMessageContent(content string) bool {
 		return false
 	}
 
-	// Buffer and display content directly (no "Assistant:" label needed as responses come through tools)
+	// Buffer the content (like thinking does)
 	m.messageBuffer.WriteString(content)
-	m.content.WriteString(content)
 
-	// Update viewport immediately for streaming effect
-	m.viewport.SetContent(m.content.String())
+	// Stream message content as it arrives (like thinking does)
+	formatted := formatEntry("", m.messageBuffer.String(), lipgloss.NewStyle(), m.width, false)
+	m.viewport.SetContent(m.content.String() + formatted)
 	m.viewport.GotoBottom()
 	return true
 }
 
 // handleAgentEvent processes a single agent event and updates the model
+// handleAgentEvent routes agent events to appropriate handlers. High complexity is inherent
+// to event routing logic that must handle 15+ distinct event types with different behaviors.
+//
+//nolint:gocyclo
 func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	switch event.Type {
 	case types.EventTypeThinkingStart:
@@ -294,6 +271,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			formatted := formatEntry("💭 ", m.thinkingBuffer.String(), thinkingStyle, m.width, false)
 			m.content.WriteString(formatted)
 		}
+		m.content.WriteString("\n\n")
 		m.isThinking = false
 		m.thinkingBuffer.Reset()
 
@@ -312,15 +290,26 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.messageBuffer.Reset()
 
 	case types.EventTypeMessageContent:
+		if strings.TrimSpace(event.Content) != "" && !m.hasMessageContentStarted {
+			m.hasMessageContentStarted = true
+		}
 		if m.handleMessageContent(event.Content) {
 			return // Viewport already updated in handleMessageContent
 		}
 
 	case types.EventTypeMessageEnd:
+		// Finalize message content (like thinking does)
+		if m.messageBuffer.Len() > 0 && m.hasMessageContentStarted {
+			formatted := formatEntry("", m.messageBuffer.String(), lipgloss.NewStyle(), m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n\n")
+			m.hasMessageContentStarted = false
+		}
 		m.messageBuffer.Reset()
 
 	case types.EventTypeError:
-		m.content.WriteString("\n" + errorStyle.Render(fmt.Sprintf("  ❌ Error: %v", event.Error)))
+		m.content.WriteString(errorStyle.Render(fmt.Sprintf("  ❌ Error: %v", event.Error)))
+		m.content.WriteString("\n\n")
 
 	case types.EventTypeTurnEnd:
 		// Turn end - no extra spacing needed
@@ -333,7 +322,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString("\n")
 		m.viewport.SetContent(m.content.String())
 		m.viewport.GotoBottom()
-		
+
 		// Handle tool approval request by showing overlay
 		if event.Preview != nil {
 			preview, ok := event.Preview.(*tools.ToolPreview)
@@ -342,7 +331,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 				responseFunc := func(response *types.ApprovalResponse) {
 					// Send approval response to agent
 					m.channels.Approval <- response
-					
+
 					// Close overlay and update viewport
 					m.overlay.deactivate()
 					m.viewport.SetContent(m.content.String())
@@ -389,6 +378,57 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			m.totalTokens += event.TokenUsage.TotalTokens
 		}
 		return // Don't update viewport for token events
+
+	case types.EventTypeCommandExecutionStart:
+		// Show command execution started message
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  🚀 ", fmt.Sprintf("Executing: %s", event.CommandExecution.Command), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+			m.viewport.SetContent(m.content.String())
+			m.viewport.GotoBottom()
+
+			// Create and activate command execution overlay
+			overlay := NewCommandExecutionOverlay(
+				event.CommandExecution.Command,
+				event.CommandExecution.WorkingDir,
+				event.CommandExecution.ExecutionID,
+				m.channels.Cancel,
+			)
+			m.overlay.activate(OverlayModeCommandOutput, overlay)
+		}
+		return
+
+	case types.EventTypeCommandOutput:
+		// Output events are handled by the overlay itself
+		return
+
+	case types.EventTypeCommandExecutionComplete:
+		// Command completed successfully
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  ✓ ", fmt.Sprintf("Command completed (exit code: %d, duration: %s)",
+				event.CommandExecution.ExitCode, event.CommandExecution.Duration), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+		// Note: Overlay stays open until user dismisses it
+
+	case types.EventTypeCommandExecutionFailed:
+		// Command failed
+		if event.CommandExecution != nil {
+			formatted := formatEntry("  ✗ ", fmt.Sprintf("Command failed (exit code: %d, duration: %s)",
+				event.CommandExecution.ExitCode, event.CommandExecution.Duration), errorStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+		// Note: Overlay stays open until user dismisses it
+
+	case types.EventTypeCommandExecutionCanceled:
+		// Command was canceled
+		formatted := formatEntry("  ⏹ ", "Command canceled by user", toolStyle, m.width, false)
+		m.content.WriteString(formatted)
+		m.content.WriteString("\n")
+		// Note: Overlay stays open until user dismisses it
 	}
 
 	// Update viewport for all other event types
@@ -417,27 +457,34 @@ func (m *model) recalculateLayout() {
 	m.viewport.Height = viewportHeight
 }
 
-// Update is called when a message is received.
+// Update is called when a message is received. High complexity is inherent to the
+// Bubble Tea Update pattern which must handle multiple message types and UI states.
+//
+//nolint:gocyclo
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
 	)
 
-	// Store old textarea height to detect changes
-	oldHeight := m.textarea.Height()
-	m.textarea, tiCmd = m.textarea.Update(msg)
-	newHeight := m.textarea.Height()
+	// Only update textarea if no overlay is active
+	// This prevents the textarea from capturing scroll events when an overlay is open
+	if !m.overlay.isActive() {
+		// Store old textarea height to detect changes
+		oldHeight := m.textarea.Height()
+		m.textarea, tiCmd = m.textarea.Update(msg)
+		newHeight := m.textarea.Height()
 
-	// If textarea height changed, recalculate viewport height
-	if oldHeight != newHeight && m.ready {
-		m.recalculateLayout()
+		// If textarea height changed, recalculate viewport height
+		if oldHeight != newHeight && m.ready {
+			m.recalculateLayout()
+		}
 	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
-		m.viewport, vpCmd = m.viewport.Update(msg)
+		m.viewport, _ = m.viewport.Update(msg)
 		m.width = msg.Width
 		m.height = msg.Height
 
@@ -467,16 +514,58 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case *types.AgentEvent:
+		// If overlay is active and it's a command execution event, forward to overlay
+		if m.overlay.isActive() && msg.IsCommandExecutionEvent() {
+			var overlayCmd tea.Cmd
+			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			// Still handle the event in the main model too
+			m.handleAgentEvent(msg)
+			return m, tea.Batch(tiCmd, vpCmd, overlayCmd)
+		}
+
 		// Update viewport for agent events
 		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.handleAgentEvent(msg)
+		return m, tea.Batch(tiCmd, vpCmd)
+
+	case tea.MouseMsg:
+		// Handle mouse events (especially scroll wheel) for viewport
+		// If overlay is active, forward mouse events to it
+		if m.overlay.isActive() {
+			var overlayCmd tea.Cmd
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg)
+
+			// Check if overlay returned nil (signals to close)
+			if updatedOverlay == nil {
+				m.overlay.deactivate()
+				m.viewport.SetContent(m.content.String())
+				m.viewport.GotoBottom()
+				return m, overlayCmd
+			}
+
+			m.overlay.overlay = updatedOverlay
+			return m, overlayCmd
+		}
+
+		// Route mouse events to viewport for scrolling
+		m.viewport, vpCmd = m.viewport.Update(msg)
 		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
 		// If overlay is active, forward all key messages to it
 		if m.overlay.isActive() {
 			var overlayCmd tea.Cmd
-			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg)
+
+			// Check if overlay returned nil (signals to close)
+			if updatedOverlay == nil {
+				m.overlay.deactivate()
+				m.viewport.SetContent(m.content.String())
+				m.viewport.GotoBottom()
+				return m, overlayCmd
+			}
+
+			m.overlay.overlay = updatedOverlay
 			return m, overlayCmd
 		}
 
@@ -517,23 +606,23 @@ func (m *model) updateTextAreaHeight() {
 		}
 		return
 	}
-	
+
 	// Calculate visual lines accounting for wrapping
 	width := m.textarea.Width()
 	if width <= 0 {
 		width = 80 // default width
 	}
-	
+
 	// Account for prompt width ("> " = 2 chars)
 	effectiveWidth := width - 2
 	if effectiveWidth <= 0 {
 		effectiveWidth = 78
 	}
-	
+
 	// Split by actual newlines first
 	textLines := strings.Split(value, "\n")
 	visualLines := 0
-	
+
 	for _, line := range textLines {
 		if line == "" {
 			visualLines++ // Empty line still counts as 1 visual line
@@ -547,7 +636,7 @@ func (m *model) updateTextAreaHeight() {
 			visualLines += wrappedLines
 		}
 	}
-	
+
 	// Clamp between 1 and MaxHeight
 	if visualLines < 1 {
 		visualLines = 1
@@ -555,7 +644,7 @@ func (m *model) updateTextAreaHeight() {
 	if visualLines > m.textarea.MaxHeight {
 		visualLines = m.textarea.MaxHeight
 	}
-	
+
 	// Only update if height changed to avoid unnecessary recalculation
 	if visualLines != m.textarea.Height() {
 		m.textarea.SetHeight(visualLines)
@@ -586,12 +675,12 @@ func (m model) View() string {
 
 	// ASCII art header with gradient effect
 	header := headerStyle.Render(`
-███████╗ ██████╗ ██████╗  ██████╗ ███████╗
-██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
-█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
-██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
-██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
-╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
+	███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+	██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+	█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+	██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+	██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+	╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
 
 	// Tips section
 	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+C to exit`)
@@ -609,7 +698,7 @@ func (m model) View() string {
 	// Bottom status bar with three sections
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
-	
+
 	// Right section includes token usage if available
 	bottomRight := "Forge Agent"
 	if m.totalTokens > 0 {
