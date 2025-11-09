@@ -30,7 +30,7 @@ const (
 	// These are tuned for long coding sessions with many file operations
 	defaultMaxTokens        = 100000 // Conservative limit with headroom for 128K context
 	defaultThresholdPercent = 80.0   // Start summarizing at 80% (80K tokens)
-	defaultToolCallAge      = 10     // Summarize tool calls older than 40 messages (was too aggressive at 10)
+	defaultToolCallAge      = 30     // Summarize tool calls older than 30 messages
 	defaultSummaryBatchSize = 10     // Summarize 10 messages at a time
 
 	// Default system prompt for coding agent

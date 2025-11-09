@@ -3,8 +3,6 @@ package context
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 
 	"github.com/entrhq/forge/pkg/agent/memory"
@@ -12,25 +10,12 @@ import (
 	"github.com/entrhq/forge/pkg/types"
 )
 
-var thresholdDebugLog *log.Logger
-
-func init() {
-	// Create debug log file in /tmp
-	f, err := os.OpenFile("/tmp/forge-threshold-strategy-debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Printf("Failed to open threshold debug log: %v", err)
-		thresholdDebugLog = log.New(os.Stderr, "[THRESHOLD-DEBUG] ", log.LstdFlags|log.Lshortfile)
-	} else {
-		thresholdDebugLog = log.New(f, "[THRESHOLD-DEBUG] ", log.LstdFlags|log.Lshortfile)
-	}
-}
-
 // ThresholdSummarizationStrategy triggers summarization when token usage
 // exceeds a configured percentage of the maximum context window.
 type ThresholdSummarizationStrategy struct {
 	// thresholdPercent is the percentage (0-100) of max tokens that triggers summarization
 	thresholdPercent float64
-	
+
 	// messagesPerSummary is how many messages to summarize in each batch
 	messagesPerSummary int
 }
@@ -46,12 +31,12 @@ func NewThresholdSummarizationStrategy(thresholdPercent float64, messagesPerSumm
 	if thresholdPercent > 100 {
 		thresholdPercent = 100
 	}
-	
+
 	// Ensure we summarize at least 1 message
 	if messagesPerSummary < 1 {
 		messagesPerSummary = 1
 	}
-	
+
 	return &ThresholdSummarizationStrategy{
 		thresholdPercent:   thresholdPercent,
 		messagesPerSummary: messagesPerSummary,
@@ -68,10 +53,10 @@ func (s *ThresholdSummarizationStrategy) ShouldRun(conv *memory.ConversationMemo
 	if maxTokens <= 0 {
 		return false
 	}
-	
+
 	// Calculate current usage percentage
 	usagePercent := (float64(currentTokens) / float64(maxTokens)) * 100
-	
+
 	// Trigger if we've exceeded the threshold
 	return usagePercent >= s.thresholdPercent
 }
@@ -82,109 +67,149 @@ func (s *ThresholdSummarizationStrategy) Summarize(ctx context.Context, conv *me
 	if len(messages) == 0 {
 		return 0, nil
 	}
-	
-	// Find messages to summarize (oldest first, skip system message)
+
+	// Collect messages to summarize
+	toSummarize := s.collectMessagesToSummarize(messages)
+	if len(toSummarize) == 0 {
+		return 0, nil
+	}
+
+	// Generate summary using LLM
+	summary, err := s.generateSummary(ctx, toSummarize, llm)
+	if err != nil {
+		return 0, err
+	}
+
+	// Replace summarized messages with the summary
+	if err := s.replaceMessagesWithSummary(conv, messages, toSummarize, summary); err != nil {
+		return 0, err
+	}
+
+	return len(toSummarize), nil
+}
+
+// collectMessagesToSummarize finds messages to summarize (oldest first, skip system message)
+func (s *ThresholdSummarizationStrategy) collectMessagesToSummarize(messages []*types.Message) []*types.Message {
 	var toSummarize []*types.Message
 	startIdx := 0
-	
+
 	// Skip system message if present
 	if len(messages) > 0 && messages[0].Role == types.RoleSystem {
 		startIdx = 1
 	}
-	
+
 	// Collect messages to summarize, respecting the batch size
 	for i := startIdx; i < len(messages) && len(toSummarize) < s.messagesPerSummary; i++ {
 		msg := messages[i]
-		
+
 		// Skip already summarized messages
-		if msg.Metadata != nil {
-			if summarized, ok := msg.Metadata["summarized"].(bool); ok && summarized {
-				continue
-			}
+		if s.isSummarized(msg) {
+			continue
 		}
-		
+
 		// Only summarize user and assistant messages
 		if msg.Role == types.RoleUser || msg.Role == types.RoleAssistant {
 			toSummarize = append(toSummarize, msg)
 		}
 	}
-	
-	if len(toSummarize) == 0 {
-		return 0, nil // Nothing to summarize
+
+	return toSummarize
+}
+
+// isSummarized checks if a message has already been summarized
+func (s *ThresholdSummarizationStrategy) isSummarized(msg *types.Message) bool {
+	if msg.Metadata == nil {
+		return false
 	}
-	
+	summarized, ok := msg.Metadata["summarized"].(bool)
+	return ok && summarized
+}
+
+// generateSummary calls the LLM to create a summary of the given messages
+func (s *ThresholdSummarizationStrategy) generateSummary(ctx context.Context, toSummarize []*types.Message, llm llm.Provider) (*types.Message, error) {
 	// Build prompt for summarization
 	prompt := s.buildSummarizationPrompt(toSummarize)
-	
+
 	// Create messages for LLM
 	llmMessages := []*types.Message{
 		types.NewSystemMessage("You are a helpful assistant that creates concise summaries of agent conversations. You are excellent at preserving important context."),
 		types.NewUserMessage(prompt),
 	}
-	
+
 	// Call LLM to generate summary
 	response, err := llm.Complete(ctx, llmMessages)
 	if err != nil {
-		return 0, fmt.Errorf("failed to generate summary: %w", err)
+		return nil, fmt.Errorf("failed to generate summary: %w", err)
 	}
-	
+
 	// Create a single summarized message to replace the batch
 	summary := types.NewAssistantMessage(response.Content).
 		WithMetadata("summarized", true).
 		WithMetadata("summary_count", len(toSummarize)).
 		WithMetadata("summary_method", s.Name())
-	
-	// Remove the summarized messages and insert the summary
-	// Find the index of the first message to summarize by comparing timestamps
-	firstIdx := -1
+
+	return summary, nil
+}
+
+// replaceMessagesWithSummary removes summarized messages and inserts the summary
+func (s *ThresholdSummarizationStrategy) replaceMessagesWithSummary(conv *memory.ConversationMemory, messages []*types.Message, toSummarize []*types.Message, summary *types.Message) error {
+	// Find the index of the first message to summarize
+	firstIdx := s.findMessageIndex(messages, toSummarize[0])
+	if firstIdx == -1 {
+		return fmt.Errorf("failed to find messages to remove")
+	}
+
+	// Build new message list
+	newMessages := s.buildNewMessageList(messages, firstIdx, len(toSummarize), summary)
+
+	// Clear and re-add all messages
+	conv.Clear()
+	conv.AddMultiple(newMessages)
+
+	return nil
+}
+
+// findMessageIndex finds the index of a message by comparing timestamps
+func (s *ThresholdSummarizationStrategy) findMessageIndex(messages []*types.Message, target *types.Message) int {
 	for i, msg := range messages {
-		if msg.Timestamp.Equal(toSummarize[0].Timestamp) {
-			firstIdx = i
-			break
+		if msg.Timestamp.Equal(target.Timestamp) {
+			return i
 		}
 	}
-	
-	if firstIdx == -1 {
-		return 0, fmt.Errorf("failed to find messages to remove")
-	}
-	
-	// Calculate how many messages we're replacing
-	replaceCount := len(toSummarize)
-	
-	// Build new message list
+	return -1
+}
+
+// buildNewMessageList creates a new message list with the summary replacing the batch
+func (s *ThresholdSummarizationStrategy) buildNewMessageList(messages []*types.Message, firstIdx, replaceCount int, summary *types.Message) []*types.Message {
 	var newMessages []*types.Message
-	
+
 	// Keep messages before the summarized range
 	newMessages = append(newMessages, messages[:firstIdx]...)
-	
+
 	// Add the summary
 	newMessages = append(newMessages, summary)
-	
+
 	// Keep messages after the summarized range
 	if firstIdx+replaceCount < len(messages) {
 		newMessages = append(newMessages, messages[firstIdx+replaceCount:]...)
 	}
-	
-	// Clear and re-add all messages
-	conv.Clear()
-	conv.AddMultiple(newMessages)
-	
-	return len(toSummarize), nil
+
+	return newMessages
 }
 
 // buildSummarizationPrompt creates a prompt for summarizing a batch of messages
 func (s *ThresholdSummarizationStrategy) buildSummarizationPrompt(messages []*types.Message) string {
 	var b strings.Builder
-	
+
 	b.WriteString("Please create a concise summary of the following conversation messages.\n")
 	b.WriteString("Preserve key information, decisions, and context. Be brief but comprehensive.\n\n")
 	b.WriteString("Messages to summarize:\n\n")
-	
+
 	for i, msg := range messages {
 		b.WriteString(fmt.Sprintf("%d. %s: %s\n\n", i+1, msg.Role, msg.Content))
 	}
-	
+
 	b.WriteString("Please provide a concise summary:")
-	
+
 	return b.String()
 }

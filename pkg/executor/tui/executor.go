@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -66,6 +67,29 @@ func (e *Executor) Run(ctx context.Context) error {
 
 type agentErrMsg struct{ err error }
 
+// summarizationStatus tracks an active context summarization operation
+type summarizationStatus struct {
+	active          bool
+	strategy        string
+	currentTokens   int
+	maxTokens       int
+	itemsProcessed  int
+	totalItems      int
+	currentItem     string
+	progressPercent float64
+	startTime       time.Time
+}
+
+// toastNotification represents a temporary notification message
+type toastNotification struct {
+	active    bool
+	message   string
+	details   string
+	icon      string
+	isError   bool
+	showUntil time.Time
+}
+
 // model represents the state of the TUI application.
 type model struct {
 	viewport                 viewport.Model
@@ -76,6 +100,8 @@ type model struct {
 	thinkingBuffer           *strings.Builder
 	messageBuffer            *strings.Builder
 	overlay                  *overlayState
+	summarization            *summarizationStatus
+	toast                    *toastNotification
 	isThinking               bool
 	width                    int
 	height                   int
@@ -83,9 +109,11 @@ type model struct {
 	hasMessageContentStarted bool
 
 	// Token usage tracking
-	totalPromptTokens     int
-	totalCompletionTokens int
-	totalTokens           int
+	totalPromptTokens     int // Cumulative input tokens across all API calls
+	totalCompletionTokens int // Cumulative output tokens across all API calls
+	totalTokens           int // Cumulative total tokens (input + output)
+	currentContextTokens  int // Current conversation context size
+	maxContextTokens      int // Maximum allowed context size
 }
 
 // initialModel returns the initial state of the TUI.
@@ -113,6 +141,8 @@ func initialModel() model {
 		thinkingBuffer: &strings.Builder{},
 		messageBuffer:  &strings.Builder{},
 		overlay:        newOverlayState(),
+		summarization:  &summarizationStatus{},
+		toast:          &toastNotification{},
 	}
 }
 
@@ -225,6 +255,99 @@ func wordWrap(text string, width int) string {
 	}
 
 	return result.String()
+}
+
+// renderSummarizationStatus renders the context summarization status overlay
+func (m model) renderSummarizationStatus() string {
+	if !m.summarization.active {
+		return ""
+	}
+
+	// Create box with border
+	boxWidth := m.width - 4
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+
+	var content strings.Builder
+
+	// Header line with brain icon and message
+	header := fmt.Sprintf("🧠 Optimizing context... [%s]", m.summarization.strategy)
+	content.WriteString(header)
+	content.WriteString("\n")
+
+	// Progress bar
+	barWidth := boxWidth - 10 // Leave room for percentage
+	if barWidth < 20 {
+		barWidth = 20
+	}
+
+	filledWidth := int(float64(barWidth) * m.summarization.progressPercent / 100.0)
+	if filledWidth > barWidth {
+		filledWidth = barWidth
+	}
+
+	bar := strings.Repeat("━", filledWidth) + strings.Repeat("━", barWidth-filledWidth)
+	progressLine := fmt.Sprintf("%s %.0f%%", bar, m.summarization.progressPercent)
+	content.WriteString(progressLine)
+	content.WriteString("\n")
+
+	// Current item description
+	if m.summarization.currentItem != "" {
+		content.WriteString(m.summarization.currentItem)
+	} else if m.summarization.totalItems > 0 {
+		content.WriteString(fmt.Sprintf("Processing item %d of %d...",
+			m.summarization.itemsProcessed, m.summarization.totalItems))
+	}
+
+	// Create styled box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(salmonPink).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return "\n" + boxStyle.Render(content.String()) + "\n"
+}
+
+// renderToast renders a toast notification
+func (m model) renderToast() string {
+	if !m.toast.active || time.Now().After(m.toast.showUntil) {
+		return ""
+	}
+
+	// Create box with border
+	boxWidth := m.width - 4
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+
+	var content strings.Builder
+
+	// Icon and message
+	header := fmt.Sprintf("%s %s", m.toast.icon, m.toast.message)
+	content.WriteString(header)
+	content.WriteString("\n")
+
+	// Details
+	if m.toast.details != "" {
+		content.WriteString(m.toast.details)
+	}
+
+	// Choose border color based on error status
+	borderColor := mintGreen // Green for success
+	if m.toast.isError {
+		borderColor = salmonPink // Pink/red for errors
+	}
+
+	// Create styled box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return "\n" + boxStyle.Render(content.String()) + "\n"
 }
 
 // handleMessageContent processes message content events with streaming support
@@ -370,6 +493,14 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString(formatted)
 		m.content.WriteString("\n")
 
+	case types.EventTypeApiCallStart:
+		// Update context token information
+		if event.ApiCallInfo != nil {
+			m.currentContextTokens = event.ApiCallInfo.ContextTokens
+			m.maxContextTokens = event.ApiCallInfo.MaxContextTokens
+		}
+		return // Don't update viewport for API call events
+
 	case types.EventTypeTokenUsage:
 		// Update token usage counts
 		if event.TokenUsage != nil {
@@ -431,44 +562,81 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		// Note: Overlay stays open until user dismisses it
 
 	case types.EventTypeContextSummarizationStart:
-		// Context summarization started
+		// Context summarization started - activate status overlay
 		if event.ContextSummarization != nil {
 			cs := event.ContextSummarization
-			formatted := formatEntry("  🧹 ", fmt.Sprintf("Summarizing context (%s): %d/%d tokens...",
-				cs.Strategy, cs.CurrentTokens, cs.MaxTokens), toolStyle, m.width, false)
-			m.content.WriteString(formatted)
-			m.content.WriteString("\n")
+			m.summarization.active = true
+			m.summarization.strategy = cs.Strategy
+			m.summarization.currentTokens = cs.CurrentTokens
+			m.summarization.maxTokens = cs.MaxTokens
+			m.summarization.itemsProcessed = 0
+			m.summarization.totalItems = 0
+			m.summarization.currentItem = ""
+			m.summarization.progressPercent = 0
+			m.summarization.startTime = time.Now()
 		}
+		return // Don't write to chat
 
 	case types.EventTypeContextSummarizationProgress:
-		// Context summarization progress update
-		if event.ContextSummarization != nil {
+		// Context summarization progress update - update status overlay
+		if event.ContextSummarization != nil && m.summarization.active {
 			cs := event.ContextSummarization
-			formatted := formatEntry("  📊 ", fmt.Sprintf("Progress: %d/%d items processed, %d tokens saved",
-				cs.ItemsProcessed, cs.TotalItems, cs.TokensSaved), toolStyle, m.width, false)
-			m.content.WriteString(formatted)
-			m.content.WriteString("\n")
+			m.summarization.itemsProcessed = cs.ItemsProcessed
+			m.summarization.totalItems = cs.TotalItems
+
+			// Calculate progress percentage
+			if cs.TotalItems > 0 {
+				m.summarization.progressPercent = float64(cs.ItemsProcessed) / float64(cs.TotalItems) * 100.0
+			}
+
+			// Update current item description
+			if cs.TotalItems > 0 {
+				m.summarization.currentItem = fmt.Sprintf("Summarizing item %d of %d...",
+					cs.ItemsProcessed, cs.TotalItems)
+			}
 		}
+		return // Don't write to chat
 
 	case types.EventTypeContextSummarizationComplete:
-		// Context summarization completed successfully
+		// Context summarization completed - hide status and show success toast
 		if event.ContextSummarization != nil {
 			cs := event.ContextSummarization
-			formatted := formatEntry("  ✓ ", fmt.Sprintf("Summarization complete: saved %d tokens (%d → %d) in %s",
-				cs.TokensSaved, cs.CurrentTokens, cs.NewTokenCount, cs.Duration), toolStyle, m.width, false)
-			m.content.WriteString(formatted)
-			m.content.WriteString("\n\n")
+
+			// Clear summarization status
+			m.summarization.active = false
+
+			// Show success toast
+			m.toast.active = true
+			m.toast.message = "Context optimized"
+			m.toast.details = fmt.Sprintf("Saved %s tokens (%d items summarized)\n%s • %s",
+				formatTokenCount(cs.TokensSaved),
+				cs.ItemsProcessed,
+				cs.Strategy,
+				cs.Duration)
+			m.toast.icon = "✨"
+			m.toast.isError = false
+			m.toast.showUntil = time.Now().Add(4 * time.Second)
 		}
+		return // Don't write to chat
 
 	case types.EventTypeContextSummarizationError:
-		// Context summarization failed
+		// Context summarization failed - hide status and show error toast
 		if event.ContextSummarization != nil {
 			cs := event.ContextSummarization
-			formatted := formatEntry("  ✗ ", fmt.Sprintf("Summarization failed (%s): %v",
-				cs.Strategy, event.Error), errorStyle, m.width, false)
-			m.content.WriteString(formatted)
-			m.content.WriteString("\n\n")
+
+			// Clear summarization status
+			m.summarization.active = false
+
+			// Show error toast
+			m.toast.active = true
+			m.toast.message = "Context optimization failed"
+			m.toast.details = fmt.Sprintf("%s: %v\nContinuing with current context",
+				cs.Strategy, event.Error)
+			m.toast.icon = "⚠️"
+			m.toast.isError = true
+			m.toast.showUntil = time.Now().Add(4 * time.Second)
 		}
+		return // Don't write to chat
 	}
 
 	// Update viewport for all other event types
@@ -742,7 +910,20 @@ func (m model) View() string {
 	// Right section includes token usage if available
 	bottomRight := "Forge Agent"
 	if m.totalTokens > 0 {
-		bottomRight = fmt.Sprintf("◆ %s System / %s Completion / %s Total tokens",
+		// Format context with visual indicator if approaching limit
+		contextStr := formatTokenCount(m.currentContextTokens)
+		if m.maxContextTokens > 0 {
+			contextStr = fmt.Sprintf("%s/%s", contextStr, formatTokenCount(m.maxContextTokens))
+
+			// Add color indicator if context is >= 80% of max (approaching limit)
+			percentage := float64(m.currentContextTokens) / float64(m.maxContextTokens) * 100
+			if percentage >= 80 {
+				contextStr = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(contextStr) // Orange/red
+			}
+		}
+
+		bottomRight = fmt.Sprintf("◆ Context: %s | Input: %s | Output: %s | Total: %s",
+			contextStr,
 			formatTokenCount(m.totalPromptTokens),
 			formatTokenCount(m.totalCompletionTokens),
 			formatTokenCount(m.totalTokens))
@@ -767,6 +948,19 @@ func (m model) View() string {
 			bottomRight,
 	)
 
+	// Build viewport section with potential status overlay and toast
+	viewportSection := m.viewport.View()
+
+	// Add summarization status overlay if active
+	if m.summarization.active {
+		viewportSection += m.renderSummarizationStatus()
+	}
+
+	// Add toast notification if active and not expired
+	if m.toast.active && time.Now().Before(m.toast.showUntil) {
+		viewportSection += m.renderToast()
+	}
+
 	// Assemble the full UI
 	baseView := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -774,7 +968,7 @@ func (m model) View() string {
 		tips,
 		topStatus,
 		"", // Blank line for spacing
-		m.viewport.View(),
+		viewportSection,
 		inputBox,
 		bottomBar,
 	)

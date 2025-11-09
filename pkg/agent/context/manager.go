@@ -123,6 +123,7 @@ func (m *Manager) EvaluateAndSummarize(ctx context.Context, conv *memory.Convers
 				strategy.Name(),
 				tokensSaved,
 				newTokenCount,
+				summarizedCount,
 				durationStr,
 			)
 		}

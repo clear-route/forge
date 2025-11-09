@@ -373,7 +373,7 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 	agentDebugLog.Printf("contextManager != nil: %v", a.contextManager != nil)
 	agentDebugLog.Printf("tokenizer != nil: %v", a.tokenizer != nil)
 	agentDebugLog.Printf("Prompt tokens: %d", promptTokens)
-	
+
 	if a.contextManager != nil && a.tokenizer != nil {
 		agentDebugLog.Printf("Checking if memory is ConversationMemory...")
 		// Get the conversation memory (cast from interface)
@@ -388,11 +388,11 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 			} else {
 				agentDebugLog.Printf("EvaluateAndSummarize completed successfully")
 			}
-			
+
 			// Rebuild messages after potential summarization
 			history = a.memory.GetAll()
 			messages = prompts.BuildMessages(systemPrompt, history, "", errorContext)
-			
+
 			// Recalculate tokens with updated messages
 			if a.tokenizer != nil {
 				promptTokens = a.tokenizer.CountMessagesTokens(messages)
@@ -402,6 +402,13 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 			agentDebugLog.Printf("Memory is NOT ConversationMemory - type: %T", a.memory)
 		}
 	}
+
+	// Emit API call start event with context information
+	maxTokens := 0
+	if a.contextManager != nil {
+		maxTokens = a.contextManager.GetMaxTokens()
+	}
+	a.emitEvent(types.NewApiCallStartEvent("llm", promptTokens, maxTokens))
 
 	// Get response from LLM
 	stream, err := a.provider.StreamCompletion(ctx, messages)

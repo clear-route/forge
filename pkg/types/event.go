@@ -80,6 +80,9 @@ type AgentEvent struct {
 
 	// ContextSummarization contains context summarization information (for context summarization events).
 	ContextSummarization *ContextSummarization
+
+	// ApiCallInfo contains API call information (for API call events).
+	ApiCallInfo *ApiCallInfo
 }
 
 // TokenUsage contains token usage statistics from an LLM API call.
@@ -146,6 +149,15 @@ type CommandExecution struct {
 
 	// ExecutionID is a unique identifier for this command execution.
 	ExecutionID string
+}
+
+// ApiCallInfo contains information about an API call.
+type ApiCallInfo struct {
+	// ContextTokens is the current conversation context size in tokens.
+	ContextTokens int
+
+	// MaxContextTokens is the configured maximum context limit in tokens.
+	MaxContextTokens int
 }
 
 // NewThinkingStartEvent creates a thinking start event.
@@ -261,11 +273,15 @@ func NewNoToolCallEvent() *AgentEvent {
 	}
 }
 
-// NewApiCallStartEvent creates an API call start event.
-func NewApiCallStartEvent(apiName string) *AgentEvent {
+// NewApiCallStartEvent creates an API call start event with context token information.
+func NewApiCallStartEvent(apiName string, contextTokens, maxContextTokens int) *AgentEvent {
 	return &AgentEvent{
 		Type:     EventTypeApiCallStart,
 		Metadata: map[string]interface{}{"api_name": apiName},
+		ApiCallInfo: &ApiCallInfo{
+			ContextTokens:    contextTokens,
+			MaxContextTokens: maxContextTokens,
+		},
 	}
 }
 
@@ -525,14 +541,15 @@ func NewContextSummarizationProgressEvent(strategy string, itemsProcessed, total
 }
 
 // NewContextSummarizationCompleteEvent creates a context summarization complete event.
-func NewContextSummarizationCompleteEvent(strategy string, tokensSaved, newTokenCount int, duration string) *AgentEvent {
+func NewContextSummarizationCompleteEvent(strategy string, tokensSaved, newTokenCount, itemsProcessed int, duration string) *AgentEvent {
 	return &AgentEvent{
 		Type: EventTypeContextSummarizationComplete,
 		ContextSummarization: &ContextSummarization{
-			Strategy:      strategy,
-			TokensSaved:   tokensSaved,
-			NewTokenCount: newTokenCount,
-			Duration:      duration,
+			Strategy:       strategy,
+			TokensSaved:    tokensSaved,
+			NewTokenCount:  newTokenCount,
+			ItemsProcessed: itemsProcessed,
+			Duration:       duration,
 		},
 		Metadata: make(map[string]interface{}),
 	}

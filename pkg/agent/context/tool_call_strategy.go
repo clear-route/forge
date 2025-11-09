@@ -80,14 +80,6 @@ func (s *ToolCallSummarizationStrategy) Summarize(ctx context.Context, conv *mem
 		return 0, nil // Nothing to summarize
 	}
 
-	// Track original token count (estimate: 4 chars per token)
-	originalTokens := 0
-	for _, group := range groups {
-		for _, msg := range group {
-			originalTokens += len(msg.Content) / 4
-		}
-	}
-
 	// Summarize each group
 	summarizedMessages := make([]*types.Message, 0)
 	for _, group := range groups {
@@ -97,13 +89,6 @@ func (s *ToolCallSummarizationStrategy) Summarize(ctx context.Context, conv *mem
 		}
 		summarizedMessages = append(summarizedMessages, summary)
 	}
-
-	// Calculate tokens saved
-	summarizedTokens := 0
-	for _, msg := range summarizedMessages {
-		summarizedTokens += len(msg.Content) / 4
-	}
-	tokensSaved := originalTokens - summarizedTokens
 
 	// Reconstruct conversation with summarized messages
 	// Keep system messages, add summarized messages, then add recent messages
@@ -128,7 +113,8 @@ func (s *ToolCallSummarizationStrategy) Summarize(ctx context.Context, conv *mem
 		conv.Add(msg)
 	}
 
-	return tokensSaved, nil
+	// Return the number of groups processed (items summarized)
+	return len(groups), nil
 }
 
 // summarizeGroup creates a concise summary of a tool call and its result using the LLM.
@@ -213,12 +199,10 @@ func groupToolCallsAndResults(messages []*types.Message) [][]*types.Message {
 				groups = append(groups, currentGroup)
 				currentGroup = make([]*types.Message, 0)
 			}
-		} else {
+		} else if len(currentGroup) > 0 {
 			// Non-tool message ends the current group
-			if len(currentGroup) > 0 {
-				groups = append(groups, currentGroup)
-				currentGroup = make([]*types.Message, 0)
-			}
+			groups = append(groups, currentGroup)
+			currentGroup = make([]*types.Message, 0)
 		}
 	}
 
