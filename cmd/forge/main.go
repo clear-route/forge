@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/entrhq/forge/pkg/agent"
+	agentcontext "github.com/entrhq/forge/pkg/agent/context"
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/executor/tui"
 	"github.com/entrhq/forge/pkg/llm/openai"
@@ -24,6 +25,13 @@ import (
 const (
 	version      = "0.1.0"                       // Version of the Forge coding agent
 	defaultModel = "anthropic/claude-sonnet-4.5" // Default model to use
+
+	// Context management defaults for coding sessions
+	// These are tuned for long coding sessions with many file operations
+	defaultMaxTokens        = 100000 // Conservative limit with headroom for 128K context
+	defaultThresholdPercent = 80.0   // Start summarizing at 80% (80K tokens)
+	defaultToolCallAge      = 10     // Summarize tool calls older than 40 messages (was too aggressive at 10)
+	defaultSummaryBatchSize = 10     // Summarize 10 messages at a time
 
 	// Default system prompt for coding agent
 	defaultSystemPrompt = `
@@ -163,10 +171,34 @@ func run(ctx context.Context, config *Config) error {
 		return fmt.Errorf("failed to create LLM provider: %w", err)
 	}
 
-	// Create agent with custom system prompt
+	// Create context summarization strategies for long coding sessions
+	// Strategy 1: Summarize old tool calls to compress historical operations
+	toolCallStrategy := agentcontext.NewToolCallSummarizationStrategy(defaultToolCallAge)
+
+	// Strategy 2: Summarize when approaching token limit to prevent exhaustion
+	thresholdStrategy := agentcontext.NewThresholdSummarizationStrategy(
+		defaultThresholdPercent,
+		defaultSummaryBatchSize,
+	)
+
+	// Create context manager with both strategies
+	// Event channel will be set by the agent during initialization
+	contextManager, err := agentcontext.NewManager(
+		provider,
+		defaultMaxTokens,
+		toolCallStrategy,
+		thresholdStrategy,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create context manager: %w", err)
+	}
+
+	// Create agent with custom system prompt and context manager
+	// The agent will set the event channel on the context manager during initialization
 	ag := agent.NewDefaultAgent(
 		provider,
 		agent.WithCustomInstructions(config.SystemPrompt),
+		agent.WithContextManager(contextManager),
 	)
 
 	// Create workspace security guard

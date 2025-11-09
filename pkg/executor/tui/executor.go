@@ -429,6 +429,46 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString(formatted)
 		m.content.WriteString("\n")
 		// Note: Overlay stays open until user dismisses it
+
+	case types.EventTypeContextSummarizationStart:
+		// Context summarization started
+		if event.ContextSummarization != nil {
+			cs := event.ContextSummarization
+			formatted := formatEntry("  🧹 ", fmt.Sprintf("Summarizing context (%s): %d/%d tokens...",
+				cs.Strategy, cs.CurrentTokens, cs.MaxTokens), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+
+	case types.EventTypeContextSummarizationProgress:
+		// Context summarization progress update
+		if event.ContextSummarization != nil {
+			cs := event.ContextSummarization
+			formatted := formatEntry("  📊 ", fmt.Sprintf("Progress: %d/%d items processed, %d tokens saved",
+				cs.ItemsProcessed, cs.TotalItems, cs.TokensSaved), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+
+	case types.EventTypeContextSummarizationComplete:
+		// Context summarization completed successfully
+		if event.ContextSummarization != nil {
+			cs := event.ContextSummarization
+			formatted := formatEntry("  ✓ ", fmt.Sprintf("Summarization complete: saved %d tokens (%d → %d) in %s",
+				cs.TokensSaved, cs.CurrentTokens, cs.NewTokenCount, cs.Duration), toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n\n")
+		}
+
+	case types.EventTypeContextSummarizationError:
+		// Context summarization failed
+		if event.ContextSummarization != nil {
+			cs := event.ContextSummarization
+			formatted := formatEntry("  ✗ ", fmt.Sprintf("Summarization failed (%s): %v",
+				cs.Strategy, event.Error), errorStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n\n")
+		}
 	}
 
 	// Update viewport for all other event types
