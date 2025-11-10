@@ -12,21 +12,50 @@ import (
 
 // ToolCallSummarizationStrategy summarizes old tool calls and their results
 // to reduce context size while preserving semantic meaning.
+// It uses a buffering mechanism with dual trigger conditions to reduce LLM API calls.
 type ToolCallSummarizationStrategy struct {
-	// messagesOldThreshold is how many messages back to start summarizing tool calls.
-	// For example, 20 means only summarize tool calls that are 20+ messages old.
+	// messagesOldThreshold is how many messages back to start considering tool calls for the buffer.
+	// For example, 20 means only tool calls that are 20+ messages old enter the buffer.
 	messagesOldThreshold int
+
+	// minToolCallsToSummarize is the minimum number of tool calls in the buffer before triggering summarization.
+	// This creates batching to reduce LLM API calls.
+	minToolCallsToSummarize int
+
+	// maxToolCallDistance is the maximum age (in messages) a tool call can be before forcing summarization.
+	// If any tool call exceeds this distance, all buffered tool calls are summarized regardless of buffer size.
+	maxToolCallDistance int
+
+	// eventChannel is used to emit progress events during parallel summarization
+	eventChannel chan<- *types.AgentEvent
 }
 
-// NewToolCallSummarizationStrategy creates a new tool call summarization strategy.
-// messagesOldThreshold specifies how many messages old a tool call must be before summarization (default: 20).
-func NewToolCallSummarizationStrategy(messagesOldThreshold int) *ToolCallSummarizationStrategy {
+// NewToolCallSummarizationStrategy creates a new tool call summarization strategy with buffering.
+// Parameters:
+//   - messagesOldThreshold: Tool calls must be at least this many messages old to enter buffer (default: 20)
+//   - minToolCallsToSummarize: Minimum buffer size before triggering summarization (default: 10)
+//   - maxToolCallDistance: Maximum age before forcing summarization regardless of buffer size (default: 40)
+func NewToolCallSummarizationStrategy(messagesOldThreshold, minToolCallsToSummarize, maxToolCallDistance int) *ToolCallSummarizationStrategy {
 	if messagesOldThreshold <= 0 {
-		messagesOldThreshold = 20 // Default to 20 messages
+		messagesOldThreshold = 20
+	}
+	if minToolCallsToSummarize <= 0 {
+		minToolCallsToSummarize = 10
+	}
+	if maxToolCallDistance <= 0 {
+		maxToolCallDistance = 40
 	}
 	return &ToolCallSummarizationStrategy{
-		messagesOldThreshold: messagesOldThreshold,
+		messagesOldThreshold:    messagesOldThreshold,
+		minToolCallsToSummarize: minToolCallsToSummarize,
+		maxToolCallDistance:     maxToolCallDistance,
+		eventChannel:            nil, // Will be set by Manager
 	}
+}
+
+// SetEventChannel sets the event channel for emitting progress events during summarization.
+func (s *ToolCallSummarizationStrategy) SetEventChannel(eventChan chan<- *types.AgentEvent) {
+	s.eventChannel = eventChan
 }
 
 // Name returns the strategy's identifier.
@@ -34,36 +63,67 @@ func (s *ToolCallSummarizationStrategy) Name() string {
 	return "ToolCallSummarization"
 }
 
-// ShouldRun checks if there are old tool calls that need summarization.
+// ShouldRun checks if buffered tool calls meet trigger conditions for summarization.
+// Returns true if either:
+// 1. Buffer trigger: Buffer contains >= minToolCallsToSummarize tool calls
+// 2. Age trigger: Any tool call is >= maxToolCallDistance messages old
 func (s *ToolCallSummarizationStrategy) ShouldRun(conv *memory.ConversationMemory, currentTokens, maxTokens int) bool {
 	messages := conv.GetAll()
-	if len(messages) <= s.messagesOldThreshold {
+	totalMessages := len(messages)
+
+	if totalMessages <= s.messagesOldThreshold {
 		return false // Not enough message history
 	}
 
-	// Check if there are any tool calls/results in the old messages that haven't been summarized
-	oldMessages := messages[:len(messages)-s.messagesOldThreshold]
-	for _, msg := range oldMessages {
+	// Identify old messages that can enter the buffer
+	oldMessages := messages[:totalMessages-s.messagesOldThreshold]
+
+	// Count unsummarized tool calls in buffer and track oldest position
+	bufferCount := 0
+	oldestToolCallPosition := -1
+
+	for i, msg := range oldMessages {
 		// Skip if already summarized
 		if isSummarized(msg) {
 			continue
 		}
 
-		// Check if this is a tool result or assistant message with tool call
-		if msg.Role == types.RoleTool {
-			return true // Found unsummarized tool result
-		}
+		// Check if this is a tool-related message
+		isToolMessage := msg.Role == types.RoleTool ||
+			(msg.Role == types.RoleAssistant && containsToolCallIndicators(msg.Content))
 
-		// Check if assistant message contains tool call indicators
-		if msg.Role == types.RoleAssistant && containsToolCallIndicators(msg.Content) {
-			return true // Found unsummarized tool call
+		if isToolMessage {
+			bufferCount++
+			if oldestToolCallPosition == -1 {
+				oldestToolCallPosition = i
+			}
+		}
+	}
+
+	// No tool calls to summarize
+	if bufferCount == 0 {
+		return false
+	}
+
+	// Buffer trigger: Check if buffer size meets minimum threshold
+	if bufferCount >= s.minToolCallsToSummarize {
+		return true
+	}
+
+	// Age trigger: Check if oldest tool call exceeds maximum distance
+	if oldestToolCallPosition >= 0 {
+		// Calculate distance from current position
+		distance := totalMessages - oldestToolCallPosition
+		if distance >= s.maxToolCallDistance {
+			return true
 		}
 	}
 
 	return false
 }
 
-// Summarize compresses old tool calls and their results using LLM-based summarization.
+// Summarize compresses buffered tool calls and their results using LLM-based summarization.
+// All tool calls that are >= messagesOldThreshold old will be summarized when triggered.
 func (s *ToolCallSummarizationStrategy) Summarize(ctx context.Context, conv *memory.ConversationMemory, llm llm.Provider) (int, error) {
 	messages := conv.GetAll()
 	if len(messages) <= s.messagesOldThreshold {
@@ -80,14 +140,10 @@ func (s *ToolCallSummarizationStrategy) Summarize(ctx context.Context, conv *mem
 		return 0, nil // Nothing to summarize
 	}
 
-	// Summarize each group
-	summarizedMessages := make([]*types.Message, 0)
-	for _, group := range groups {
-		summary, err := s.summarizeGroup(ctx, group, llm)
-		if err != nil {
-			return 0, fmt.Errorf("failed to summarize tool call group: %w", err)
-		}
-		summarizedMessages = append(summarizedMessages, summary)
+	// Summarize groups in parallel with progress tracking
+	summarizedMessages, err := s.summarizeGroupsParallel(ctx, groups, llm)
+	if err != nil {
+		return 0, err
 	}
 
 	// Reconstruct conversation with summarized messages
@@ -154,6 +210,73 @@ Provide only the summary, no additional commentary:`, builder.String())
 	summary.WithMetadata("original_message_count", len(group))
 
 	return summary, nil
+}
+
+// summarizeGroupsParallel processes multiple tool call groups concurrently,
+// emitting progress events as each group completes.
+func (s *ToolCallSummarizationStrategy) summarizeGroupsParallel(ctx context.Context, groups [][]*types.Message, llm llm.Provider) ([]*types.Message, error) {
+	numGroups := len(groups)
+	if numGroups == 0 {
+		return nil, nil
+	}
+
+	// Create channels for results and errors
+	type result struct {
+		index       int
+		message     *types.Message
+		tokensSaved int
+		err         error
+	}
+	resultChan := make(chan result, numGroups)
+
+	// Process each group in a separate goroutine
+	for i, group := range groups {
+		go func(idx int, grp []*types.Message) {
+			summary, err := s.summarizeGroup(ctx, grp, llm)
+
+			// Calculate tokens saved for this group (approximate)
+			tokensSaved := 0
+			if summary != nil {
+				// Rough estimate: original group size minus summary size
+				for _, msg := range grp {
+					tokensSaved += len(msg.Content) / 4 // Approximate tokens
+				}
+				tokensSaved -= len(summary.Content) / 4
+			}
+
+			resultChan <- result{index: idx, message: summary, tokensSaved: tokensSaved, err: err}
+
+			// Emit progress event if event channel is available
+			if s.eventChannel != nil {
+				s.eventChannel <- types.NewContextSummarizationProgressEvent(
+					s.Name(),
+					idx+1,
+					numGroups,
+					tokensSaved,
+				)
+			}
+		}(i, group)
+	}
+
+	// Collect results maintaining original order
+	results := make([]*types.Message, numGroups)
+	var firstError error
+
+	for range numGroups {
+		res := <-resultChan
+		if res.err != nil && firstError == nil {
+			firstError = res.err
+		}
+		if res.message != nil {
+			results[res.index] = res.message
+		}
+	}
+
+	if firstError != nil {
+		return nil, fmt.Errorf("failed to summarize tool call group: %w", firstError)
+	}
+
+	return results, nil
 }
 
 // Helper functions

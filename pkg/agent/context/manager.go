@@ -57,8 +57,19 @@ func NewManager(llm llm.Provider, maxTokens int, strategies ...Strategy) (*Manag
 
 // SetEventChannel sets the event channel for emitting summarization events.
 // This is called by the agent during initialization after channels are created.
+// It also propagates the event channel to strategies that support progress events.
 func (m *Manager) SetEventChannel(eventChan chan<- *types.AgentEvent) {
 	m.eventChannel = eventChan
+
+	// Propagate to strategies that support event emission
+	for _, strategy := range m.strategies {
+		// Type assert to check if strategy supports SetEventChannel
+		if setter, ok := strategy.(interface {
+			SetEventChannel(chan<- *types.AgentEvent)
+		}); ok {
+			setter.SetEventChannel(eventChan)
+		}
+	}
 }
 
 // EvaluateAndSummarize evaluates all strategies and performs summarization if needed.

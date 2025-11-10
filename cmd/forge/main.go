@@ -30,7 +30,9 @@ const (
 	// These are tuned for long coding sessions with many file operations
 	defaultMaxTokens        = 100000 // Conservative limit with headroom for 128K context
 	defaultThresholdPercent = 80.0   // Start summarizing at 80% (80K tokens)
-	defaultToolCallAge      = 30     // Summarize tool calls older than 30 messages
+	defaultToolCallAge      = 20     // Tool calls must be 20+ messages old to enter buffer
+	defaultMinToolCalls     = 10     // Minimum 10 tool calls in buffer before summarizing
+	defaultMaxToolCallDist  = 40     // Force summarization if any tool call is 40+ messages old
 	defaultSummaryBatchSize = 10     // Summarize 10 messages at a time
 
 	// Default system prompt for coding agent
@@ -172,8 +174,12 @@ func run(ctx context.Context, config *Config) error {
 	}
 
 	// Create context summarization strategies for long coding sessions
-	// Strategy 1: Summarize old tool calls to compress historical operations
-	toolCallStrategy := agentcontext.NewToolCallSummarizationStrategy(defaultToolCallAge)
+	// Strategy 1: Summarize old tool calls to compress historical operations (with buffering)
+	toolCallStrategy := agentcontext.NewToolCallSummarizationStrategy(
+		defaultToolCallAge,
+		defaultMinToolCalls,
+		defaultMaxToolCallDist,
+	)
 
 	// Strategy 2: Summarize when approaching token limit to prevent exhaustion
 	thresholdStrategy := agentcontext.NewThresholdSummarizationStrategy(
