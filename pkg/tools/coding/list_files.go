@@ -130,6 +130,13 @@ func (t *ListFilesTool) listDirectory(dirPath string, pattern string) ([]fileEnt
 
 	var result []fileEntry
 	for _, entry := range entries {
+		fullPath := filepath.Join(dirPath, entry.Name())
+
+		// Skip ignored paths
+		if t.guard.ShouldIgnore(fullPath) {
+			continue
+		}
+
 		// Apply pattern filter if specified
 		if pattern != "" {
 			matched, err := filepath.Match(pattern, entry.Name())
@@ -141,7 +148,6 @@ func (t *ListFilesTool) listDirectory(dirPath string, pattern string) ([]fileEnt
 			}
 		}
 
-		fullPath := filepath.Join(dirPath, entry.Name())
 		info, err := entry.Info()
 		if err != nil {
 			continue // Skip entries we can't stat
@@ -174,6 +180,14 @@ func (t *ListFilesTool) listRecursive(rootPath string, pattern string) ([]fileEn
 		// Check if path is within workspace (security check)
 		if !t.guard.IsWithinWorkspace(path) {
 			return filepath.SkipDir
+		}
+
+		// Skip ignored paths
+		if t.guard.ShouldIgnore(path) {
+			if info.IsDir() {
+				return filepath.SkipDir // Skip entire directory
+			}
+			return nil // Skip file
 		}
 
 		// Apply pattern filter if specified (only to files)

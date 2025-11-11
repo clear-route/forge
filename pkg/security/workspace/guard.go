@@ -5,6 +5,7 @@ package workspace
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -13,11 +14,13 @@ import (
 // It validates that all file operations remain within the workspace directory,
 // preventing path traversal attacks and unauthorized file access.
 type Guard struct {
-	workspaceDir string // Absolute path to workspace root
+	workspaceDir  string         // Absolute path to workspace root
+	ignoreMatcher *IgnoreMatcher // Pattern matcher for ignore rules
 }
 
 // NewGuard creates a new workspace guard for the given directory.
 // The directory path is converted to an absolute path, cleaned, and symlinks are evaluated.
+// It also initializes the ignore matcher with patterns from defaults, .gitignore, and .forgeignore.
 func NewGuard(workspaceDir string) (*Guard, error) {
 	if workspaceDir == "" {
 		return nil, fmt.Errorf("workspace directory cannot be empty")
@@ -35,8 +38,15 @@ func NewGuard(workspaceDir string) (*Guard, error) {
 		return nil, fmt.Errorf("failed to evaluate workspace directory symlinks: %w", err)
 	}
 
+	// Initialize ignore matcher with patterns from all sources
+	ignoreMatcher, err := NewIgnoreMatcher(evalPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize ignore matcher: %w", err)
+	}
+
 	return &Guard{
-		workspaceDir: evalPath,
+		workspaceDir:  evalPath,
+		ignoreMatcher: ignoreMatcher,
 	}, nil
 }
 
@@ -160,4 +170,36 @@ func (g *Guard) MakeRelative(absPath string) (string, error) {
 	}
 
 	return relPath, nil
+}
+
+// ShouldIgnore checks if a path should be ignored based on loaded ignore patterns.
+// The path can be either absolute or relative - it will be converted to relative for matching.
+// Returns true if the path matches any ignore pattern (considering precedence and negation).
+func (g *Guard) ShouldIgnore(path string) bool {
+	// Convert to relative path for pattern matching
+	var relPath string
+	if filepath.IsAbs(path) {
+		var err error
+		relPath, err = g.MakeRelative(path)
+		if err != nil {
+			// If we can't make it relative, it's outside workspace, so don't ignore
+			// (workspace boundary check will catch this elsewhere)
+			return false
+		}
+	} else {
+		relPath = path
+	}
+
+	// Check if path is a directory by attempting to stat it
+	absPath := path
+	if !filepath.IsAbs(path) {
+		absPath = filepath.Join(g.workspaceDir, path)
+	}
+	
+	isDir := false
+	if info, err := os.Lstat(absPath); err == nil {
+		isDir = info.IsDir()
+	}
+
+	return g.ignoreMatcher.ShouldIgnore(relPath, isDir)
 }

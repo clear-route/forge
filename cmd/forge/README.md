@@ -8,6 +8,7 @@ A powerful terminal-based coding assistant built on the Forge agent framework. F
 - 📁 **File Operations** - Read, write, list, and search files within your workspace
 - ✏️ **Smart Editing** - Diff-based code changes without full file rewrites
 - 🔒 **Workspace Security** - All operations restricted to your project directory
+- 🚫 **Smart Ignoring** - Automatically excludes node_modules, .git, .env, and other clutter
 - 🎨 **Syntax Highlighting** - Beautiful diff previews with syntax highlighting
 - ⚡ **Command Execution** - Run terminal commands with approval workflow
 - 🌳 **File Navigation** - Browse your project structure
@@ -187,6 +188,57 @@ Forge operates with workspace-level security:
 - Path traversal attacks are prevented
 - Symlinks pointing outside the workspace are blocked
 - Commands require explicit user approval before execution
+
+## File Ignoring
+
+Forge automatically filters out common directories and files that clutter results:
+
+### Default Ignore Patterns
+
+The following are always ignored:
+- `node_modules/`, `vendor/` - Dependency directories
+- `.git/` - Version control metadata
+- `.env`, `.env.*` - Environment files
+- `*.log` - Log files
+- `.DS_Store` - macOS system files
+- `__pycache__/`, `*.pyc` - Python cache
+- `.vscode/`, `.idea/` - IDE directories
+- `dist/`, `build/`, `tmp/`, `temp/` - Build artifacts
+- And more (see [ignore.go](../../pkg/security/workspace/ignore.go))
+
+### Custom Patterns
+
+You can customize ignore behavior with two optional files in your workspace root:
+
+1. **`.gitignore`** - Respects your existing git ignore patterns
+2. **`.forgeignore`** - Forge-specific patterns (highest priority)
+
+Both files support standard gitignore syntax:
+- `*.test` - Glob patterns
+- `logs/` - Directory patterns
+- `!important.log` - Negation patterns
+- `# comment` - Comments
+
+**Pattern Precedence** (highest to lowest):
+1. `.forgeignore` patterns
+2. `.gitignore` patterns
+3. Default patterns
+
+### Examples
+
+Create a `.forgeignore` file to customize:
+
+```
+# Ignore all test files except integration tests
+*.test
+!*integration.test
+
+# Ignore specific directories
+tmp/
+.cache/
+```
+
+For more details, see [ADR-0016: File Ignore System](../../docs/adr/0016-file-ignore-system.md).
 
 ## Development Status
 
