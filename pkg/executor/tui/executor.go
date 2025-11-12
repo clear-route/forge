@@ -762,6 +762,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.files,
 			msg.message,
 			msg.diff,
+			msg.prTitle,
+			msg.prDesc,
 			m.width,
 			m.height,
 			func(approved bool) {

@@ -17,6 +17,8 @@ type SlashCommandPreview struct {
 	files        []string
 	message      string
 	diff         string
+	prTitle      string // PR title (only for PR commands)
+	prDesc       string // PR description (only for PR commands)
 	selected     ApprovalChoice
 	width        int
 	height       int
@@ -25,7 +27,7 @@ type SlashCommandPreview struct {
 }
 
 // NewSlashCommandPreview creates a new slash command preview overlay
-func NewSlashCommandPreview(commandName, title string, files []string, message, diff string, width, height int, responseFunc func(bool)) *SlashCommandPreview {
+func NewSlashCommandPreview(commandName, title string, files []string, message, diff, prTitle, prDesc string, width, height int, responseFunc func(bool)) *SlashCommandPreview {
 	// Make overlay wide - 90% of screen width
 	overlayWidth := max(int(float64(width)*0.9), 80)
 
@@ -42,7 +44,7 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 	vp.Style = lipgloss.NewStyle()
 
 	// Build content showing files, message, and diff preview
-	content := buildPreviewContent(files, message, diff)
+	content := buildPreviewContent(commandName, files, message, diff, prTitle, prDesc)
 	vp.SetContent(content)
 
 	return &SlashCommandPreview{
@@ -52,6 +54,8 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 		files:        files,
 		message:      message,
 		diff:         diff,
+		prTitle:      prTitle,
+		prDesc:       prDesc,
 		selected:     ApprovalChoiceAccept,
 		width:        overlayWidth,
 		height:       overlayHeight,
@@ -61,38 +65,76 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 }
 
 // buildPreviewContent creates the content to display in the viewport
-func buildPreviewContent(files []string, message, diff string) string {
+func buildPreviewContent(commandName string, files []string, message, diff, prTitle, prDesc string) string {
 	var b strings.Builder
 
-	// Show files to be committed
-	if len(files) > 0 {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Files to commit:"))
-		b.WriteString("\n")
-		for _, file := range files {
-			b.WriteString("  • " + file + "\n")
-		}
-		b.WriteString("\n")
-	}
-
-	// Show commit message
-	if message != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commit Message:"))
-		b.WriteString("\n")
-		b.WriteString(message)
-		b.WriteString("\n\n")
-	}
-
-	// Show diff preview
-	if diff != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Changes:"))
-		b.WriteString("\n")
+	if commandName == "pr" {
+		// PR-specific layout
 		
-		// Apply syntax highlighting to diff
-		highlightedDiff, err := HighlightDiff(diff, "")
-		if err != nil {
+		// Show branch info
+		if len(files) > 0 {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Branch:"))
+			b.WriteString("\n")
+			for _, file := range files {
+				b.WriteString("  " + file + "\n")
+			}
+			b.WriteString("\n")
+		}
+		
+		// Show PR title
+		if prTitle != "" {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Title:"))
+			b.WriteString("\n")
+			b.WriteString(prTitle)
+			b.WriteString("\n\n")
+		}
+		
+		// Show PR description
+		if prDesc != "" {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Description:"))
+			b.WriteString("\n")
+			b.WriteString(prDesc)
+			b.WriteString("\n\n")
+		}
+		
+		// Show commits and changes
+		if diff != "" {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commits & Changes:"))
+			b.WriteString("\n")
 			b.WriteString(diff)
-		} else {
-			b.WriteString(highlightedDiff)
+		}
+	} else {
+		// Commit-specific layout
+		
+		// Show files to commit
+		if len(files) > 0 {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Files to commit:"))
+			b.WriteString("\n")
+			for _, file := range files {
+				b.WriteString("  • " + file + "\n")
+			}
+			b.WriteString("\n")
+		}
+		
+		// Show commit message
+		if message != "" {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commit Message:"))
+			b.WriteString("\n")
+			b.WriteString(message)
+			b.WriteString("\n\n")
+		}
+		
+		// Show diff with syntax highlighting
+		if diff != "" {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Changes:"))
+			b.WriteString("\n")
+			
+			highlightedDiff, err := HighlightDiff(diff, "")
+			if err != nil {
+				b.WriteString(diff)
+			} else {
+				b.WriteString(highlightedDiff)
+			}
 		}
 	}
 

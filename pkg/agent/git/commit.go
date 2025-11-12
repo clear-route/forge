@@ -47,7 +47,8 @@ func (g *CommitMessageGenerator) Generate(ctx context.Context, workingDir string
 }
 
 func getDiff(workingDir string, files []string) (string, error) {
-	args := append([]string{"diff", "--cached"}, files...)
+	// Try git diff HEAD first (for modified tracked files)
+	args := append([]string{"diff", "HEAD", "--"}, files...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = workingDir
 
@@ -56,7 +57,31 @@ func getDiff(workingDir string, files []string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git diff failed: %w, stderr: %s", err, stderr.String())
+		// If that fails, try without HEAD (unstaged changes)
+		stdout.Reset()
+		stderr.Reset()
+		
+		args = append([]string{"diff", "--"}, files...)
+		cmd = exec.Command("git", args...)
+		cmd.Dir = workingDir
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		
+		if err := cmd.Run(); err != nil {
+			// If both fail, try --cached in case files were already staged
+			stdout.Reset()
+			stderr.Reset()
+			
+			args = append([]string{"diff", "--cached", "--"}, files...)
+			cmd = exec.Command("git", args...)
+			cmd.Dir = workingDir
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			
+			if err := cmd.Run(); err != nil {
+				return "", fmt.Errorf("git diff failed: %w, stderr: %s", err, stderr.String())
+			}
+		}
 	}
 
 	return stdout.String(), nil
@@ -109,9 +134,17 @@ func GetModifiedFiles(workingDir string) ([]string, error) {
 		if line == "" {
 			continue
 		}
-		// Status is first 2 chars, filename starts at char 3
-		if len(line) > 3 {
-			files = append(files, strings.TrimSpace(line[3:]))
+		// git status --porcelain format: XY filename
+		// Where X and Y are status codes (2 chars total)
+		// There's a space after the status, so filename starts at position 3
+		if len(line) > 2 {
+			// Split on whitespace and take the last part (handles renamed files too)
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				// For renamed files, format is "R old -> new", we want the new name
+				filename := parts[len(parts)-1]
+				files = append(files, filename)
+			}
 		}
 	}
 

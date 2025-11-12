@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/entrhq/forge/pkg/agent/git"
-	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -268,17 +267,38 @@ func handleCommitCommand(m *model, args []string) tea.Cmd {
 
 // getDiffForFiles gets the git diff for the specified files
 func getDiffForFiles(workingDir string, files []string) (string, error) {
-	// Use "git diff" for unstaged changes (working directory vs index)
-	// This shows what would be staged/committed
-	args := append([]string{"diff"}, files...)
+	// Try to get diff against HEAD first (for modified tracked files)
+	args := append([]string{"diff", "HEAD", "--"}, files...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = workingDir
 	
 	output, err := cmd.Output()
 	if err != nil {
-		// If git diff fails, return empty string rather than error
-		// This allows the preview to still show even if diff generation fails
-		return "(Unable to generate diff preview)", nil
+		// If that fails (new files not in HEAD), try without HEAD
+		// This will show working directory changes
+		args = append([]string{"diff", "--"}, files...)
+		cmd = exec.Command("git", args...)
+		cmd.Dir = workingDir
+		
+		output, err = cmd.Output()
+		if err != nil {
+			// If both fail, return a helpful message
+			return "(Unable to generate diff preview - files may be untracked)", nil
+		}
+	}
+	
+	// If output is empty, the files might be new/untracked
+	// Try to show them as additions
+	if len(output) == 0 {
+		// Get diff of what would be staged if we add these files
+		args = append([]string{"diff", "--no-index", "/dev/null", "--"}, files...)
+		cmd = exec.Command("git", args...)
+		cmd.Dir = workingDir
+		
+		output, err = cmd.Output()
+		if err != nil {
+			return "(New/untracked files - run commit to see full content)", nil
+		}
 	}
 	
 	return string(output), nil
@@ -294,29 +314,113 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 	prTitle := strings.Join(args, " ")
 	
 	return func() tea.Msg {
-		// Execute the PR creation in a background goroutine
+		// Gather preview data in background
 		ctx := context.Background()
-		result, err := m.slashHandler.Execute(ctx, &slash.Command{
-			Name: "pr",
-			Arg:  prTitle,
-		})
 		
+		// Get base branch
+		base, err := git.DetectBaseBranch(m.workspaceDir)
 		if err != nil {
 			return toastMsg{
 				message: "PR Failed",
-				details: err.Error(),
+				details: fmt.Sprintf("Failed to detect base branch: %v", err),
 				icon:    "❌",
 				isError: true,
 			}
 		}
 		
-		return toastMsg{
-			message: "PR Generated",
-			details: result,
-			icon:    "🔀",
-			isError: false,
+		// Get current branch
+		head, err := getCurrentBranch(m.workspaceDir)
+		if err != nil {
+			return toastMsg{
+				message: "PR Failed",
+				details: fmt.Sprintf("Failed to get current branch: %v", err),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		// Get commits since base
+		commits, err := git.GetCommitsSinceBase(m.workspaceDir, base, head)
+		if err != nil {
+			return toastMsg{
+				message: "PR Failed",
+				details: fmt.Sprintf("Failed to get commits: %v", err),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		if len(commits) == 0 {
+			return toastMsg{
+				message: "Nothing to PR",
+				details: "No commits found for pull request",
+				icon:    "ℹ️",
+				isError: false,
+			}
+		}
+		
+		// Get diff summary
+		diffSummary, err := git.GetDiffSummary(m.workspaceDir, base, head)
+		if err != nil {
+			return toastMsg{
+				message: "PR Failed",
+				details: fmt.Sprintf("Failed to get diff summary: %v", err),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		// Generate PR content
+		prContent, err := m.prGen.Generate(ctx, commits, diffSummary, base, head, prTitle)
+		if err != nil {
+			return toastMsg{
+				message: "PR Failed",
+				details: fmt.Sprintf("Failed to generate PR content: %v", err),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		// Build commits and changes preview
+		var changesContent strings.Builder
+		changesContent.WriteString(fmt.Sprintf("Commits (%d):\n", len(commits)))
+		for _, commit := range commits {
+			changesContent.WriteString(fmt.Sprintf("  • %s\n", commit.Message))
+		}
+		changesContent.WriteString("\n")
+		changesContent.WriteString(diffSummary)
+		
+		// Return preview message with separate PR title and description
+		return slashCommandPreviewMsg{
+			commandName: "pr",
+			title:       "Pull Request Preview",
+			args:        prTitle, // Store original args
+			files:       []string{fmt.Sprintf("%s → %s", head, base)},
+			prTitle:     prContent.Title,
+			prDesc:      prContent.Description,
+			diff:        changesContent.String(),
+			onApprove: func() {
+				// This will be called when user approves
+				// The actual execution will happen in the Update handler
+			},
+			onReject: func() {
+				// This will be called when user rejects
+			},
 		}
 	}
+}
+
+// getCurrentBranch gets the current git branch name
+func getCurrentBranch(workingDir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = workingDir
+	
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	
+	return strings.TrimSpace(string(output)), nil
 }
 
 // toastMsg is a message type for showing toast notifications
@@ -335,6 +439,8 @@ type slashCommandPreviewMsg struct {
 	files       []string
 	message     string
 	diff        string
+	prTitle     string   // PR title (only for PR commands)
+	prDesc      string   // PR description (only for PR commands)
 	onApprove   func()
 	onReject    func()
 }
