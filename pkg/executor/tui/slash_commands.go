@@ -13,7 +13,7 @@ type CommandType int
 
 const (
 	CommandTypeTUI   CommandType = iota // Handled entirely by TUI
-	CommandTypeAgent                     // Sent to agent
+	CommandTypeAgent                    // Sent to agent
 )
 
 // CommandHandler processes a slash command and returns a tea.Cmd.

@@ -93,27 +93,26 @@ func renderOverlay(baseView string, overlay Overlay, width, height int) string {
 
 // renderToastOverlay renders a toast-style overlay at the bottom of the screen
 // without affecting the base view's layout
-func renderToastOverlay(baseView string, toastContent string, width, height int) string {
+func renderToastOverlay(baseView string, toastContent string) string {
 	if toastContent == "" {
 		return baseView
 	}
 
-	
 	// Split base view into lines
 	baseLines := strings.Split(baseView, "\n")
-	
+
 	// Calculate where to position the toast (bottom of screen, above input area)
 	// We want to overlay it on top of the existing content
 	toastLines := strings.Split(strings.TrimRight(toastContent, "\n"), "\n")
 	toastHeight := len(toastLines)
-	
+
 	// Position toast starting from a few lines above the bottom
 	// This puts it just above the input box
 	startLine := len(baseLines) - 5 - toastHeight
 	if startLine < 0 {
 		startLine = 0
 	}
-	
+
 	// Build result with toast overlaid
 	var result strings.Builder
 	for i, line := range baseLines {
@@ -132,6 +131,6 @@ func renderToastOverlay(baseView string, toastContent string, width, height int)
 			result.WriteString("\n")
 		}
 	}
-	
+
 	return result.String()
 }

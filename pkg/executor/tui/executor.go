@@ -699,10 +699,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if oldHeight != newHeight && m.ready {
 			m.recalculateLayout()
 		}
-
-
 	}
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
@@ -886,20 +883,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Check if we should activate/deactivate command palette based on input
 	value := m.textarea.Value()
-	
-	// Only activate palette if input is exactly "/" as first character
-	if value == "/" && !m.commandPalette.active {
+
+	// Handle command palette activation/deactivation based on input
+	switch {
+	case value == "/" && !m.commandPalette.active:
+		// Only activate palette if input is exactly "/" as first character
 		m.commandPalette.activate()
 		m.commandPalette.updateFilter("")
-	} else if strings.HasPrefix(value, "/") && m.commandPalette.active {
+	case strings.HasPrefix(value, "/") && m.commandPalette.active:
 		// Update filter if palette is already active
 		filter := strings.TrimPrefix(value, "/")
 		m.commandPalette.updateFilter(filter)
-	} else if !strings.HasPrefix(value, "/") && m.commandPalette.active {
+	case !strings.HasPrefix(value, "/") && m.commandPalette.active:
 		// Deactivate palette if input no longer starts with /
 		m.commandPalette.deactivate()
 	}
-	
+
 	// Auto-adjust textarea height based on content after any key press
 	m.updateTextAreaHeight()
 
@@ -961,12 +960,6 @@ func (m *model) updateTextAreaHeight() {
 		m.textarea.SetHeight(visualLines)
 		m.recalculateLayout()
 	}
-}
-
-// handleUserInput is deprecated - command execution is now handled in Update's Enter key handler
-// This function is kept for compatibility but should not be used
-func (m *model) handleUserInput() {
-	// No-op - functionality moved to Update
 }
 
 // View renders the TUI.
@@ -1065,19 +1058,19 @@ func (m model) View() string {
 	// Add command palette as overlay if active
 	if m.commandPalette.active {
 		paletteContent := m.commandPalette.render(m.width)
-		baseView = renderToastOverlay(baseView, paletteContent, m.width, m.height)
+		baseView = renderToastOverlay(baseView, paletteContent)
 	}
 
 	// Add summarization status as overlay if active
 	if m.summarization.active {
 		summarizationContent := m.renderSummarizationStatus()
-		baseView = renderToastOverlay(baseView, summarizationContent, m.width, m.height)
+		baseView = renderToastOverlay(baseView, summarizationContent)
 	}
 
 	// Add toast notification as overlay if active and not expired
 	if m.toast.active && time.Now().Before(m.toast.showUntil) {
 		toastContent := m.renderToast()
-		baseView = renderToastOverlay(baseView, toastContent, m.width, m.height)
+		baseView = renderToastOverlay(baseView, toastContent)
 	}
 
 	return baseView
