@@ -51,14 +51,15 @@ func (e *Executor) Run(ctx context.Context) error {
 	model := initialModel()
 	model.agent = e.agent
 	model.channels = e.agent.GetChannels()
+	model.workspaceDir = e.workspaceDir
 	
 	// Initialize slash handler for git operations
 	if e.provider != nil && e.workspaceDir != "" {
 		llmClient := newLLMAdapter(e.provider)
 		tracker := git.NewModificationTracker()
-		commitGen := git.NewCommitMessageGenerator(llmClient)
-		prGen := git.NewPRGenerator(llmClient)
-		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, commitGen, prGen, nil)
+		model.commitGen = git.NewCommitMessageGenerator(llmClient)
+		model.prGen = git.NewPRGenerator(llmClient)
+		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen, nil)
 	}
 
 	e.program = tea.NewProgram(
@@ -113,6 +114,10 @@ type model struct {
 	agent                    agent.Agent
 	channels                 *types.AgentChannels
 	slashHandler             *slash.Handler
+	workspaceDir             string
+	commitGen                *git.CommitMessageGenerator
+	prGen                    *git.PRGenerator
+	pendingSlashCommand      *slashCommandPreviewMsg
 	content                  *strings.Builder
 	thinkingBuffer           *strings.Builder
 	messageBuffer            *strings.Builder
@@ -746,6 +751,69 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toastMsg:
 		// Handle toast messages from slash commands
 		m.showToast(msg.message, msg.details, msg.icon, msg.isError)
+		return m, nil
+
+	case slashCommandPreviewMsg:
+		// Show preview overlay for slash command and store the command data
+		m.pendingSlashCommand = &msg
+		preview := NewSlashCommandPreview(
+			msg.commandName,
+			msg.title,
+			msg.files,
+			msg.message,
+			msg.diff,
+			m.width,
+			m.height,
+			func(approved bool) {
+				// The preview will close itself by returning nil from Update
+				// We just need to send the approval/rejection message
+			},
+		)
+		m.overlay.activate(OverlayModeSlashCommandPreview, preview)
+		return m, nil
+
+	case slashCommandApprovedMsg:
+		// Deactivate overlay first
+		m.overlay.deactivate()
+		
+		// Execute the approved command using the stored pendingSlashCommand
+		if m.pendingSlashCommand == nil {
+			return m, nil
+		}
+		
+		return m, func() tea.Msg {
+			ctx := context.Background()
+			result, err := m.slashHandler.Execute(ctx, &slash.Command{
+				Name: m.pendingSlashCommand.commandName,
+				Arg:  m.pendingSlashCommand.args,
+			})
+			
+			if err != nil {
+				return toastMsg{
+					message: "Command Failed",
+					details: err.Error(),
+					icon:    "❌",
+					isError: true,
+				}
+			}
+			
+			icon := "✅"
+			if m.pendingSlashCommand.commandName == "pr" {
+				icon = "🔀"
+			}
+			
+			return toastMsg{
+				message: "Success",
+				details: result,
+				icon:    icon,
+				isError: false,
+			}
+		}
+
+	case slashCommandRejectedMsg:
+		// Deactivate overlay and show cancellation toast
+		m.overlay.deactivate()
+		m.showToast("Cancelled", fmt.Sprintf("/%s command cancelled", msg.commandName), "ℹ️", false)
 		return m, nil
 
 	case agentErrMsg:

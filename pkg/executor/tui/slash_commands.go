@@ -3,9 +3,11 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/entrhq/forge/pkg/agent/git"
 	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/types"
 )
@@ -201,29 +203,85 @@ func handleCommitCommand(m *model, args []string) tea.Cmd {
 	commitMessage := strings.Join(args, " ")
 	
 	return func() tea.Msg {
-		// Execute the commit in a background goroutine
+		// Gather preview data in background
 		ctx := context.Background()
-		result, err := m.slashHandler.Execute(ctx, &slash.Command{
-			Name: "commit",
-			Arg:  commitMessage,
-		})
 		
+		// Get modified files
+		files, err := git.GetModifiedFiles(m.workspaceDir)
 		if err != nil {
 			return toastMsg{
 				message: "Commit Failed",
-				details: err.Error(),
+				details: fmt.Sprintf("Failed to get modified files: %v", err),
 				icon:    "❌",
 				isError: true,
 			}
 		}
 		
-		return toastMsg{
-			message: "Commit Success",
-			details: result,
-			icon:    "✅",
-			isError: false,
+		if len(files) == 0 {
+			return toastMsg{
+				message: "Nothing to Commit",
+				details: "No modified files found",
+				icon:    "ℹ️",
+				isError: false,
+			}
+		}
+		
+		// Get diff for preview
+		diff, err := getDiffForFiles(m.workspaceDir, files)
+		if err != nil {
+			diff = "(Unable to generate diff preview)"
+		}
+		
+		// Generate commit message if not provided
+		message := commitMessage
+		if message == "" {
+			generatedMsg, err := m.commitGen.Generate(ctx, m.workspaceDir, files)
+			if err != nil {
+				return toastMsg{
+					message: "Commit Failed",
+					details: fmt.Sprintf("Failed to generate commit message: %v", err),
+					icon:    "❌",
+					isError: true,
+				}
+			}
+			message = generatedMsg
+		}
+		
+		// Return preview message
+		return slashCommandPreviewMsg{
+			commandName: "commit",
+			title:       "Commit Preview",
+			args:        commitMessage, // Store original args
+			files:       files,
+			message:     message,
+			diff:        diff,
+			onApprove: func() {
+				// This will be called when user approves
+				// The actual execution will happen in the Update handler
+			},
+			onReject: func() {
+				// This will be called when user rejects
+			},
 		}
 	}
+}
+
+// getDiffForFiles gets the git diff for the specified files
+func getDiffForFiles(workingDir string, files []string) (string, error) {
+	// Use "git diff" for unstaged changes (working directory vs index)
+	// This shows what would be staged/committed
+	args := append([]string{"diff"}, files...)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = workingDir
+	
+	output, err := cmd.Output()
+	if err != nil {
+		// If git diff fails, return empty string rather than error
+		// This allows the preview to still show even if diff generation fails
+		return "(Unable to generate diff preview)", nil
+	}
+	
+	return string(output), nil
 }
 
 // handlePRCommand creates a pull request using the slash handler
@@ -267,4 +325,27 @@ type toastMsg struct {
 	details string
 	icon    string
 	isError bool
+}
+
+// slashCommandPreviewMsg requests showing a preview overlay for a slash command
+type slashCommandPreviewMsg struct {
+	commandName string
+	title       string
+	args        string   // Original command arguments
+	files       []string
+	message     string
+	diff        string
+	onApprove   func()
+	onReject    func()
+}
+
+// slashCommandApprovedMsg indicates the user approved the slash command
+type slashCommandApprovedMsg struct {
+	commandName string
+	args        []string
+}
+
+// slashCommandRejectedMsg indicates the user rejected the slash command
+type slashCommandRejectedMsg struct {
+	commandName string
 }

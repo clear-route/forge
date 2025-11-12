@@ -21,6 +21,8 @@ const (
 	OverlayModeCommandOutput
 	// OverlayModeHelp shows the help overlay
 	OverlayModeHelp
+	// OverlayModeSlashCommandPreview shows slash command preview
+	OverlayModeSlashCommandPreview
 )
 
 // Overlay is the base interface for all overlay components
