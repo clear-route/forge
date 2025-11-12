@@ -195,7 +195,7 @@ func (g *Guard) ShouldIgnore(path string) bool {
 	if !filepath.IsAbs(path) {
 		absPath = filepath.Join(g.workspaceDir, path)
 	}
-	
+
 	isDir := false
 	if info, err := os.Lstat(absPath); err == nil {
 		isDir = info.IsDir()

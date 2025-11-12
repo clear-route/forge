@@ -73,7 +73,7 @@ install-tools: ## Install development tools
 run: ## Run the forge TUI coding agent
 	@echo "Running forge..."
 	@echo "Note: Make sure OPENAI_API_KEY is set in your environment"
-	$(GOCMD) run ./cmd/forge/main.go
+	$(GOCMD) run ./cmd/forge
 
 install: ## Install forge binary to GOPATH/bin
 	@echo "Installing forge to $(shell go env GOPATH)/bin..."

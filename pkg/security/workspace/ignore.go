@@ -37,11 +37,11 @@ var defaultIgnorePatterns = []string{
 
 // ignorePattern represents a single ignore pattern with metadata.
 type ignorePattern struct {
-	pattern   string // Original pattern string
-	negation  bool   // True if this is a negation pattern (starts with !)
-	dirOnly   bool   // True if pattern only matches directories (ends with /)
-	isGlob    bool   // True if pattern contains glob characters
-	source    string // Source of pattern: "default", "gitignore", "forgeignore"
+	pattern  string // Original pattern string
+	negation bool   // True if this is a negation pattern (starts with !)
+	dirOnly  bool   // True if pattern only matches directories (ends with /)
+	isGlob   bool   // True if pattern contains glob characters
+	source   string // Source of pattern: "default", "gitignore", "forgeignore"
 }
 
 // IgnoreMatcher handles pattern matching for file ignore rules.
@@ -151,7 +151,7 @@ func (m *IgnoreMatcher) addPattern(pattern, source string) {
 func (m *IgnoreMatcher) ShouldIgnore(relPath string, isDir bool) bool {
 	// Normalize path separators for matching
 	relPath = filepath.ToSlash(relPath)
-	
+
 	// Track whether path is ignored (last match wins)
 	ignored := false
 
@@ -167,7 +167,7 @@ func (m *IgnoreMatcher) ShouldIgnore(relPath string, isDir bool) bool {
 			dirMatches := m.matchPattern(relPath, p.pattern, p.isGlob)
 			// Check if path is inside this directory
 			insideDir := strings.HasPrefix(relPath, p.pattern+"/")
-			
+
 			matches = dirMatches || insideDir
 		} else {
 			matches = m.matchPattern(relPath, p.pattern, p.isGlob)
@@ -183,70 +183,81 @@ func (m *IgnoreMatcher) ShouldIgnore(relPath string, isDir bool) bool {
 	return ignored
 }
 
-// matchPattern checks if a path matches a pattern.
+// matchPattern checks if a path matches a pattern, dispatching to helpers.
 func (m *IgnoreMatcher) matchPattern(path, pattern string, isGlob bool) bool {
-	// Normalize pattern separators
 	pattern = filepath.ToSlash(pattern)
 
-	// Check for exact match first
+	// Check for exact match first, which is the cheapest check.
 	if path == pattern {
 		return true
 	}
 
-	// Split path into components
-	parts := strings.Split(path, "/")
-
 	if isGlob {
-		// Use filepath.Match for glob patterns
-		// Try matching against the base name
-		matched, err := filepath.Match(pattern, filepath.Base(path))
-		if err == nil && matched {
+		return m.matchGlob(path, pattern)
+	}
+
+	return m.matchSimple(path, pattern)
+}
+
+// matchGlob handles matching for glob patterns.
+func (m *IgnoreMatcher) matchGlob(path, pattern string) bool {
+	// Try matching against the full path.
+	if globMatch(pattern, path) {
+		return true
+	}
+
+	// Try matching against just the base name.
+	if globMatch(pattern, filepath.Base(path)) {
+		return true
+	}
+
+	// Try matching against each path segment. This handles patterns like "**/foo.go"
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		// Check subpath from root, e.g., "a/b" in "a/b/c.txt"
+		if globMatch(pattern, strings.Join(parts[:i+1], "/")) {
 			return true
 		}
-
-		// Try matching full path
-		matched, err = filepath.Match(pattern, path)
-		if err == nil && matched {
+		// Also check just the individual segment, e.g., "b" in "a/b/c.txt"
+		if globMatch(pattern, parts[i]) {
 			return true
-		}
-
-		// Try matching against each path segment
-		for i := range parts {
-			subpath := strings.Join(parts[:i+1], "/")
-			matched, err := filepath.Match(pattern, subpath)
-			if err == nil && matched {
-				return true
-			}
-			// Also try matching just the segment
-			matched, err = filepath.Match(pattern, parts[i])
-			if err == nil && matched {
-				return true
-			}
-		}
-	} else {
-		// For non-glob patterns (like directory names)
-		// Check if pattern matches any component in the path
-		for _, part := range parts {
-			if part == pattern {
-				return true
-			}
-		}
-
-		// Check if pattern is a prefix of the path (for directory patterns)
-		if strings.HasPrefix(path, pattern+"/") || path == pattern {
-			return true
-		}
-
-		// Check if any segment of the path starts with the pattern
-		for i := range parts {
-			subpath := strings.Join(parts[:i+1], "/")
-			if subpath == pattern || strings.HasPrefix(path, pattern+"/") {
-				return true
-			}
 		}
 	}
 
 	return false
+}
+
+// matchSimple handles matching for simple, non-glob patterns (e.g., directory or exact names).
+func (m *IgnoreMatcher) matchSimple(path, pattern string) bool {
+	// Check if the pattern is a prefix of the path (e.g., "node_modules/" matching "node_modules/pkg/file.js").
+	if strings.HasPrefix(path, pattern+"/") {
+		return true
+	}
+
+	parts := strings.Split(path, "/")
+
+	// Check if the pattern matches any full path component. This handles "node_modules" in "a/node_modules/b"
+	for _, part := range parts {
+		if part == pattern {
+			return true
+		}
+	}
+
+	// Check if pattern matches a subpath from the root. e.g. pattern "a/b" in "a/b/c"
+	for i := range parts {
+		if strings.Join(parts[:i+1], "/") == pattern {
+			return true
+		}
+	}
+
+	return false
+}
+
+// globMatch is a helper to run filepath.Match and handle the error.
+func globMatch(pattern, name string) bool {
+	// This helper is a standalone function as it doesn't depend on the IgnoreMatcher instance.
+	matched, err := filepath.Match(pattern, name)
+	return err == nil && matched
 }
 
 // PatternCount returns the total number of loaded patterns.
