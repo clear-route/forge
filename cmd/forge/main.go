@@ -34,31 +34,6 @@ const (
 	defaultMinToolCalls     = 10     // Minimum 10 tool calls in buffer before summarizing
 	defaultMaxToolCallDist  = 40     // Force summarization if any tool call is 40+ messages old
 	defaultSummaryBatchSize = 10     // Summarize 10 messages at a time
-
-	// Default system prompt for coding agent
-	defaultSystemPrompt = `
-You are Forge, an expert coding assistant with access to powerful tools for file operations and code editing.
-
-You can:
-- Read and write files in the current workspace
-- Search code with regex patterns
-- Apply precise code changes using diffs
-- Execute terminal commands
-- List and navigate the file system
-
-Guidelines:
-1. Always work within the current workspace directory
-2. Use ApplyDiff for targeted changes instead of rewriting entire files
-3. Explain your changes clearly before proposing them
-4. Ask for clarification when requirements are ambiguous
-5. Follow best practices for the language you're working with
-
-When making file changes:
-- Show a clear diff of what you're changing
-- Explain why you're making the change
-- Consider the impact on related code
-
-Be helpful, precise, and thoughtful in your assistance.`
 )
 
 // Config holds the application configuration
@@ -113,7 +88,7 @@ func parseFlags() *Config {
 	flag.StringVar(&config.BaseURL, "base-url", os.Getenv("OPENAI_BASE_URL"), "OpenAI API base URL (or set OPENAI_BASE_URL env var)")
 	flag.StringVar(&config.Model, "model", defaultModel, "LLM model to use")
 	flag.StringVar(&config.WorkspaceDir, "workspace", ".", "Workspace directory (default: current directory)")
-	flag.StringVar(&config.SystemPrompt, "prompt", defaultSystemPrompt, "System prompt for the agent")
+	flag.StringVar(&config.SystemPrompt, "prompt", "", "Custom instructions for the agent (optional, overrides default)")
 	flag.BoolVar(&config.ShowVersion, "version", false, "Show version and exit")
 
 	flag.Usage = func() {
@@ -199,13 +174,11 @@ func run(ctx context.Context, config *Config) error {
 		return fmt.Errorf("failed to create context manager: %w", err)
 	}
 
-	// Create agent with custom system prompt and context manager
-	// The agent will set the event channel on the context manager during initialization
-	ag := agent.NewDefaultAgent(
-		provider,
-		agent.WithCustomInstructions(config.SystemPrompt),
-		agent.WithContextManager(contextManager),
-	)
+	// Compose the system prompt
+	systemPrompt := composeSystemPrompt()
+	if config.SystemPrompt != "" {
+		systemPrompt = config.SystemPrompt // Override with user-provided prompt
+	}
 
 	// Create workspace security guard
 	guard, err := workspace.NewGuard(config.WorkspaceDir)
@@ -213,22 +186,26 @@ func run(ctx context.Context, config *Config) error {
 		return fmt.Errorf("failed to create workspace guard: %w", err)
 	}
 
+	// Create agent with custom system prompt and context manager
+	ag := agent.NewDefaultAgent(
+		provider,
+		agent.WithCustomInstructions(systemPrompt),
+		agent.WithContextManager(contextManager),
+	)
+
 	// Register coding tools
-	codingTools := []struct {
-		name string
-		tool tools.Tool
-	}{
-		{"read_file", coding.NewReadFileTool(guard)},
-		{"write_file", coding.NewWriteFileTool(guard)},
-		{"list_files", coding.NewListFilesTool(guard)},
-		{"search_files", coding.NewSearchFilesTool(guard)},
-		{"apply_diff", coding.NewApplyDiffTool(guard)},
-		{"execute_command", coding.NewExecuteCommandTool(guard)},
+	codingTools := []tools.Tool{
+		coding.NewReadFileTool(guard),
+		coding.NewWriteFileTool(guard),
+		coding.NewListFilesTool(guard),
+		coding.NewSearchFilesTool(guard),
+		coding.NewApplyDiffTool(guard),
+		coding.NewExecuteCommandTool(guard),
 	}
 
-	for _, t := range codingTools {
-		if err := ag.RegisterTool(t.tool); err != nil {
-			return fmt.Errorf("failed to register %s tool: %w", t.name, err)
+	for _, tool := range codingTools {
+		if err := ag.RegisterTool(tool); err != nil {
+			return fmt.Errorf("failed to register tool: %w", err)
 		}
 	}
 

@@ -39,12 +39,12 @@ func init() {
 // It processes user inputs through an LLM provider using an agent loop
 // with tools, thinking, and memory management.
 type DefaultAgent struct {
-	provider           llm.Provider
-	channels           *types.AgentChannels
-	customInstructions string
-	maxTurns           int
-	bufferSize         int
-	metadata           map[string]interface{}
+	provider             llm.Provider
+	channels             *types.AgentChannels
+	customInstructions   string
+	maxTurns             int
+	bufferSize           int
+	metadata             map[string]interface{}
 
 	// Agent loop components
 	tools   map[string]tools.Tool
@@ -131,6 +131,7 @@ func WithContextManager(manager *agentcontext.Manager) AgentOption {
 		a.contextManager = manager
 	}
 }
+
 
 // NewDefaultAgent creates a new DefaultAgent with the given provider and options.
 func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
@@ -465,6 +466,7 @@ func (a *DefaultAgent) buildSystemPrompt() string {
 	if a.customInstructions != "" {
 		builder.WithCustomInstructions(a.customInstructions)
 	}
+
 
 	return builder.Build()
 }
