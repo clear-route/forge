@@ -100,6 +100,7 @@ type model struct {
 	thinkingBuffer           *strings.Builder
 	messageBuffer            *strings.Builder
 	overlay                  *overlayState
+	commandPalette           *CommandPalette
 	summarization            *summarizationStatus
 	toast                    *toastNotification
 	isThinking               bool
@@ -141,6 +142,7 @@ func initialModel() model {
 		thinkingBuffer: &strings.Builder{},
 		messageBuffer:  &strings.Builder{},
 		overlay:        newOverlayState(),
+		commandPalette: newCommandPalette(),
 		summarization:  &summarizationStatus{},
 		toast:          &toastNotification{},
 	}
@@ -308,6 +310,16 @@ func (m model) renderSummarizationStatus() string {
 		Width(boxWidth)
 
 	return "\n" + boxStyle.Render(content.String()) + "\n"
+}
+
+// showToast displays a toast notification to the user
+func (m *model) showToast(message, details, icon string, isError bool) {
+	m.toast.active = true
+	m.toast.message = message
+	m.toast.details = details
+	m.toast.icon = icon
+	m.toast.isError = isError
+	m.toast.showUntil = time.Now().Add(3 * time.Second)
 }
 
 // renderToast renders a toast notification
@@ -687,6 +699,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if oldHeight != newHeight && m.ready {
 			m.recalculateLayout()
 		}
+
+
 	}
 
 	switch msg := msg.(type) {
@@ -777,6 +791,49 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, overlayCmd
 		}
 
+		// Handle command palette navigation when active
+		// Only intercept specific keys, let everything else pass through to textarea
+		if m.commandPalette.active {
+			switch msg.Type {
+			case tea.KeyEsc:
+				// Cancel command palette
+				m.commandPalette.deactivate()
+				m.textarea.Reset()
+				return m, tea.Batch(tiCmd, vpCmd)
+			case tea.KeyUp:
+				// Navigate up in palette, don't update textarea
+				m.commandPalette.selectPrev()
+				return m, nil
+			case tea.KeyDown:
+				// Navigate down in palette, don't update textarea
+				m.commandPalette.selectNext()
+				return m, nil
+			case tea.KeyTab:
+				// Autocomplete with selected command and close palette
+				selected := m.commandPalette.getSelected()
+				if selected != nil {
+					m.textarea.SetValue("/" + selected.Name + " ")
+					m.textarea.CursorEnd()
+				}
+				m.commandPalette.deactivate()
+				return m, tea.Batch(tiCmd, vpCmd)
+			case tea.KeyEnter:
+				// Autocomplete with the selected command and close the palette
+				selected := m.commandPalette.getSelected()
+				if selected != nil {
+					m.textarea.SetValue("/" + selected.Name + " ")
+					m.textarea.CursorEnd()
+				}
+				m.commandPalette.deactivate()
+				return m, tea.Batch(tiCmd, vpCmd)
+			default:
+				// For all other keys (typing, backspace, etc.), let textarea handle them
+				// The textarea has already been updated at the top of Update()
+				// Return here to prevent the outer switch from handling these keys
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -789,7 +846,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(tiCmd, vpCmd)
 			}
 			// Plain Enter submits
-			m.handleUserInput()
+			input := m.textarea.Value()
+			if input == "" {
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// Check if input is a slash command
+			commandName, args, isCommand := parseSlashCommand(input)
+			if isCommand {
+				// Execute slash command and get updated model
+				m.textarea.Reset()
+				m.commandPalette.deactivate()
+				return executeSlashCommand(m, commandName, args)
+			}
+
+			// If input starts with / but isn't a valid command, don't send to agent
+			if strings.HasPrefix(strings.TrimSpace(input), "/") {
+				// Keep palette active, don't submit
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// Regular user input - send to agent
+			if m.channels != nil {
+				formatted := formatEntry("You: ", input, userStyle, m.width, true)
+				// Strip any trailing newlines before adding our spacing
+				formatted = strings.TrimRight(formatted, "\n")
+				m.content.WriteString(formatted + "\n\n")
+				m.viewport.SetContent(m.content.String())
+				m.channels.Input <- types.NewUserInput(input)
+				m.textarea.Reset()
+				m.viewport.GotoBottom()
+			}
 			return m, tea.Batch(tiCmd, vpCmd)
 		default:
 			// Let viewport handle other keys (arrow keys, pgup/pgdn, etc. for scrolling)
@@ -797,6 +884,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check if we should activate/deactivate command palette based on input
+	value := m.textarea.Value()
+	
+	// Only activate palette if input is exactly "/" as first character
+	if value == "/" && !m.commandPalette.active {
+		m.commandPalette.activate()
+		m.commandPalette.updateFilter("")
+	} else if strings.HasPrefix(value, "/") && m.commandPalette.active {
+		// Update filter if palette is already active
+		filter := strings.TrimPrefix(value, "/")
+		m.commandPalette.updateFilter(filter)
+	} else if !strings.HasPrefix(value, "/") && m.commandPalette.active {
+		// Deactivate palette if input no longer starts with /
+		m.commandPalette.deactivate()
+	}
+	
 	// Auto-adjust textarea height based on content after any key press
 	m.updateTextAreaHeight()
 
@@ -860,19 +963,10 @@ func (m *model) updateTextAreaHeight() {
 	}
 }
 
-// handleUserInput processes user input and sends it to the agent
+// handleUserInput is deprecated - command execution is now handled in Update's Enter key handler
+// This function is kept for compatibility but should not be used
 func (m *model) handleUserInput() {
-	input := m.textarea.Value()
-	if input != "" && m.channels != nil {
-		formatted := formatEntry("You: ", input, userStyle, m.width, true)
-		// Strip any trailing newlines before adding our spacing
-		formatted = strings.TrimRight(formatted, "\n")
-		m.content.WriteString(formatted + "\n\n")
-		m.viewport.SetContent(m.content.String())
-		m.channels.Input <- types.NewUserInput(input)
-		m.textarea.Reset()
-		m.viewport.GotoBottom()
-	}
+	// No-op - functionality moved to Update
 }
 
 // View renders the TUI.
@@ -948,20 +1042,10 @@ func (m model) View() string {
 			bottomRight,
 	)
 
-	// Build viewport section with potential status overlay and toast
+	// Build viewport section - just the viewport itself
 	viewportSection := m.viewport.View()
 
-	// Add summarization status overlay if active
-	if m.summarization.active {
-		viewportSection += m.renderSummarizationStatus()
-	}
-
-	// Add toast notification if active and not expired
-	if m.toast.active && time.Now().Before(m.toast.showUntil) {
-		viewportSection += m.renderToast()
-	}
-
-	// Assemble the full UI
+	// Assemble the base UI without overlays
 	baseView := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
@@ -973,9 +1057,27 @@ func (m model) View() string {
 		bottomBar,
 	)
 
-	// If overlay is active, render it on top
+	// Layer overlays on top of the base view using absolute positioning
 	if m.overlay.isActive() {
-		return renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+	}
+
+	// Add command palette as overlay if active
+	if m.commandPalette.active {
+		paletteContent := m.commandPalette.render(m.width)
+		baseView = renderToastOverlay(baseView, paletteContent, m.width, m.height)
+	}
+
+	// Add summarization status as overlay if active
+	if m.summarization.active {
+		summarizationContent := m.renderSummarizationStatus()
+		baseView = renderToastOverlay(baseView, summarizationContent, m.width, m.height)
+	}
+
+	// Add toast notification as overlay if active and not expired
+	if m.toast.active && time.Now().Before(m.toast.showUntil) {
+		toastContent := m.renderToast()
+		baseView = renderToastOverlay(baseView, toastContent, m.width, m.height)
 	}
 
 	return baseView
