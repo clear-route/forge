@@ -14,7 +14,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent/git"
+	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -23,14 +26,18 @@ import (
 // Executor is a TUI-based executor that provides an interactive,
 // Gemini-style interface for agent interaction.
 type Executor struct {
-	agent   agent.Agent
-	program *tea.Program
+	agent        agent.Agent
+	program      *tea.Program
+	provider     llm.Provider
+	workspaceDir string
 }
 
 // NewExecutor creates a new TUI executor for the given agent.
-func NewExecutor(agent agent.Agent) *Executor {
+func NewExecutor(agent agent.Agent, provider llm.Provider, workspaceDir string) *Executor {
 	return &Executor{
-		agent: agent,
+		agent:        agent,
+		provider:     provider,
+		workspaceDir: workspaceDir,
 	}
 }
 
@@ -44,6 +51,15 @@ func (e *Executor) Run(ctx context.Context) error {
 	model := initialModel()
 	model.agent = e.agent
 	model.channels = e.agent.GetChannels()
+	
+	// Initialize slash handler for git operations
+	if e.provider != nil && e.workspaceDir != "" {
+		llmClient := newLLMAdapter(e.provider)
+		tracker := git.NewModificationTracker()
+		commitGen := git.NewCommitMessageGenerator(llmClient)
+		prGen := git.NewPRGenerator(llmClient)
+		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, commitGen, prGen, nil)
+	}
 
 	e.program = tea.NewProgram(
 		model,
@@ -96,6 +112,7 @@ type model struct {
 	textarea                 textarea.Model
 	agent                    agent.Agent
 	channels                 *types.AgentChannels
+	slashHandler             *slash.Handler
 	content                  *strings.Builder
 	thinkingBuffer           *strings.Builder
 	messageBuffer            *strings.Builder
@@ -724,6 +741,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(m.width - 8)
 		m.ready = true
 		m.recalculateLayout()
+		return m, nil
+
+	case toastMsg:
+		// Handle toast messages from slash commands
+		m.showToast(msg.message, msg.details, msg.icon, msg.isError)
 		return m, nil
 
 	case agentErrMsg:

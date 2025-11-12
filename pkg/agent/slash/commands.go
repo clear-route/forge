@@ -89,7 +89,12 @@ func (h *Handler) handleStop() string {
 }
 
 func (h *Handler) handleCommit(ctx context.Context, customMessage string) (string, error) {
-	files := h.tracker.GetModified()
+	// Get modified files from git status instead of tracker
+	files, err := git.GetModifiedFiles(h.workingDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get modified files: %w", err)
+	}
+	
 	if len(files) == 0 {
 		return "", fmt.Errorf("no files to commit")
 	}
@@ -99,7 +104,6 @@ func (h *Handler) handleCommit(ctx context.Context, customMessage string) (strin
 	}
 
 	var message string
-	var err error
 
 	if customMessage == "" {
 		message, err = h.commitGenerator.Generate(ctx, h.workingDir, files)
@@ -115,7 +119,11 @@ func (h *Handler) handleCommit(ctx context.Context, customMessage string) (strin
 		return "", err
 	}
 
-	h.tracker.Clear()
+	// Clear tracker if it was being used
+	if h.tracker != nil {
+		h.tracker.Clear()
+	}
+	
 	return fmt.Sprintf("Commit %s: %s", hash, message), nil
 }
 

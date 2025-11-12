@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -189,54 +191,80 @@ func handleStopCommand(m *model, args []string) tea.Cmd {
 	return nil
 }
 
-// handleCommitCommand creates a git commit
+// handleCommitCommand creates a git commit using the slash handler
 func handleCommitCommand(m *model, args []string) tea.Cmd {
-	// For now, send as user input with metadata
-	// Later this will be enhanced with file tracking and LLM generation
-	commitMessage := strings.Join(args, " ")
-
-	if m.channels != nil {
-		if commitMessage == "" {
-			// Auto-generate commit message
-			input := types.NewUserInput("Create a git commit with an auto-generated conventional commit message based on the changes made in this session.")
-			input.WithMetadata("command", "commit")
-			input.WithMetadata("auto_generate", true)
-			m.channels.Input <- input
-		} else {
-			// Use provided message
-			input := types.NewUserInput(fmt.Sprintf("Create a git commit with this message: %s", commitMessage))
-			input.WithMetadata("command", "commit")
-			input.WithMetadata("message", commitMessage)
-			m.channels.Input <- input
-		}
-		m.showToast("Commit", "Creating git commit...", "📝", false)
+	if m.slashHandler == nil {
+		m.showToast("Error", "Git operations not available", "❌", true)
+		return nil
 	}
 
-	return nil
+	commitMessage := strings.Join(args, " ")
+	
+	return func() tea.Msg {
+		// Execute the commit in a background goroutine
+		ctx := context.Background()
+		result, err := m.slashHandler.Execute(ctx, &slash.Command{
+			Name: "commit",
+			Arg:  commitMessage,
+		})
+		
+		if err != nil {
+			return toastMsg{
+				message: "Commit Failed",
+				details: err.Error(),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		return toastMsg{
+			message: "Commit Success",
+			details: result,
+			icon:    "✅",
+			isError: false,
+		}
+	}
 }
 
-// handlePRCommand creates a pull request
+// handlePRCommand creates a pull request using the slash handler
 func handlePRCommand(m *model, args []string) tea.Cmd {
-	// For now, send as user input with metadata
-	// Later this will be enhanced with base branch detection and LLM generation
-	prTitle := strings.Join(args, " ")
-
-	if m.channels != nil {
-		if prTitle == "" {
-			// Auto-generate PR
-			input := types.NewUserInput("Create a pull request with auto-generated title and description based on the commits and changes in the current branch.")
-			input.WithMetadata("command", "pr")
-			input.WithMetadata("auto_generate", true)
-			m.channels.Input <- input
-		} else {
-			// Use provided title
-			input := types.NewUserInput(fmt.Sprintf("Create a pull request with this title: %s. Generate the description based on commits and changes.", prTitle))
-			input.WithMetadata("command", "pr")
-			input.WithMetadata("title", prTitle)
-			m.channels.Input <- input
-		}
-		m.showToast("Pull Request", "Creating pull request...", "🔀", false)
+	if m.slashHandler == nil {
+		m.showToast("Error", "Git operations not available", "❌", true)
+		return nil
 	}
 
-	return nil
+	prTitle := strings.Join(args, " ")
+	
+	return func() tea.Msg {
+		// Execute the PR creation in a background goroutine
+		ctx := context.Background()
+		result, err := m.slashHandler.Execute(ctx, &slash.Command{
+			Name: "pr",
+			Arg:  prTitle,
+		})
+		
+		if err != nil {
+			return toastMsg{
+				message: "PR Failed",
+				details: err.Error(),
+				icon:    "❌",
+				isError: true,
+			}
+		}
+		
+		return toastMsg{
+			message: "PR Generated",
+			details: result,
+			icon:    "🔀",
+			isError: false,
+		}
+	}
+}
+
+// toastMsg is a message type for showing toast notifications
+type toastMsg struct {
+	message string
+	details string
+	icon    string
+	isError bool
 }

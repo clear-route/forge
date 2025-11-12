@@ -89,6 +89,35 @@ func truncateDiff(diff string, maxChars int) string {
 	return diff[:maxChars] + "\\n... (diff truncated)"
 }
 
+// GetModifiedFiles returns a list of modified files from git status
+func GetModifiedFiles(workingDir string) ([]string, error) {
+	// Get all modified, new, and deleted files
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = workingDir
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git status failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	var files []string
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		// Status is first 2 chars, filename starts at char 3
+		if len(line) > 3 {
+			files = append(files, strings.TrimSpace(line[3:]))
+		}
+	}
+
+	return files, nil
+}
+
 func StageFiles(workingDir string, files []string) error {
 	if len(files) == 0 {
 		return fmt.Errorf("no files to stage")
