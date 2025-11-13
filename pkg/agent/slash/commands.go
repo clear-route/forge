@@ -94,13 +94,13 @@ func (h *Handler) handleCommit(ctx context.Context, customMessage string) (strin
 	if err != nil {
 		return "", fmt.Errorf("failed to get modified files: %w", err)
 	}
-	
+
 	if len(files) == 0 {
 		return "", fmt.Errorf("no files to commit")
 	}
 
-	if err := git.StageFiles(h.workingDir, files); err != nil {
-		return "", err
+	if stageErr := git.StageFiles(h.workingDir, files); stageErr != nil {
+		return "", stageErr
 	}
 
 	var message string
@@ -123,7 +123,7 @@ func (h *Handler) handleCommit(ctx context.Context, customMessage string) (strin
 	if h.tracker != nil {
 		h.tracker.Clear()
 	}
-	
+
 	return fmt.Sprintf("Commit %s: %s", hash, message), nil
 }
 

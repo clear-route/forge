@@ -11,23 +11,24 @@ import (
 
 // SlashCommandPreview displays a preview of slash command changes before execution
 type SlashCommandPreview struct {
-	viewport     viewport.Model
-	commandName  string
-	title        string
-	files        []string
-	message      string
-	diff         string
-	prTitle      string // PR title (only for PR commands)
-	prDesc       string // PR description (only for PR commands)
-	selected     ApprovalChoice
-	width        int
-	height       int
-	focused      bool
-	responseFunc func(bool) // true = approve, false = reject
+	viewport    viewport.Model
+	commandName string
+	title       string
+	files       []string
+	message     string
+	diff        string
+	prTitle     string // PR title (only for PR commands)
+	prDesc      string // PR description (only for PR commands)
+	selected    ApprovalChoice
+	width       int
+	height      int
+	focused     bool
+	onApprove   tea.Cmd // Command to execute on approval
+	onReject    tea.Cmd // Command to execute on rejection
 }
 
 // NewSlashCommandPreview creates a new slash command preview overlay
-func NewSlashCommandPreview(commandName, title string, files []string, message, diff, prTitle, prDesc string, width, height int, responseFunc func(bool)) *SlashCommandPreview {
+func NewSlashCommandPreview(commandName, title string, files []string, message, diff, prTitle, prDesc string, width, height int, onApprove, onReject tea.Cmd) *SlashCommandPreview {
 	// Make overlay wide - 90% of screen width
 	overlayWidth := max(int(float64(width)*0.9), 80)
 
@@ -48,19 +49,20 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 	vp.SetContent(content)
 
 	return &SlashCommandPreview{
-		viewport:     vp,
-		commandName:  commandName,
-		title:        title,
-		files:        files,
-		message:      message,
-		diff:         diff,
-		prTitle:      prTitle,
-		prDesc:       prDesc,
-		selected:     ApprovalChoiceAccept,
-		width:        overlayWidth,
-		height:       overlayHeight,
-		focused:      true,
-		responseFunc: responseFunc,
+		viewport:    vp,
+		commandName: commandName,
+		title:       title,
+		files:       files,
+		message:     message,
+		diff:        diff,
+		prTitle:     prTitle,
+		prDesc:      prDesc,
+		selected:    ApprovalChoiceAccept,
+		width:       overlayWidth,
+		height:      overlayHeight,
+		focused:     true,
+		onApprove:   onApprove,
+		onReject:    onReject,
 	}
 }
 
@@ -70,7 +72,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 	if commandName == "pr" {
 		// PR-specific layout
-		
+
 		// Show branch info
 		if len(files) > 0 {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Branch:"))
@@ -80,7 +82,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 			}
 			b.WriteString("\n")
 		}
-		
+
 		// Show PR title
 		if prTitle != "" {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Title:"))
@@ -88,7 +90,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 			b.WriteString(prTitle)
 			b.WriteString("\n\n")
 		}
-		
+
 		// Show PR description
 		if prDesc != "" {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Description:"))
@@ -96,7 +98,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 			b.WriteString(prDesc)
 			b.WriteString("\n\n")
 		}
-		
+
 		// Show commits and changes
 		if diff != "" {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commits & Changes:"))
@@ -105,7 +107,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 		}
 	} else {
 		// Commit-specific layout
-		
+
 		// Show files to commit
 		if len(files) > 0 {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Files to commit:"))
@@ -115,7 +117,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 			}
 			b.WriteString("\n")
 		}
-		
+
 		// Show commit message
 		if message != "" {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commit Message:"))
@@ -123,12 +125,12 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 			b.WriteString(message)
 			b.WriteString("\n\n")
 		}
-		
+
 		// Show diff with syntax highlighting
 		if diff != "" {
 			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Changes:"))
 			b.WriteString("\n")
-			
+
 			highlightedDiff, err := HighlightDiff(diff, "")
 			if err != nil {
 				b.WriteString(diff)
@@ -171,22 +173,13 @@ func (s *SlashCommandPreview) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
 }
 
 func (s *SlashCommandPreview) handleReject() (Overlay, tea.Cmd) {
-	// Return nil overlay to close, and send rejection message
-	return nil, func() tea.Msg {
-		return slashCommandRejectedMsg{
-			commandName: s.commandName,
-		}
-	}
+	// Close overlay and execute rejection command
+	return nil, s.onReject
 }
 
 func (s *SlashCommandPreview) handleApprove() (Overlay, tea.Cmd) {
-	// Return nil overlay to close, and send approval message
-	return nil, func() tea.Msg {
-		return slashCommandApprovedMsg{
-			commandName: s.commandName,
-			args:        []string{}, // Args are already stored in pendingSlashCommand
-		}
-	}
+	// Close overlay and execute approval command
+	return nil, s.onApprove
 }
 
 func (s *SlashCommandPreview) handleToggleSelection() (Overlay, tea.Cmd) {

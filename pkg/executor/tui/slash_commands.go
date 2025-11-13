@@ -19,18 +19,22 @@ const (
 	CommandTypeAgent                    // Sent to agent
 )
 
-// CommandHandler processes a slash command and returns a tea.Cmd.
+// CommandHandler processes a slash command and returns either:
+// - tea.Cmd for immediate execution
+// - ApprovalRequest for commands requiring user approval
+// - nil for commands with no side effects
 // The model is passed as a pointer and can be modified directly.
-type CommandHandler func(m *model, args []string) tea.Cmd
+type CommandHandler func(m *model, args []string) interface{}
 
 // SlashCommand represents a registered command
 type SlashCommand struct {
-	Name        string         // Command name (without /)
-	Description string         // Short description for palette
-	Type        CommandType    // Where to handle the command
-	Handler     CommandHandler // Handler function (for TUI commands)
-	MinArgs     int            // Minimum number of arguments
-	MaxArgs     int            // Maximum number of arguments (-1 for unlimited)
+	Name             string         // Command name (without /)
+	Description      string         // Short description for palette
+	Type             CommandType    // Where to handle the command
+	Handler          CommandHandler // Handler function (for TUI commands)
+	RequiresApproval bool           // Whether command requires user approval
+	MinArgs          int            // Minimum number of arguments
+	MaxArgs          int            // Maximum number of arguments (-1 for unlimited)
 }
 
 // commandRegistry holds all registered slash commands
@@ -60,21 +64,23 @@ func init() {
 	})
 
 	registerCommand(&SlashCommand{
-		Name:        "commit",
-		Description: "Create git commit from session changes",
-		Type:        CommandTypeAgent,
-		Handler:     handleCommitCommand,
-		MinArgs:     0,
-		MaxArgs:     -1, // Unlimited for commit message
+		Name:             "commit",
+		Description:      "Create git commit from session changes",
+		Type:             CommandTypeAgent,
+		Handler:          handleCommitCommand,
+		RequiresApproval: true, // Commit requires approval
+		MinArgs:          0,
+		MaxArgs:          -1, // Unlimited for commit message
 	})
 
 	registerCommand(&SlashCommand{
-		Name:        "pr",
-		Description: "Create pull request from current branch",
-		Type:        CommandTypeAgent,
-		Handler:     handlePRCommand,
-		MinArgs:     0,
-		MaxArgs:     -1, // Unlimited for PR title
+		Name:             "pr",
+		Description:      "Create pull request from current branch",
+		Type:             CommandTypeAgent,
+		Handler:          handlePRCommand,
+		RequiresApproval: true, // PR requires approval
+		MinArgs:          0,
+		MaxArgs:          -1, // Unlimited for PR title
 	})
 }
 
@@ -145,15 +151,36 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 
 	// Execute the command handler
 	if cmd.Handler != nil {
-		cmd := cmd.Handler(&m, args)
-		return m, cmd
+		result := cmd.Handler(&m, args)
+
+		// Handle different return types
+		switch v := result.(type) {
+		case tea.Cmd:
+			// Direct command execution
+			return m, v
+		case func() tea.Msg:
+			// Function that returns a message (also a tea.Cmd, but type switch needs explicit match)
+			return m, tea.Cmd(v)
+		case ApprovalRequest:
+			// Command requires approval - send approval request message
+			return m, func() tea.Msg {
+				return approvalRequestMsg{request: v}
+			}
+		case nil:
+			// No-op command
+			return m, nil
+		default:
+			// Unknown return type - show error
+			m.showToast("Command Error", fmt.Sprintf("Command '/%s' returned unexpected type", commandName), "❌", true)
+			return m, nil
+		}
 	}
 
 	return m, nil
 }
 
 // handleHelpCommand shows help information
-func handleHelpCommand(m *model, args []string) tea.Cmd {
+func handleHelpCommand(m *model, args []string) interface{} {
 	// Build help content
 	var helpContent strings.Builder
 	helpContent.WriteString("Available Commands:\n\n")
@@ -183,7 +210,7 @@ func handleHelpCommand(m *model, args []string) tea.Cmd {
 }
 
 // handleStopCommand stops the current agent operation
-func handleStopCommand(m *model, args []string) tea.Cmd {
+func handleStopCommand(m *model, args []string) interface{} {
 	if m.channels != nil {
 		// Send cancel input to agent
 		m.channels.Input <- types.NewCancelInput()
@@ -192,19 +219,19 @@ func handleStopCommand(m *model, args []string) tea.Cmd {
 	return nil
 }
 
-// handleCommitCommand creates a git commit using the slash handler
-func handleCommitCommand(m *model, args []string) tea.Cmd {
+// handleCommitCommand creates a git commit with preview
+func handleCommitCommand(m *model, args []string) interface{} {
 	if m.slashHandler == nil {
 		m.showToast("Error", "Git operations not available", "❌", true)
 		return nil
 	}
 
 	commitMessage := strings.Join(args, " ")
-	
+
+	// Gather preview data and return approval request
 	return func() tea.Msg {
-		// Gather preview data in background
 		ctx := context.Background()
-		
+
 		// Get modified files
 		files, err := git.GetModifiedFiles(m.workspaceDir)
 		if err != nil {
@@ -215,7 +242,7 @@ func handleCommitCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		if len(files) == 0 {
 			return toastMsg{
 				message: "Nothing to Commit",
@@ -224,13 +251,10 @@ func handleCommitCommand(m *model, args []string) tea.Cmd {
 				isError: false,
 			}
 		}
-		
+
 		// Get diff for preview
-		diff, err := getDiffForFiles(m.workspaceDir, files)
-		if err != nil {
-			diff = "(Unable to generate diff preview)"
-		}
-		
+		diff := getDiffForFiles(m.workspaceDir, files)
+
 		// Generate commit message if not provided
 		message := commitMessage
 		if message == "" {
@@ -245,33 +269,21 @@ func handleCommitCommand(m *model, args []string) tea.Cmd {
 			}
 			message = generatedMsg
 		}
-		
-		// Return preview message
-		return slashCommandPreviewMsg{
-			commandName: "commit",
-			title:       "Commit Preview",
-			args:        commitMessage, // Store original args
-			files:       files,
-			message:     message,
-			diff:        diff,
-			onApprove: func() {
-				// This will be called when user approves
-				// The actual execution will happen in the Update handler
-			},
-			onReject: func() {
-				// This will be called when user rejects
-			},
+
+		// Return approval request instead of command-specific message
+		return approvalRequestMsg{
+			request: NewCommitApprovalRequest(files, message, diff, commitMessage, m.slashHandler),
 		}
 	}
 }
 
 // getDiffForFiles gets the git diff for the specified files
-func getDiffForFiles(workingDir string, files []string) (string, error) {
+func getDiffForFiles(workingDir string, files []string) string {
 	// Try to get diff against HEAD first (for modified tracked files)
 	args := append([]string{"diff", "HEAD", "--"}, files...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = workingDir
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		// If that fails (new files not in HEAD), try without HEAD
@@ -279,14 +291,14 @@ func getDiffForFiles(workingDir string, files []string) (string, error) {
 		args = append([]string{"diff", "--"}, files...)
 		cmd = exec.Command("git", args...)
 		cmd.Dir = workingDir
-		
+
 		output, err = cmd.Output()
 		if err != nil {
 			// If both fail, return a helpful message
-			return "(Unable to generate diff preview - files may be untracked)", nil
+			return "(Unable to generate diff preview - files may be untracked)"
 		}
 	}
-	
+
 	// If output is empty, the files might be new/untracked
 	// Try to show them as additions
 	if len(output) == 0 {
@@ -294,29 +306,28 @@ func getDiffForFiles(workingDir string, files []string) (string, error) {
 		args = append([]string{"diff", "--no-index", "/dev/null", "--"}, files...)
 		cmd = exec.Command("git", args...)
 		cmd.Dir = workingDir
-		
+
 		output, err = cmd.Output()
 		if err != nil {
-			return "(New/untracked files - run commit to see full content)", nil
+			return "(New/untracked files - run commit to see full content)"
 		}
 	}
-	
-	return string(output), nil
+
+	return string(output)
 }
 
-// handlePRCommand creates a pull request using the slash handler
-func handlePRCommand(m *model, args []string) tea.Cmd {
+// handlePRCommand creates a pull request with preview
+func handlePRCommand(m *model, args []string) interface{} {
 	if m.slashHandler == nil {
 		m.showToast("Error", "Git operations not available", "❌", true)
 		return nil
 	}
 
 	prTitle := strings.Join(args, " ")
-	
+
 	return func() tea.Msg {
-		// Gather preview data in background
 		ctx := context.Background()
-		
+
 		// Get base branch
 		base, err := git.DetectBaseBranch(m.workspaceDir)
 		if err != nil {
@@ -327,7 +338,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		// Get current branch
 		head, err := getCurrentBranch(m.workspaceDir)
 		if err != nil {
@@ -338,7 +349,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		// Get commits since base
 		commits, err := git.GetCommitsSinceBase(m.workspaceDir, base, head)
 		if err != nil {
@@ -349,7 +360,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		if len(commits) == 0 {
 			return toastMsg{
 				message: "Nothing to PR",
@@ -358,7 +369,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: false,
 			}
 		}
-		
+
 		// Get diff summary
 		diffSummary, err := git.GetDiffSummary(m.workspaceDir, base, head)
 		if err != nil {
@@ -369,7 +380,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		// Generate PR content
 		prContent, err := m.prGen.Generate(ctx, commits, diffSummary, base, head, prTitle)
 		if err != nil {
@@ -380,7 +391,7 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 				isError: true,
 			}
 		}
-		
+
 		// Build commits and changes preview
 		var changesContent strings.Builder
 		changesContent.WriteString(fmt.Sprintf("Commits (%d):\n", len(commits)))
@@ -389,23 +400,11 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 		}
 		changesContent.WriteString("\n")
 		changesContent.WriteString(diffSummary)
-		
-		// Return preview message with separate PR title and description
-		return slashCommandPreviewMsg{
-			commandName: "pr",
-			title:       "Pull Request Preview",
-			args:        prTitle, // Store original args
-			files:       []string{fmt.Sprintf("%s → %s", head, base)},
-			prTitle:     prContent.Title,
-			prDesc:      prContent.Description,
-			diff:        changesContent.String(),
-			onApprove: func() {
-				// This will be called when user approves
-				// The actual execution will happen in the Update handler
-			},
-			onReject: func() {
-				// This will be called when user rejects
-			},
+
+		// Return approval request instead of command-specific message
+		branchInfo := fmt.Sprintf("%s → %s", head, base)
+		return approvalRequestMsg{
+			request: NewPRApprovalRequest(branchInfo, prContent.Title, prContent.Description, changesContent.String(), prTitle, m.slashHandler),
 		}
 	}
 }
@@ -414,12 +413,12 @@ func handlePRCommand(m *model, args []string) tea.Cmd {
 func getCurrentBranch(workingDir string) (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = workingDir
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	
+
 	return strings.TrimSpace(string(output)), nil
 }
 
@@ -429,29 +428,4 @@ type toastMsg struct {
 	details string
 	icon    string
 	isError bool
-}
-
-// slashCommandPreviewMsg requests showing a preview overlay for a slash command
-type slashCommandPreviewMsg struct {
-	commandName string
-	title       string
-	args        string   // Original command arguments
-	files       []string
-	message     string
-	diff        string
-	prTitle     string   // PR title (only for PR commands)
-	prDesc      string   // PR description (only for PR commands)
-	onApprove   func()
-	onReject    func()
-}
-
-// slashCommandApprovedMsg indicates the user approved the slash command
-type slashCommandApprovedMsg struct {
-	commandName string
-	args        []string
-}
-
-// slashCommandRejectedMsg indicates the user rejected the slash command
-type slashCommandRejectedMsg struct {
-	commandName string
 }

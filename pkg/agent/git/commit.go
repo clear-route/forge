@@ -60,24 +60,24 @@ func getDiff(workingDir string, files []string) (string, error) {
 		// If that fails, try without HEAD (unstaged changes)
 		stdout.Reset()
 		stderr.Reset()
-		
+
 		args = append([]string{"diff", "--"}, files...)
 		cmd = exec.Command("git", args...)
 		cmd.Dir = workingDir
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		
+
 		if err := cmd.Run(); err != nil {
 			// If both fail, try --cached in case files were already staged
 			stdout.Reset()
 			stderr.Reset()
-			
+
 			args = append([]string{"diff", "--cached", "--"}, files...)
 			cmd = exec.Command("git", args...)
 			cmd.Dir = workingDir
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
-			
+
 			if err := cmd.Run(); err != nil {
 				return "", fmt.Errorf("git diff failed: %w, stderr: %s", err, stderr.String())
 			}
