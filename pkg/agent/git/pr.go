@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -55,11 +56,11 @@ func (g *PRGenerator) buildPRPrompt(
 ) string {
 	var sb strings.Builder
 
+	sb.WriteString("Generate a pull request title and description based on the following information.\n\n")
+
 	if customTitle != "" {
-		sb.WriteString("Generate a pull request description (title already provided).\n\n")
-		sb.WriteString(fmt.Sprintf("Title: %s\n\n", customTitle))
-	} else {
-		sb.WriteString("Generate a pull request title and description.\n\n")
+		sb.WriteString(fmt.Sprintf("User-provided title: %s\n", customTitle))
+		sb.WriteString("(You may use this or generate a better one based on the changes)\n\n")
 	}
 
 	sb.WriteString(fmt.Sprintf("Base: %s -> Head: %s\n\n", base, head))
@@ -72,37 +73,53 @@ func (g *PRGenerator) buildPRPrompt(
 	sb.WriteString("\nMaterial Changes (from git diff):\n")
 	sb.WriteString(diffSummary)
 
-	sb.WriteString("\n\nGenerate in this format:\n")
-	if customTitle == "" {
-		sb.WriteString("TITLE: <concise, actionable summary>\n\n")
-	}
-	sb.WriteString("DESCRIPTION:\n")
-	sb.WriteString("## Summary\n")
-	sb.WriteString("<what changed and why>\n\n")
-	sb.WriteString("## Changes\n")
-	sb.WriteString("- <key changes from actual diffs>\n\n")
-	sb.WriteString("## Testing\n")
-	sb.WriteString("<how to verify these changes>\n")
+	sb.WriteString("\n\nYou MUST respond with a valid JSON object in this exact format:\n")
+	sb.WriteString("{\n")
+	sb.WriteString(`  "title": "concise, actionable PR title"` + ",\n")
+	sb.WriteString(`  "description": "## Summary\n\n<what changed and why>\n\n## Changes\n\n- <key changes>\n\n## Testing\n\n<how to verify>"` + "\n")
+	sb.WriteString("}\n\n")
+	sb.WriteString("The description should be in markdown format with sections: Summary, Changes, and Testing.\n")
+	sb.WriteString("Respond ONLY with the JSON object, no other text.")
 
 	return sb.String()
 }
 
 func parsePRContent(response string) *PRContent {
-	lines := strings.Split(response, "\n")
-	var title, description string
+	// Try to find JSON in the response (handle markdown code blocks)
+	jsonStr := response
 
-	for i, line := range lines {
-		if strings.HasPrefix(line, "TITLE:") {
-			title = strings.TrimSpace(strings.TrimPrefix(line, "TITLE:"))
-		} else if strings.HasPrefix(line, "DESCRIPTION:") {
-			description = strings.TrimSpace(strings.Join(lines[i+1:], "\n"))
-			break
+	// Remove markdown code fences if present
+	if idx := strings.Index(response, "```json"); idx != -1 {
+		jsonStr = response[idx+7:] // Skip "```json"
+		if endIdx := strings.Index(jsonStr, "```"); endIdx != -1 {
+			jsonStr = jsonStr[:endIdx]
+		}
+	} else if idx := strings.Index(response, "```"); idx != -1 {
+		jsonStr = response[idx+3:]
+		if endIdx := strings.Index(jsonStr, "```"); endIdx != -1 {
+			jsonStr = jsonStr[:endIdx]
 		}
 	}
 
+	// Find JSON object boundaries
+	start := strings.Index(jsonStr, "{")
+	end := strings.LastIndex(jsonStr, "}")
+
+	if start != -1 && end != -1 && end > start {
+		jsonStr = jsonStr[start : end+1]
+	}
+
+	// Try to unmarshal JSON
+	var content PRContent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(jsonStr)), &content); err == nil {
+		return &content
+	}
+
+	// Fallback: if JSON parsing fails, return empty content
+	// The overlay will show "Pull Request Preview" and just the commits/changes
 	return &PRContent{
-		Title:       title,
-		Description: description,
+		Title:       "",
+		Description: "",
 	}
 }
 

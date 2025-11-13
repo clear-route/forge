@@ -35,8 +35,13 @@ func NewPRApprovalRequest(branch, prTitle, prDesc, changes, args string, slashHa
 
 // Title returns the approval dialog title
 func (p *PRApprovalRequest) Title() string {
-	if p.prTitle != "" {
+	// Use the generated PR title if available
+	if p.prTitle != "" && p.prTitle != p.args {
 		return p.prTitle
+	}
+	// Fall back to user-provided title if any
+	if p.args != "" {
+		return p.args
 	}
 	return "Pull Request Preview"
 }
@@ -51,6 +56,15 @@ func (p *PRApprovalRequest) Content() string {
 		b.WriteString("\n")
 		b.WriteString("  " + p.branch + "\n")
 		b.WriteString("\n")
+	}
+
+	// Show PR title if it's different from the overlay title
+	// (i.e., if we're showing user-provided title in header, show generated title here)
+	if p.prTitle != "" && p.args != "" && p.prTitle != p.args {
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Generated Title:"))
+		b.WriteString("\n")
+		b.WriteString(p.prTitle)
+		b.WriteString("\n\n")
 	}
 
 	// Show PR description prominently if available
