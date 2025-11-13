@@ -185,12 +185,21 @@ func TestNewToolEvents(t *testing.T) {
 }
 
 func TestNewApiEvents(t *testing.T) {
-	start := NewApiCallStartEvent("openai")
+	start := NewApiCallStartEvent("openai", 50000, 100000)
 	if start.Type != EventTypeApiCallStart {
 		t.Errorf("ApiCallStart type = %v, want %v", start.Type, EventTypeApiCallStart)
 	}
 	if start.Metadata["api_name"] != "openai" {
 		t.Error("ApiCallStart api_name metadata not set")
+	}
+	if start.ApiCallInfo == nil {
+		t.Error("ApiCallInfo not set")
+	}
+	if start.ApiCallInfo.ContextTokens != 50000 {
+		t.Errorf("ContextTokens = %v, want %v", start.ApiCallInfo.ContextTokens, 50000)
+	}
+	if start.ApiCallInfo.MaxContextTokens != 100000 {
+		t.Errorf("MaxContextTokens = %v, want %v", start.ApiCallInfo.MaxContextTokens, 100000)
 	}
 
 	end := NewApiCallEndEvent("openai")
@@ -305,7 +314,7 @@ func TestAgentEventHelpers(t *testing.T) {
 		},
 		{
 			name:       "api_call_start",
-			event:      NewApiCallStartEvent("test"),
+			event:      NewApiCallStartEvent("test", 1000, 2000),
 			isThinking: false,
 			isMessage:  false,
 			isTool:     false,

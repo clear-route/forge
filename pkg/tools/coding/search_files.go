@@ -145,11 +145,20 @@ func (t *SearchFilesTool) searchDirectory(dirPath string, regex *regexp.Regexp, 
 			if !t.guard.IsWithinWorkspace(path) {
 				return filepath.SkipDir
 			}
+			// Skip ignored directories
+			if t.guard.ShouldIgnore(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
 		// Check if path is within workspace
 		if !t.guard.IsWithinWorkspace(path) {
+			return nil
+		}
+
+		// Skip ignored files
+		if t.guard.ShouldIgnore(path) {
 			return nil
 		}
 

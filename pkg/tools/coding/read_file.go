@@ -83,6 +83,11 @@ func (t *ReadFileTool) Execute(ctx context.Context, arguments json.RawMessage) (
 		return "", fmt.Errorf("failed to resolve path: %w", err)
 	}
 
+	// Check if file is ignored
+	if t.guard.ShouldIgnore(absPath) {
+		return "", fmt.Errorf("file '%s' is ignored by .gitignore, .forgeignore, or default patterns", input.Path)
+	}
+
 	// Read file
 	content, err := t.readFileWithLineNumbers(absPath, input.StartLine, input.EndLine)
 	if err != nil {

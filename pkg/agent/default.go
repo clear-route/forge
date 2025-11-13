@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"time"
 
+	agentcontext "github.com/entrhq/forge/pkg/agent/context"
 	"github.com/entrhq/forge/pkg/agent/core"
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
@@ -18,6 +21,19 @@ import (
 
 	"github.com/google/uuid"
 )
+
+var agentDebugLog *log.Logger
+
+func init() {
+	// Create debug log file in /tmp
+	f, err := os.OpenFile("/tmp/forge-agent-debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Printf("Failed to open agent debug log: %v", err)
+		agentDebugLog = log.New(os.Stderr, "[AGENT-DEBUG] ", log.LstdFlags|log.Lshortfile)
+	} else {
+		agentDebugLog = log.New(f, "[AGENT-DEBUG] ", log.LstdFlags|log.Lshortfile)
+	}
+}
 
 // DefaultAgent is a basic implementation of the Agent interface.
 // It processes user inputs through an LLM provider using an agent loop
@@ -57,6 +73,9 @@ type DefaultAgent struct {
 
 	// Token usage tracking
 	tokenizer *tokenizer.Tokenizer
+
+	// Context management
+	contextManager *agentcontext.Manager
 }
 
 // pendingApproval tracks an approval request that is waiting for user response
@@ -106,6 +125,13 @@ func WithApprovalTimeout(timeout time.Duration) AgentOption {
 	}
 }
 
+// WithContextManager sets a context manager for the agent to handle context summarization
+func WithContextManager(manager *agentcontext.Manager) AgentOption {
+	return func(a *DefaultAgent) {
+		a.contextManager = manager
+	}
+}
+
 // NewDefaultAgent creates a new DefaultAgent with the given provider and options.
 func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 	// Create tokenizer for client-side token counting
@@ -134,6 +160,11 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 
 	// Create channels with configured buffer size
 	a.channels = types.NewAgentChannels(a.bufferSize)
+
+	// If context manager was provided, set its event channel now that channels exist
+	if a.contextManager != nil {
+		a.contextManager.SetEventChannel(a.channels.Event)
+	}
 
 	return a
 }
@@ -336,6 +367,48 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 	if a.tokenizer != nil {
 		promptTokens = a.tokenizer.CountMessagesTokens(messages)
 	}
+
+	// Evaluate context summarization strategies before each turn
+	agentDebugLog.Printf("=== Agent Loop Iteration ===")
+	agentDebugLog.Printf("contextManager != nil: %v", a.contextManager != nil)
+	agentDebugLog.Printf("tokenizer != nil: %v", a.tokenizer != nil)
+	agentDebugLog.Printf("Prompt tokens: %d", promptTokens)
+
+	if a.contextManager != nil && a.tokenizer != nil {
+		agentDebugLog.Printf("Checking if memory is ConversationMemory...")
+		// Get the conversation memory (cast from interface)
+		if convMem, ok := a.memory.(*memory.ConversationMemory); ok {
+			agentDebugLog.Printf("Memory is ConversationMemory - calling EvaluateAndSummarize")
+			// Evaluate and run summarization strategies if needed
+			_, err := a.contextManager.EvaluateAndSummarize(ctx, convMem, promptTokens)
+			if err != nil {
+				agentDebugLog.Printf("EvaluateAndSummarize returned error: %v", err)
+				// Log error but continue - summarization failure shouldn't stop the agent
+				a.emitEvent(types.NewErrorEvent(fmt.Errorf("context summarization failed: %w", err)))
+			} else {
+				agentDebugLog.Printf("EvaluateAndSummarize completed successfully")
+			}
+
+			// Rebuild messages after potential summarization
+			history = a.memory.GetAll()
+			messages = prompts.BuildMessages(systemPrompt, history, "", errorContext)
+
+			// Recalculate tokens with updated messages
+			if a.tokenizer != nil {
+				promptTokens = a.tokenizer.CountMessagesTokens(messages)
+				agentDebugLog.Printf("Tokens after potential summarization: %d", promptTokens)
+			}
+		} else {
+			agentDebugLog.Printf("Memory is NOT ConversationMemory - type: %T", a.memory)
+		}
+	}
+
+	// Emit API call start event with context information
+	maxTokens := 0
+	if a.contextManager != nil {
+		maxTokens = a.contextManager.GetMaxTokens()
+	}
+	a.emitEvent(types.NewApiCallStartEvent("llm", promptTokens, maxTokens))
 
 	// Get response from LLM
 	stream, err := a.provider.StreamCompletion(ctx, messages)
