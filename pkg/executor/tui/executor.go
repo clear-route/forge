@@ -46,6 +46,7 @@ var loadingMessages = []string{
 
 // getRandomLoadingMessage returns a random loading message
 func getRandomLoadingMessage() string {
+	// #nosec G404 - Using math/rand for UI randomness is acceptable
 	return loadingMessages[rand.Intn(len(loadingMessages))]
 }
 
@@ -757,7 +758,7 @@ func (m *model) recalculateLayout() {
 	// Input height is dynamic based on textarea height (with border padding)
 	inputHeight := m.textarea.Height() + 2 // textarea height + border
 	statusBarHeight := 1
-	
+
 	// Account for loading indicator height when active
 	loadingIndicatorHeight := 0
 	if m.agentBusy {
@@ -843,7 +844,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Generic operation completed - hide loading and show toast
 		m.agentBusy = false
 		m.recalculateLayout()
-		
+
 		if msg.err != nil {
 			m.showToast(msg.errorTitle, fmt.Sprintf("%v", msg.err), msg.errorIcon, true)
 		} else {
@@ -1009,12 +1010,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				formatted = strings.TrimRight(formatted, "\n")
 				m.content.WriteString(formatted + "\n\n")
 				m.viewport.SetContent(m.content.String())
-				
+
 				// Set agent as busy and pick a random loading message
 				m.agentBusy = true
 				m.currentLoadingMessage = getRandomLoadingMessage()
 				m.recalculateLayout()
-				
+
 				m.channels.Input <- types.NewUserInput(input)
 				m.textarea.Reset()
 				m.viewport.GotoBottom()
@@ -1138,7 +1139,7 @@ func (m model) View() string {
 		loadingMsg := fmt.Sprintf("%s %s", m.spinner.View(), m.currentLoadingMessage)
 		loadingStyle := lipgloss.NewStyle().
 			Foreground(salmonPink).
-			Width(m.width - 4).
+			Width(m.width-4).
 			Padding(0, 2)
 		loadingIndicator = loadingStyle.Render(loadingMsg)
 	}
