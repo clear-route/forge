@@ -35,6 +35,9 @@ func NewPRApprovalRequest(branch, prTitle, prDesc, changes, args string, slashHa
 
 // Title returns the approval dialog title
 func (p *PRApprovalRequest) Title() string {
+	if p.prTitle != "" {
+		return p.prTitle
+	}
 	return "Pull Request Preview"
 }
 
@@ -42,7 +45,7 @@ func (p *PRApprovalRequest) Title() string {
 func (p *PRApprovalRequest) Content() string {
 	var b strings.Builder
 
-	// Show branch info
+	// Show branch info at the top
 	if p.branch != "" {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Branch:"))
 		b.WriteString("\n")
@@ -50,17 +53,9 @@ func (p *PRApprovalRequest) Content() string {
 		b.WriteString("\n")
 	}
 
-	// Show PR title
-	if p.prTitle != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Title:"))
-		b.WriteString("\n")
-		b.WriteString(p.prTitle)
-		b.WriteString("\n\n")
-	}
-
-	// Show PR description
+	// Show PR description prominently if available
 	if p.prDesc != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Description:"))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Description:"))
 		b.WriteString("\n")
 		b.WriteString(p.prDesc)
 		b.WriteString("\n\n")

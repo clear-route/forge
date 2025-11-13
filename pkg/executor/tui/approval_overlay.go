@@ -140,7 +140,6 @@ func (a *GenericApprovalOverlay) handleWindowResize(msg tea.WindowSizeMsg) (Over
 // View renders the approval overlay
 func (a *GenericApprovalOverlay) View() string {
 	title := OverlayTitleStyle.Render(a.request.Title())
-	subtitle := OverlaySubtitleStyle.Render("Review the changes below")
 	viewportContent := a.viewport.View()
 
 	// Render approval buttons using style functions
@@ -159,7 +158,6 @@ func (a *GenericApprovalOverlay) View() string {
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
-		subtitle,
 		"",
 		viewportContent,
 		"",
