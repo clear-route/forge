@@ -157,9 +157,16 @@ func (h *Handler) handlePR(ctx context.Context, customTitle string) (string, err
 		return "", err
 	}
 
+	// Create the PR on GitHub
+	prURL, err := git.CreatePR(h.workingDir, prContent.Title, prContent.Description, base, head)
+	if err != nil {
+		return "", fmt.Errorf("failed to create PR: %w", err)
+	}
+
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("PR (%s -> %s)\n\n", head, base))
+	result.WriteString(fmt.Sprintf("✅ PR Created: %s -> %s\n\n", head, base))
 	result.WriteString(fmt.Sprintf("Title: %s\n\n", prContent.Title))
+	result.WriteString(fmt.Sprintf("URL: %s\n\n", prURL))
 	result.WriteString(prContent.Description)
 
 	return result.String(), nil

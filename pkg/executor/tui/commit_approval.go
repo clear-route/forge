@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,29 +75,30 @@ func (c *CommitApprovalRequest) Content() string {
 
 // OnApprove returns the command to execute when the user approves the commit
 func (c *CommitApprovalRequest) OnApprove() tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		result, err := c.slashHandler.Execute(ctx, &slash.Command{
-			Name: "commit",
-			Arg:  c.args,
-		})
-
-		if err != nil {
-			return toastMsg{
-				message: "Commit Failed",
-				details: fmt.Sprintf("%v", err),
-				icon:    "❌",
-				isError: true,
+	return tea.Batch(
+		// First, signal that we're starting commit creation
+		func() tea.Msg {
+			return operationStartMsg{
+				message: "Creating commit...",
 			}
-		}
-
-		return toastMsg{
-			message: "Success",
-			details: result,
-			icon:    "✅",
-			isError: false,
-		}
-	}
+		},
+		// Then execute the commit
+		func() tea.Msg {
+			ctx := context.Background()
+			result, err := c.slashHandler.Execute(ctx, &slash.Command{
+				Name: "commit",
+				Arg:  c.args,
+			})
+			return operationCompleteMsg{
+				result:       result,
+				err:          err,
+				successTitle: "Success",
+				successIcon:  "✅",
+				errorTitle:   "Commit Failed",
+				errorIcon:    "❌",
+			}
+		},
+	)
 }
 
 // OnReject returns the command to execute when the user rejects the commit

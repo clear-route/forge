@@ -113,6 +113,21 @@ type agentErrMsg struct{ err error }
 // slashCommandCompleteMsg signals that a slash command has completed
 type slashCommandCompleteMsg struct{}
 
+// operationStartMsg signals that a long-running operation has started
+type operationStartMsg struct {
+	message string // Loading message to display
+}
+
+// operationCompleteMsg signals that a long-running operation has completed
+type operationCompleteMsg struct {
+	result       string
+	err          error
+	successTitle string
+	successIcon  string
+	errorTitle   string
+	errorIcon    string
+}
+
 // summarizationStatus tracks an active context summarization operation
 type summarizationStatus struct {
 	active          bool
@@ -815,6 +830,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Slash command completed - clear busy state
 		m.agentBusy = false
 		m.recalculateLayout()
+		return m, nil
+
+	case operationStartMsg:
+		// Generic operation started - show loading indicator
+		m.agentBusy = true
+		m.currentLoadingMessage = msg.message
+		m.recalculateLayout()
+		return m, nil
+
+	case operationCompleteMsg:
+		// Generic operation completed - hide loading and show toast
+		m.agentBusy = false
+		m.recalculateLayout()
+		
+		if msg.err != nil {
+			m.showToast(msg.errorTitle, fmt.Sprintf("%v", msg.err), msg.errorIcon, true)
+		} else {
+			m.showToast(msg.successTitle, msg.result, msg.successIcon, false)
+		}
 		return m, nil
 
 	case toastMsg:

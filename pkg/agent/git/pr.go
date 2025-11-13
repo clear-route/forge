@@ -225,3 +225,41 @@ func GetDiffSummary(workingDir, base, head string) (string, error) {
 
 	return fmt.Sprintf("Files Changed:\n%s\n\nCode Changes:\n%s", stats, diffPreview), nil
 }
+
+// CreatePR pushes the current branch and creates a PR on GitHub using gh CLI
+func CreatePR(workingDir, title, body, base, head string) (string, error) {
+	// First, push the current branch to remote
+	pushCmd := exec.Command("git", "push", "-u", "origin", head)
+	pushCmd.Dir = workingDir
+
+	var pushStdout, pushStderr bytes.Buffer
+	pushCmd.Stdout = &pushStdout
+	pushCmd.Stderr = &pushStderr
+
+	if err := pushCmd.Run(); err != nil {
+		// Check if branch already exists
+		if !strings.Contains(pushStderr.String(), "already exists") {
+			return "", fmt.Errorf("failed to push branch: %w, stderr: %s", err, pushStderr.String())
+		}
+	}
+
+	// Create PR using gh CLI
+	prCmd := exec.Command("gh", "pr", "create",
+		"--title", title,
+		"--body", body,
+		"--base", base,
+		"--head", head,
+	)
+	prCmd.Dir = workingDir
+
+	var prStdout, prStderr bytes.Buffer
+	prCmd.Stdout = &prStdout
+	prCmd.Stderr = &prStderr
+
+	if err := prCmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to create PR: %w, stderr: %s", err, prStderr.String())
+	}
+
+	// Return the PR URL from gh output
+	return strings.TrimSpace(prStdout.String()), nil
+}

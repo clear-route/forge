@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -87,29 +86,30 @@ func (p *PRApprovalRequest) Content() string {
 
 // OnApprove returns the command to execute when the user approves the PR
 func (p *PRApprovalRequest) OnApprove() tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		result, err := p.slashHandler.Execute(ctx, &slash.Command{
-			Name: "pr",
-			Arg:  p.args,
-		})
-
-		if err != nil {
-			return toastMsg{
-				message: "PR Failed",
-				details: fmt.Sprintf("%v", err),
-				icon:    "❌",
-				isError: true,
+	return tea.Batch(
+		// First, signal that we're starting PR creation
+		func() tea.Msg {
+			return operationStartMsg{
+				message: "Creating pull request on GitHub...",
 			}
-		}
-
-		return toastMsg{
-			message: "Success",
-			details: result,
-			icon:    "🔀",
-			isError: false,
-		}
-	}
+		},
+		// Then execute the PR creation
+		func() tea.Msg {
+			ctx := context.Background()
+			result, err := p.slashHandler.Execute(ctx, &slash.Command{
+				Name: "pr",
+				Arg:  p.args,
+			})
+			return operationCompleteMsg{
+				result:       result,
+				err:          err,
+				successTitle: "Success",
+				successIcon:  "🔀",
+				errorTitle:   "PR Failed",
+				errorIcon:    "❌",
+			}
+		},
+	)
 }
 
 // OnReject returns the command to execute when the user rejects the PR
