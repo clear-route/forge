@@ -5,10 +5,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,6 +24,30 @@ import (
 )
 
 // Colors and styles are now defined in styles.go for consistency across all TUI components
+
+// loadingMessages contains quirky ASCII-style messages shown during agent processing
+var loadingMessages = []string{
+	"Thinking deep thoughts...",
+	"Brewing some code...",
+	"Analyzing the situation...",
+	"Working some magic...",
+	"Processing neural pathways...",
+	"Launching solution engines...",
+	"Forging your response...",
+	"Crafting the perfect answer...",
+	"Consulting the documentation...",
+	"Gathering the bits and bytes...",
+	"Spinning up the hamster wheel...",
+	"Channeling the AI spirits...",
+	"Compiling brilliance...",
+	"Running through possibilities...",
+	"Calculating optimal outcomes...",
+}
+
+// getRandomLoadingMessage returns a random loading message
+func getRandomLoadingMessage() string {
+	return loadingMessages[rand.Intn(len(loadingMessages))]
+}
 
 // Executor is a TUI-based executor that provides an interactive,
 // Gemini-style interface for agent interaction.
@@ -84,6 +110,9 @@ func (e *Executor) Run(ctx context.Context) error {
 
 type agentErrMsg struct{ err error }
 
+// slashCommandCompleteMsg signals that a slash command has completed
+type slashCommandCompleteMsg struct{}
+
 // summarizationStatus tracks an active context summarization operation
 type summarizationStatus struct {
 	active          bool
@@ -124,7 +153,10 @@ type model struct {
 	commandPalette           *CommandPalette
 	summarization            *summarizationStatus
 	toast                    *toastNotification
+	spinner                  spinner.Model
 	isThinking               bool
+	agentBusy                bool
+	currentLoadingMessage    string
 	width                    int
 	height                   int
 	ready                    bool
@@ -156,6 +188,10 @@ func initialModel() model {
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().Padding(0, 2)
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(salmonPink)
+
 	return model{
 		viewport:       vp,
 		textarea:       ta,
@@ -166,12 +202,14 @@ func initialModel() model {
 		commandPalette: newCommandPalette(),
 		summarization:  &summarizationStatus{},
 		toast:          &toastNotification{},
+		spinner:        s,
+		agentBusy:      false,
 	}
 }
 
 // Init is the first function that will be called.
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
 // formatTokenCount formats a token count with K/M suffixes for readability
@@ -468,7 +506,23 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString("\n\n")
 
 	case types.EventTypeTurnEnd:
-		// Turn end - no extra spacing needed
+		// Turn end - clear busy state
+		m.agentBusy = false
+		m.recalculateLayout()
+		return
+
+	case types.EventTypeUpdateBusy:
+		// Update busy state based on event
+		wasBusy := m.agentBusy
+		m.agentBusy = event.IsBusy
+		if m.agentBusy {
+			// Pick a random loading message when becoming busy
+			m.currentLoadingMessage = getRandomLoadingMessage()
+		}
+		// Recalculate layout if busy state changed
+		if wasBusy != m.agentBusy {
+			m.recalculateLayout()
+		}
 		return
 
 	case types.EventTypeToolApprovalRequest:
@@ -688,9 +742,15 @@ func (m *model) recalculateLayout() {
 	// Input height is dynamic based on textarea height (with border padding)
 	inputHeight := m.textarea.Height() + 2 // textarea height + border
 	statusBarHeight := 1
+	
+	// Account for loading indicator height when active
+	loadingIndicatorHeight := 0
+	if m.agentBusy {
+		loadingIndicatorHeight = 1 // One line for the loading indicator
+	}
 
 	// Set viewport to fill remaining space
-	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight
+	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight - loadingIndicatorHeight
 	if viewportHeight < 5 {
 		viewportHeight = 5
 	}
@@ -707,6 +767,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
 	)
+
+	// Handle spinner tick messages
+	var spinnerCmd tea.Cmd
+	m.spinner, spinnerCmd = m.spinner.Update(msg)
 
 	// Only update textarea if no overlay is active
 	// This prevents the textarea from capturing scroll events when an overlay is open
@@ -747,9 +811,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recalculateLayout()
 		return m, nil
 
+	case slashCommandCompleteMsg:
+		// Slash command completed - clear busy state
+		m.agentBusy = false
+		m.recalculateLayout()
+		return m, nil
+
 	case toastMsg:
 		// Handle toast messages from slash commands
 		m.showToast(msg.message, msg.details, msg.icon, msg.isError)
+		// Also clear busy state when toast is shown (command completed)
+		m.agentBusy = false
+		m.recalculateLayout()
 		return m, nil
 
 	case approvalRequestMsg:
@@ -902,11 +975,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				formatted = strings.TrimRight(formatted, "\n")
 				m.content.WriteString(formatted + "\n\n")
 				m.viewport.SetContent(m.content.String())
+				
+				// Set agent as busy and pick a random loading message
+				m.agentBusy = true
+				m.currentLoadingMessage = getRandomLoadingMessage()
+				m.recalculateLayout()
+				
 				m.channels.Input <- types.NewUserInput(input)
 				m.textarea.Reset()
 				m.viewport.GotoBottom()
 			}
-			return m, tea.Batch(tiCmd, vpCmd)
+			return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 		default:
 			// Let viewport handle other keys (arrow keys, pgup/pgdn, etc. for scrolling)
 			m.viewport, vpCmd = m.viewport.Update(msg)
@@ -934,7 +1013,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Auto-adjust textarea height based on content after any key press
 	m.updateTextAreaHeight()
 
-	return m, tea.Batch(tiCmd, vpCmd)
+	return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 }
 
 // updateTextAreaHeight adjusts textarea height based on number of lines
@@ -1019,6 +1098,17 @@ func (m model) View() string {
 	}
 	topStatus := statusBarStyle.Render(fmt.Sprintf("  Working directory: %s", cwd))
 
+	// Loading indicator (shown above input box when agent is busy)
+	var loadingIndicator string
+	if m.agentBusy {
+		loadingMsg := fmt.Sprintf("%s %s", m.spinner.View(), m.currentLoadingMessage)
+		loadingStyle := lipgloss.NewStyle().
+			Foreground(salmonPink).
+			Width(m.width - 4).
+			Padding(0, 2)
+		loadingIndicator = loadingStyle.Render(loadingMsg)
+	}
+
 	// Input box
 	inputBox := inputBoxStyle.Width(m.width - 4).Render(m.textarea.View())
 
@@ -1071,16 +1161,33 @@ func (m model) View() string {
 	viewportSection := m.viewport.View()
 
 	// Assemble the base UI without overlays
-	baseView := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		tips,
-		topStatus,
-		"", // Blank line for spacing
-		viewportSection,
-		inputBox,
-		bottomBar,
-	)
+	var baseView string
+	if m.agentBusy {
+		// Include loading indicator when agent is busy
+		baseView = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			tips,
+			topStatus,
+			"", // Blank line for spacing
+			viewportSection,
+			loadingIndicator,
+			inputBox,
+			bottomBar,
+		)
+	} else {
+		// Normal view without loading indicator
+		baseView = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			tips,
+			topStatus,
+			"", // Blank line for spacing
+			viewportSection,
+			inputBox,
+			bottomBar,
+		)
+	}
 
 	// Layer overlays on top of the base view using absolute positioning
 	if m.overlay.isActive() {

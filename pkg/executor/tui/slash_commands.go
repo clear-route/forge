@@ -160,6 +160,20 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 			return m, v
 		case func() tea.Msg:
 			// Function that returns a message (also a tea.Cmd, but type switch needs explicit match)
+			// For long-running commands (commit, pr), wrap with busy indicator
+			if commandName == "commit" || commandName == "pr" {
+				m.agentBusy = true
+				m.currentLoadingMessage = getRandomLoadingMessage()
+				// Wrap the command to clear busy state when done
+				return m, func() tea.Msg {
+					msg := v()
+					// After the command executes, send completion message
+					return tea.Batch(
+						func() tea.Msg { return msg },
+						func() tea.Msg { return slashCommandCompleteMsg{} },
+					)()
+				}
+			}
 			return m, tea.Cmd(v)
 		case ApprovalRequest:
 			// Command requires approval - send approval request message
