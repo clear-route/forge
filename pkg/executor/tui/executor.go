@@ -5,32 +5,66 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent/git"
+	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/types"
 )
 
 // Colors and styles are now defined in styles.go for consistency across all TUI components
 
+// loadingMessages contains quirky ASCII-style messages shown during agent processing
+var loadingMessages = []string{
+	"Thinking deep thoughts...",
+	"Brewing some code...",
+	"Analyzing the situation...",
+	"Working some magic...",
+	"Processing neural pathways...",
+	"Launching solution engines...",
+	"Forging your response...",
+	"Crafting the perfect answer...",
+	"Consulting the documentation...",
+	"Gathering the bits and bytes...",
+	"Spinning up the hamster wheel...",
+	"Channeling the AI spirits...",
+	"Compiling brilliance...",
+	"Running through possibilities...",
+	"Calculating optimal outcomes...",
+}
+
+// getRandomLoadingMessage returns a random loading message
+func getRandomLoadingMessage() string {
+	// #nosec G404 - Using math/rand for UI randomness is acceptable
+	return loadingMessages[rand.Intn(len(loadingMessages))]
+}
+
 // Executor is a TUI-based executor that provides an interactive,
 // Gemini-style interface for agent interaction.
 type Executor struct {
-	agent   agent.Agent
-	program *tea.Program
+	agent        agent.Agent
+	program      *tea.Program
+	provider     llm.Provider
+	workspaceDir string
 }
 
 // NewExecutor creates a new TUI executor for the given agent.
-func NewExecutor(agent agent.Agent) *Executor {
+func NewExecutor(agent agent.Agent, provider llm.Provider, workspaceDir string) *Executor {
 	return &Executor{
-		agent: agent,
+		agent:        agent,
+		provider:     provider,
+		workspaceDir: workspaceDir,
 	}
 }
 
@@ -44,6 +78,16 @@ func (e *Executor) Run(ctx context.Context) error {
 	model := initialModel()
 	model.agent = e.agent
 	model.channels = e.agent.GetChannels()
+	model.workspaceDir = e.workspaceDir
+
+	// Initialize slash handler for git operations
+	if e.provider != nil && e.workspaceDir != "" {
+		llmClient := newLLMAdapter(e.provider)
+		tracker := git.NewModificationTracker()
+		model.commitGen = git.NewCommitMessageGenerator(llmClient)
+		model.prGen = git.NewPRGenerator(llmClient)
+		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen, nil)
+	}
 
 	e.program = tea.NewProgram(
 		model,
@@ -66,6 +110,24 @@ func (e *Executor) Run(ctx context.Context) error {
 }
 
 type agentErrMsg struct{ err error }
+
+// slashCommandCompleteMsg signals that a slash command has completed
+type slashCommandCompleteMsg struct{}
+
+// operationStartMsg signals that a long-running operation has started
+type operationStartMsg struct {
+	message string // Loading message to display
+}
+
+// operationCompleteMsg signals that a long-running operation has completed
+type operationCompleteMsg struct {
+	result       string
+	err          error
+	successTitle string
+	successIcon  string
+	errorTitle   string
+	errorIcon    string
+}
 
 // summarizationStatus tracks an active context summarization operation
 type summarizationStatus struct {
@@ -96,13 +158,21 @@ type model struct {
 	textarea                 textarea.Model
 	agent                    agent.Agent
 	channels                 *types.AgentChannels
+	slashHandler             *slash.Handler
+	workspaceDir             string
+	commitGen                *git.CommitMessageGenerator
+	prGen                    *git.PRGenerator
 	content                  *strings.Builder
 	thinkingBuffer           *strings.Builder
 	messageBuffer            *strings.Builder
 	overlay                  *overlayState
+	commandPalette           *CommandPalette
 	summarization            *summarizationStatus
 	toast                    *toastNotification
+	spinner                  spinner.Model
 	isThinking               bool
+	agentBusy                bool
+	currentLoadingMessage    string
 	width                    int
 	height                   int
 	ready                    bool
@@ -134,6 +204,10 @@ func initialModel() model {
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().Padding(0, 2)
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(salmonPink)
+
 	return model{
 		viewport:       vp,
 		textarea:       ta,
@@ -141,14 +215,17 @@ func initialModel() model {
 		thinkingBuffer: &strings.Builder{},
 		messageBuffer:  &strings.Builder{},
 		overlay:        newOverlayState(),
+		commandPalette: newCommandPalette(),
 		summarization:  &summarizationStatus{},
 		toast:          &toastNotification{},
+		spinner:        s,
+		agentBusy:      false,
 	}
 }
 
 // Init is the first function that will be called.
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
 // formatTokenCount formats a token count with K/M suffixes for readability
@@ -310,6 +387,16 @@ func (m model) renderSummarizationStatus() string {
 	return "\n" + boxStyle.Render(content.String()) + "\n"
 }
 
+// showToast displays a toast notification to the user
+func (m *model) showToast(message, details, icon string, isError bool) {
+	m.toast.active = true
+	m.toast.message = message
+	m.toast.details = details
+	m.toast.icon = icon
+	m.toast.isError = isError
+	m.toast.showUntil = time.Now().Add(3 * time.Second)
+}
+
 // renderToast renders a toast notification
 func (m model) renderToast() string {
 	if !m.toast.active || time.Now().After(m.toast.showUntil) {
@@ -435,7 +522,23 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.content.WriteString("\n\n")
 
 	case types.EventTypeTurnEnd:
-		// Turn end - no extra spacing needed
+		// Turn end - clear busy state
+		m.agentBusy = false
+		m.recalculateLayout()
+		return
+
+	case types.EventTypeUpdateBusy:
+		// Update busy state based on event
+		wasBusy := m.agentBusy
+		m.agentBusy = event.IsBusy
+		if m.agentBusy {
+			// Pick a random loading message when becoming busy
+			m.currentLoadingMessage = getRandomLoadingMessage()
+		}
+		// Recalculate layout if busy state changed
+		if wasBusy != m.agentBusy {
+			m.recalculateLayout()
+		}
 		return
 
 	case types.EventTypeToolApprovalRequest:
@@ -656,8 +759,14 @@ func (m *model) recalculateLayout() {
 	inputHeight := m.textarea.Height() + 2 // textarea height + border
 	statusBarHeight := 1
 
+	// Account for loading indicator height when active
+	loadingIndicatorHeight := 0
+	if m.agentBusy {
+		loadingIndicatorHeight = 1 // One line for the loading indicator
+	}
+
 	// Set viewport to fill remaining space
-	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight
+	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight - loadingIndicatorHeight
 	if viewportHeight < 5 {
 		viewportHeight = 5
 	}
@@ -675,6 +784,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vpCmd tea.Cmd
 	)
 
+	// Handle spinner tick messages
+	var spinnerCmd tea.Cmd
+	m.spinner, spinnerCmd = m.spinner.Update(msg)
+
 	// Only update textarea if no overlay is active
 	// This prevents the textarea from capturing scroll events when an overlay is open
 	if !m.overlay.isActive() {
@@ -688,7 +801,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recalculateLayout()
 		}
 	}
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
@@ -713,6 +825,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(m.width - 8)
 		m.ready = true
 		m.recalculateLayout()
+		return m, nil
+
+	case slashCommandCompleteMsg:
+		// Slash command completed - clear busy state
+		m.agentBusy = false
+		m.recalculateLayout()
+		return m, nil
+
+	case operationStartMsg:
+		// Generic operation started - show loading indicator
+		m.agentBusy = true
+		m.currentLoadingMessage = msg.message
+		m.recalculateLayout()
+		return m, nil
+
+	case operationCompleteMsg:
+		// Generic operation completed - hide loading and show toast
+		m.agentBusy = false
+		m.recalculateLayout()
+
+		if msg.err != nil {
+			m.showToast(msg.errorTitle, fmt.Sprintf("%v", msg.err), msg.errorIcon, true)
+		} else {
+			m.showToast(msg.successTitle, msg.result, msg.successIcon, false)
+		}
+		return m, nil
+
+	case toastMsg:
+		// Handle toast messages from slash commands
+		m.showToast(msg.message, msg.details, msg.icon, msg.isError)
+		// Also clear busy state when toast is shown (command completed)
+		m.agentBusy = false
+		m.recalculateLayout()
+		return m, nil
+
+	case approvalRequestMsg:
+		// Generic approval handling - works with any ApprovalRequest
+		overlay := NewGenericApprovalOverlay(msg.request, m.width, m.height)
+		m.overlay.activate(OverlayModeSlashCommandPreview, overlay)
 		return m, nil
 
 	case agentErrMsg:
@@ -777,6 +928,49 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, overlayCmd
 		}
 
+		// Handle command palette navigation when active
+		// Only intercept specific keys, let everything else pass through to textarea
+		if m.commandPalette.active {
+			switch msg.Type {
+			case tea.KeyEsc:
+				// Cancel command palette
+				m.commandPalette.deactivate()
+				m.textarea.Reset()
+				return m, tea.Batch(tiCmd, vpCmd)
+			case tea.KeyUp:
+				// Navigate up in palette, don't update textarea
+				m.commandPalette.selectPrev()
+				return m, nil
+			case tea.KeyDown:
+				// Navigate down in palette, don't update textarea
+				m.commandPalette.selectNext()
+				return m, nil
+			case tea.KeyTab:
+				// Autocomplete with selected command and close palette
+				selected := m.commandPalette.getSelected()
+				if selected != nil {
+					m.textarea.SetValue("/" + selected.Name + " ")
+					m.textarea.CursorEnd()
+				}
+				m.commandPalette.deactivate()
+				return m, tea.Batch(tiCmd, vpCmd)
+			case tea.KeyEnter:
+				// Autocomplete with the selected command and close the palette
+				selected := m.commandPalette.getSelected()
+				if selected != nil {
+					m.textarea.SetValue("/" + selected.Name + " ")
+					m.textarea.CursorEnd()
+				}
+				m.commandPalette.deactivate()
+				return m, tea.Batch(tiCmd, vpCmd)
+			default:
+				// For all other keys (typing, backspace, etc.), let textarea handle them
+				// The textarea has already been updated at the top of Update()
+				// Return here to prevent the outer switch from handling these keys
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -789,18 +983,72 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(tiCmd, vpCmd)
 			}
 			// Plain Enter submits
-			m.handleUserInput()
-			return m, tea.Batch(tiCmd, vpCmd)
+			input := m.textarea.Value()
+			if input == "" {
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// Check if input is a slash command
+			commandName, args, isCommand := parseSlashCommand(input)
+			if isCommand {
+				// Execute slash command and get updated model
+				m.textarea.Reset()
+				m.commandPalette.deactivate()
+				return executeSlashCommand(m, commandName, args)
+			}
+
+			// If input starts with / but isn't a valid command, don't send to agent
+			if strings.HasPrefix(strings.TrimSpace(input), "/") {
+				// Keep palette active, don't submit
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// Regular user input - send to agent
+			if m.channels != nil {
+				formatted := formatEntry("You: ", input, userStyle, m.width, true)
+				// Strip any trailing newlines before adding our spacing
+				formatted = strings.TrimRight(formatted, "\n")
+				m.content.WriteString(formatted + "\n\n")
+				m.viewport.SetContent(m.content.String())
+
+				// Set agent as busy and pick a random loading message
+				m.agentBusy = true
+				m.currentLoadingMessage = getRandomLoadingMessage()
+				m.recalculateLayout()
+
+				m.channels.Input <- types.NewUserInput(input)
+				m.textarea.Reset()
+				m.viewport.GotoBottom()
+			}
+			return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 		default:
 			// Let viewport handle other keys (arrow keys, pgup/pgdn, etc. for scrolling)
 			m.viewport, vpCmd = m.viewport.Update(msg)
 		}
 	}
 
+	// Check if we should activate/deactivate command palette based on input
+	value := m.textarea.Value()
+
+	// Handle command palette activation/deactivation based on input
+	switch {
+	case value == "/" && !m.commandPalette.active:
+		// Only activate palette if input is exactly "/" as first character
+		m.commandPalette.activate()
+		m.commandPalette.updateFilter("")
+	case strings.HasPrefix(value, "/") && m.commandPalette.active:
+		// Update filter if palette is already active
+		filter := strings.TrimPrefix(value, "/")
+		m.commandPalette.updateFilter(filter)
+	case !strings.HasPrefix(value, "/") && m.commandPalette.active:
+		// Deactivate palette if input no longer starts with /
+		m.commandPalette.deactivate()
+	}
+
 	// Auto-adjust textarea height based on content after any key press
 	m.updateTextAreaHeight()
 
-	return m, tea.Batch(tiCmd, vpCmd)
+	return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 }
 
 // updateTextAreaHeight adjusts textarea height based on number of lines
@@ -860,21 +1108,6 @@ func (m *model) updateTextAreaHeight() {
 	}
 }
 
-// handleUserInput processes user input and sends it to the agent
-func (m *model) handleUserInput() {
-	input := m.textarea.Value()
-	if input != "" && m.channels != nil {
-		formatted := formatEntry("You: ", input, userStyle, m.width, true)
-		// Strip any trailing newlines before adding our spacing
-		formatted = strings.TrimRight(formatted, "\n")
-		m.content.WriteString(formatted + "\n\n")
-		m.viewport.SetContent(m.content.String())
-		m.channels.Input <- types.NewUserInput(input)
-		m.textarea.Reset()
-		m.viewport.GotoBottom()
-	}
-}
-
 // View renders the TUI.
 func (m model) View() string {
 	if !m.ready {
@@ -899,6 +1132,17 @@ func (m model) View() string {
 		cwd = "~"
 	}
 	topStatus := statusBarStyle.Render(fmt.Sprintf("  Working directory: %s", cwd))
+
+	// Loading indicator (shown above input box when agent is busy)
+	var loadingIndicator string
+	if m.agentBusy {
+		loadingMsg := fmt.Sprintf("%s %s", m.spinner.View(), m.currentLoadingMessage)
+		loadingStyle := lipgloss.NewStyle().
+			Foreground(salmonPink).
+			Width(m.width-4).
+			Padding(0, 2)
+		loadingIndicator = loadingStyle.Render(loadingMsg)
+	}
 
 	// Input box
 	inputBox := inputBoxStyle.Width(m.width - 4).Render(m.textarea.View())
@@ -948,34 +1192,59 @@ func (m model) View() string {
 			bottomRight,
 	)
 
-	// Build viewport section with potential status overlay and toast
+	// Build viewport section - just the viewport itself
 	viewportSection := m.viewport.View()
 
-	// Add summarization status overlay if active
-	if m.summarization.active {
-		viewportSection += m.renderSummarizationStatus()
+	// Assemble the base UI without overlays
+	var baseView string
+	if m.agentBusy {
+		// Include loading indicator when agent is busy
+		baseView = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			tips,
+			topStatus,
+			"", // Blank line for spacing
+			viewportSection,
+			loadingIndicator,
+			inputBox,
+			bottomBar,
+		)
+	} else {
+		// Normal view without loading indicator
+		baseView = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			tips,
+			topStatus,
+			"", // Blank line for spacing
+			viewportSection,
+			inputBox,
+			bottomBar,
+		)
 	}
 
-	// Add toast notification if active and not expired
-	if m.toast.active && time.Now().Before(m.toast.showUntil) {
-		viewportSection += m.renderToast()
-	}
-
-	// Assemble the full UI
-	baseView := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		tips,
-		topStatus,
-		"", // Blank line for spacing
-		viewportSection,
-		inputBox,
-		bottomBar,
-	)
-
-	// If overlay is active, render it on top
+	// Layer overlays on top of the base view using absolute positioning
 	if m.overlay.isActive() {
-		return renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+	}
+
+	// Add command palette as overlay if active
+	if m.commandPalette.active {
+		paletteContent := m.commandPalette.render(m.width)
+		baseView = renderToastOverlay(baseView, paletteContent)
+	}
+
+	// Add summarization status as overlay if active
+	if m.summarization.active {
+		summarizationContent := m.renderSummarizationStatus()
+		baseView = renderToastOverlay(baseView, summarizationContent)
+	}
+
+	// Add toast notification as overlay if active and not expired
+	if m.toast.active && time.Now().Before(m.toast.showUntil) {
+		toastContent := m.renderToast()
+		baseView = renderToastOverlay(baseView, toastContent)
 	}
 
 	return baseView

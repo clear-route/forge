@@ -108,8 +108,14 @@ func main() {
 		log.Fatalf("Failed to register calculator tool: %v", err)
 	}
 
-	// Create TUI executor
-	executor := tui.NewExecutor(ag)
+	// Get current working directory for git operations
+	workspaceDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %v", err)
+	}
+
+	// Create TUI executor with provider and workspace for git operations
+	executor := tui.NewExecutor(ag, provider, workspaceDir)
 
 	// Run the conversation
 	ctx := context.Background()

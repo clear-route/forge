@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -17,6 +19,10 @@ const (
 	OverlayModeFileTree
 	// OverlayModeCommandOutput shows command output overlay
 	OverlayModeCommandOutput
+	// OverlayModeHelp shows the help overlay
+	OverlayModeHelp
+	// OverlayModeSlashCommandPreview shows slash command preview
+	OverlayModeSlashCommandPreview
 )
 
 // Overlay is the base interface for all overlay components
@@ -85,4 +91,48 @@ func renderOverlay(baseView string, overlay Overlay, width, height int) string {
 		overlayView,
 		lipgloss.WithWhitespaceChars(" "),
 	)
+}
+
+// renderToastOverlay renders a toast-style overlay at the bottom of the screen
+// without affecting the base view's layout
+func renderToastOverlay(baseView string, toastContent string) string {
+	if toastContent == "" {
+		return baseView
+	}
+
+	// Split base view into lines
+	baseLines := strings.Split(baseView, "\n")
+
+	// Calculate where to position the toast (bottom of screen, above input area)
+	// We want to overlay it on top of the existing content
+	toastLines := strings.Split(strings.TrimRight(toastContent, "\n"), "\n")
+	toastHeight := len(toastLines)
+
+	// Position toast starting from a few lines above the bottom
+	// This puts it just above the input box
+	startLine := len(baseLines) - 5 - toastHeight
+	if startLine < 0 {
+		startLine = 0
+	}
+
+	// Build result with toast overlaid
+	var result strings.Builder
+	for i, line := range baseLines {
+		toastLineIdx := i - startLine
+		if toastLineIdx >= 0 && toastLineIdx < len(toastLines) {
+			// Overlay the toast line, left-aligned with small padding
+			toastLine := toastLines[toastLineIdx]
+			padding := 2 // Left padding for spacing from edge
+			// Write toast with left padding
+			result.WriteString(strings.Repeat(" ", padding))
+			result.WriteString(toastLine)
+		} else {
+			result.WriteString(line)
+		}
+		if i < len(baseLines)-1 {
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
 }

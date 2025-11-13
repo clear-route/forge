@@ -209,8 +209,8 @@ func run(ctx context.Context, config *Config) error {
 		}
 	}
 
-	// Create TUI executor
-	executor := tui.NewExecutor(ag)
+	// Create TUI executor with provider and workspace for git operations
+	executor := tui.NewExecutor(ag, provider, config.WorkspaceDir)
 
 	// Display welcome message
 	fmt.Printf("Forge v%s - Coding Agent\n", version)
