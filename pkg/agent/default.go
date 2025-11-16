@@ -14,6 +14,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
 	"github.com/entrhq/forge/pkg/tools/coding"
@@ -459,7 +460,7 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 // buildSystemPrompt constructs the system prompt with tool schemas and custom instructions
 func (a *DefaultAgent) buildSystemPrompt() string {
 	builder := prompts.NewPromptBuilder().
-		WithTools(a.GetTools())
+		WithTools(a.getToolsList())
 
 	// Add user's custom instructions if provided
 	if a.customInstructions != "" {
@@ -506,7 +507,20 @@ func (a *DefaultAgent) RegisterTool(tool tools.Tool) error {
 }
 
 // GetTools returns a list of all available tools (built-in + custom)
-func (a *DefaultAgent) GetTools() []tools.Tool {
+// This is used internally for prompt building and memory
+func (a *DefaultAgent) GetTools() []interface{} {
+	a.toolsMu.RLock()
+	defer a.toolsMu.RUnlock()
+
+	toolsList := make([]interface{}, 0, len(a.tools))
+	for _, tool := range a.tools {
+		toolsList = append(toolsList, tool)
+	}
+	return toolsList
+}
+
+// getToolsList returns tools as []tools.Tool for internal use
+func (a *DefaultAgent) getToolsList() []tools.Tool {
 	a.toolsMu.RLock()
 	defer a.toolsMu.RUnlock()
 
@@ -629,7 +643,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:           prompts.ErrorTypeUnknownTool,
 			ToolName:       toolCall.ToolName,
-			AvailableTools: a.GetTools(),
+			AvailableTools: a.getToolsList(),
 		})
 
 		// Track error and check circuit breaker
@@ -786,7 +800,29 @@ func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolC
 		argsMap = make(map[string]interface{})
 	}
 
-	// Emit approval request event
+	// Check if tool is auto-approved
+	if config.IsToolAutoApproved(toolCall.ToolName) {
+		// Auto-approve tool
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+		return true, false
+	}
+
+	// For execute_command, check command whitelist
+	if toolCall.ToolName == "execute_command" {
+		// Extract command from arguments
+		if cmdInterface, ok := argsMap["command"]; ok {
+			if cmd, ok := cmdInterface.(string); ok {
+				// Check if command is whitelisted
+				if config.IsCommandWhitelisted(cmd) {
+					// Auto-approve whitelisted command
+					a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+					return true, false
+				}
+			}
+		}
+	}
+
+	// Emit approval request event (tool requires manual approval)
 	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
 
 	// Wait for response with timeout

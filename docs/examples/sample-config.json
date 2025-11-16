@@ -1,0 +1,37 @@
+{
+  "auto_approval": {
+    "read_file": true,
+    "list_files": true,
+    "list_code_definition_names": true,
+    "search_files": true,
+    "write_to_file": false,
+    "apply_diff": false,
+    "execute_command": false,
+    "browser_action": false,
+    "ask_followup_question": true
+  },
+  "command_whitelist": {
+    "patterns": [
+      {
+        "pattern": "npm",
+        "description": "All npm commands"
+      },
+      {
+        "pattern": "git status",
+        "description": "Git status and variations"
+      },
+      {
+        "pattern": "ls",
+        "description": "List directory"
+      },
+      {
+        "pattern": "go build",
+        "description": "Build Go projects"
+      },
+      {
+        "pattern": "go test",
+        "description": "Run Go tests"
+      }
+    ]
+  }
+}
