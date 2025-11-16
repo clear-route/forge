@@ -240,7 +240,7 @@ func (s *SettingsOverlay) Height() int {
 
 // handleSettingsCommand opens the settings overlay
 func handleSettingsCommand(m *model, args []string) interface{} {
-	// Show settings overlay
-	m.overlay.activate(OverlayModeSettings, NewSettingsOverlay(m.width, m.height))
+	// Show interactive settings overlay
+	m.overlay.activate(OverlayModeSettings, NewInteractiveSettingsOverlay(m.width, m.height))
 	return nil
 }

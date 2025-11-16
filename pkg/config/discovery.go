@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 )
 
 // DiscoverToolsFromAgent initializes the auto-approval section with tools from the agent
@@ -37,17 +38,39 @@ func DiscoverToolsFromAgent(agent interface{}) error {
 		return fmt.Errorf("auto-approval section has wrong type")
 	}
 
-	// Extract tool names and ensure they exist in the config
+	// Extract tool names for tools that require approval (implement Previewable)
+	// Tools that don't require approval (like task_completion, ask_question) are excluded
 	type toolNamer interface {
 		Name() string
 	}
 
 	for _, tool := range tools {
+		var toolName string
 		if namer, ok := tool.(toolNamer); ok {
-			toolName := namer.Name()
-			if toolName != "" {
-				autoApproval.EnsureToolExists(toolName)
-			}
+			toolName = namer.Name()
+		}
+		
+		// Use reflection to check if the tool has a GeneratePreview method
+		// This is necessary because the tools are returned as []interface{} which loses type information
+		toolType := reflect.TypeOf(tool)
+		
+		// Check if the type has a GeneratePreview method
+		method, hasMethod := toolType.MethodByName("GeneratePreview")
+		if !hasMethod {
+			continue
+		}
+		
+		// Verify the method signature matches what we expect
+		// GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error)
+		// The method should have 3 inputs (receiver, context, json.RawMessage) and 2 outputs (pointer, error)
+		methodType := method.Type
+		if methodType.NumIn() != 3 || methodType.NumOut() != 2 {
+			continue
+		}
+		
+		// Tool implements Previewable interface, add it to config
+		if toolName != "" {
+			autoApproval.EnsureToolExists(toolName)
 		}
 	}
 
