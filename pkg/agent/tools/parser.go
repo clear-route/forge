@@ -7,7 +7,13 @@ import (
 	"strings"
 )
 
-const defaultServerName = "local"
+const (
+	defaultServerName = "local"
+	maxXMLSize        = 10 * 1024 * 1024 // 10MB limit for XML tool calls
+)
+
+// Compile regex once at package level for efficiency
+var toolRegex = regexp.MustCompile(`(?s)<tool>.*?</tool>`)
 
 // ParseToolCall extracts a tool call from an LLM response that contains
 // XML-formatted tool invocations.
@@ -31,8 +37,10 @@ const defaultServerName = "local"
 // Returns the parsed ToolCall and the remaining text after removing the tool call,
 // or an error if parsing fails.
 func ParseToolCall(text string) (*ToolCall, string, error) {
-	// Regex to match <tool>...</tool> tags
-	toolRegex := regexp.MustCompile(`(?s)<tool>.*?</tool>`)
+	// Check XML size limit to prevent DOS attacks
+	if len(text) > maxXMLSize {
+		return nil, text, fmt.Errorf("tool call XML exceeds maximum size of %d bytes", maxXMLSize)
+	}
 
 	matches := toolRegex.FindStringSubmatch(text)
 	if len(matches) < 1 {
@@ -44,7 +52,12 @@ func ParseToolCall(text string) (*ToolCall, string, error) {
 
 	var toolCall ToolCall
 	if err := xml.Unmarshal([]byte(toolXML), &toolCall); err != nil {
-		return nil, text, fmt.Errorf("failed to unmarshal tool call XML: %w", err)
+		// Include XML snippet in error for better debugging
+		snippet := toolXML
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		return nil, text, fmt.Errorf("failed to unmarshal tool call XML: %w\nXML snippet: %s", err, snippet)
 	}
 
 	// Validate required fields

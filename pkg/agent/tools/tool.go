@@ -11,7 +11,13 @@ import (
 //
 // Example tool call format from LLM:
 //
-//	<tool>{"server_name": "local", "tool_name": "task_completion", "arguments": {"result": "Task done!"}}</tool>
+//	<tool>
+//	<server_name>local</server_name>
+//	<tool_name>task_completion</tool_name>
+//	<arguments>
+//	  <result>Task completed successfully</result>
+//	</arguments>
+//	</tool>
 type Tool interface {
 	// Name returns the unique identifier for this tool (e.g., "task_completion")
 	Name() string
@@ -47,9 +53,18 @@ type ArgumentsBlock struct {
 	InnerXML []byte `xml:",innerxml"`
 }
 
-// GetArgumentsXML returns the arguments wrapped in <arguments> tags for unmarshaling
+// GetArgumentsXML returns the arguments wrapped in <arguments> tags for unmarshaling.
+// Uses efficient byte slice operations to avoid multiple string allocations.
 func (tc *ToolCall) GetArgumentsXML() []byte {
-	return []byte("<arguments>" + string(tc.Arguments.InnerXML) + "</arguments>")
+	const prefix = "<arguments>"
+	const suffix = "</arguments>"
+	
+	// Pre-allocate exact size needed
+	result := make([]byte, 0, len(prefix)+len(tc.Arguments.InnerXML)+len(suffix))
+	result = append(result, []byte(prefix)...)
+	result = append(result, tc.Arguments.InnerXML...)
+	result = append(result, []byte(suffix)...)
+	return result
 }
 
 // Previewable is an optional interface that tools can implement to provide

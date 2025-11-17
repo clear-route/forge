@@ -598,7 +598,7 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed to parse tool call:\n%s\n", toolCallContent)))
 
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:    prompts.ErrorTypeInvalidJSON,
+			Type:    prompts.ErrorTypeInvalidXML,
 			Error:   err,
 			Content: toolCallContent,
 		})
