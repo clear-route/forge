@@ -3,6 +3,8 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -147,29 +149,107 @@ func (s *ToolResultSummarizer) GenerateSummary(toolName string, result string) s
 	}
 }
 
-// extractFilename attempts to extract a filename from tool result
+// extractFilename attempts to extract a filename from tool result using
+// multiple heuristics. It looks for file paths in the first few lines and
+// returns the most likely filename found.
 func (s *ToolResultSummarizer) extractFilename(result string) string {
-	// This is a simple heuristic - improve as needed
 	lines := strings.Split(result, "\n")
 	if len(lines) == 0 {
 		return ""
 	}
 
-	// Look for common patterns in first few lines
-	for i := 0; i < min(3, len(lines)); i++ {
+	// Try multiple extraction strategies in order of confidence
+	extractors := []filenameExtractor{
+		s.extractFromQuotedPath,
+		s.extractFromPathPattern,
+		s.extractFromExtensionPattern,
+	}
+
+	// Search first few lines for filename
+	const maxLinesToSearch = 5
+	for i := 0; i < min(maxLinesToSearch, len(lines)); i++ {
 		line := strings.TrimSpace(lines[i])
-		// Look for file paths (simple heuristic)
-		if strings.Contains(line, ".go") || strings.Contains(line, ".py") ||
-			strings.Contains(line, ".js") || strings.Contains(line, ".ts") ||
-			strings.Contains(line, "/") {
-			// Extract just the filename if it's a path
-			parts := strings.Split(line, "/")
-			if len(parts) > 0 {
-				return parts[len(parts)-1]
+		if line == "" {
+			continue
+		}
+
+		for _, extractor := range extractors {
+			if filename := extractor(line); filename != "" {
+				return filename
 			}
-			return line
 		}
 	}
+
+	return ""
+}
+
+// filenameExtractor is a function that attempts to extract a filename from a line
+type filenameExtractor func(string) string
+
+// extractFromQuotedPath extracts filenames from quoted paths like "path/to/file.go"
+func (s *ToolResultSummarizer) extractFromQuotedPath(line string) string {
+	// Match quoted strings that look like file paths
+	patterns := []string{
+		`"([^"]+\.[a-zA-Z0-9]{1,4})"`,  // "file.ext"
+		`'([^']+\.[a-zA-Z0-9]{1,4})'`,  // 'file.ext'
+		"`([^`]+\\.[a-zA-Z0-9]{1,4})`", // `file.ext`
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		if matches := re.FindStringSubmatch(line); len(matches) > 1 {
+			return filepath.Base(matches[1])
+		}
+	}
+
+	return ""
+}
+
+// extractFromPathPattern extracts filenames from path-like patterns
+func (s *ToolResultSummarizer) extractFromPathPattern(line string) string {
+	// Match file paths with directory separators
+	// Examples: pkg/foo/bar.go, ./internal/test.py, /absolute/path/file.js
+	// More flexible pattern that handles ./ prefix and absolute paths
+	pathPattern := regexp.MustCompile(`(?:^|\s)((?:\./|/)?(?:[\w-]+/)+[\w-]+\.[a-zA-Z0-9]{1,4})(?:\s|$|:)`)
+	if matches := pathPattern.FindStringSubmatch(line); len(matches) > 1 {
+		return filepath.Base(matches[1])
+	}
+
+	return ""
+}
+
+// extractFromExtensionPattern extracts filenames based on common file extensions
+func (s *ToolResultSummarizer) extractFromExtensionPattern(line string) string {
+	// Common file extensions we want to detect
+	extensions := []string{
+		// Programming languages
+		"go", "py", "js", "ts", "jsx", "tsx", "java", "cpp", "c", "h", "hpp",
+		"rs", "rb", "php", "swift", "kt", "scala", "cs", "fs",
+		// Config and data
+		"json", "yaml", "yml", "toml", "xml", "ini", "conf", "cfg",
+		// Documentation
+		"md", "txt", "rst", "adoc",
+		// Web
+		"html", "css", "scss", "sass", "less",
+		// Other
+		"sql", "sh", "bash", "zsh", "fish",
+	}
+
+	// Build a pattern that matches word characters followed by any of these extensions
+	extensionPattern := strings.Join(extensions, "|")
+	pattern := fmt.Sprintf(`\b([\w-]+\.(?:%s))\b`, extensionPattern)
+	re := regexp.MustCompile(pattern)
+
+	if matches := re.FindStringSubmatch(line); len(matches) > 1 {
+		return matches[1]
+	}
+
+	// Special case: files without extensions (Dockerfile, Makefile, etc.)
+	noExtPattern := regexp.MustCompile(`\b(Dockerfile|Makefile|Rakefile|Gemfile|Procfile)\b`)
+	if matches := noExtPattern.FindStringSubmatch(line); len(matches) > 1 {
+		return matches[1]
+	}
+
 	return ""
 }
 
