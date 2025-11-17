@@ -527,6 +527,15 @@ func (a *DefaultAgent) RegisterTool(tool tools.Tool) error {
 	return nil
 }
 
+// GetTool retrieves a specific tool by name from the agent's tool registry.
+// Returns nil if the tool is not found.
+func (a *DefaultAgent) GetTool(name string) interface{} {
+	a.toolsMu.RLock()
+	defer a.toolsMu.RUnlock()
+
+	return a.tools[name]
+}
+
 // GetTools returns a list of all available tools (built-in + custom)
 // This is used internally for prompt building and memory
 func (a *DefaultAgent) GetTools() []interface{} {

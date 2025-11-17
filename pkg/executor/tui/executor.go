@@ -83,29 +83,29 @@ func (e *Executor) Run(ctx context.Context) error {
 		log.Printf("Warning: failed to discover tools from agent: %v", err)
 	}
 
-	model := initialModel()
-	model.agent = e.agent
-	model.channels = e.agent.GetChannels()
-	model.workspaceDir = e.workspaceDir
+	m := initialModel()
+	m.agent = e.agent
+	m.channels = e.agent.GetChannels()
+	m.workspaceDir = e.workspaceDir
 
 	// Initialize slash handler for git operations
 	if e.provider != nil && e.workspaceDir != "" {
 		llmClient := newLLMAdapter(e.provider)
 		tracker := git.NewModificationTracker()
-		model.commitGen = git.NewCommitMessageGenerator(llmClient)
-		model.prGen = git.NewPRGenerator(llmClient)
-		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen)
+		m.commitGen = git.NewCommitMessageGenerator(llmClient)
+		m.prGen = git.NewPRGenerator(llmClient)
+		m.slashHandler = slash.NewHandler(e.workspaceDir, tracker, m.commitGen, m.prGen)
 	}
 
 	e.program = tea.NewProgram(
-		model,
+		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
 
 	go func() {
 		// Listen for agent events and forward them to the TUI
-		for event := range model.channels.Event {
+		for event := range m.channels.Event {
 			e.program.Send(event)
 		}
 	}()
@@ -180,6 +180,7 @@ type model struct {
 	spinner                  spinner.Model
 	isThinking               bool
 	agentBusy                bool
+	bashMode                 bool // Track if in bash mode
 	currentLoadingMessage    string
 	toolNameDisplayed        bool // Track if we've already displayed the tool name
 	width                    int
@@ -956,6 +957,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recalculateLayout()
 		return m, nil
 
+	case bashCommandResultMsg:
+		// Bash command completed - display result in viewport
+		formatted := fmt.Sprintf("\n[%s] $ %s\n%s\n", msg.timestamp, msg.command, msg.result)
+		m.content.WriteString(formatted)
+		m.viewport.SetContent(m.content.String())
+		m.viewport.GotoBottom()
+		return m, nil
+
 	case approvalRequestMsg:
 		// Generic approval handling - works with any ApprovalRequest
 		overlay := NewGenericApprovalOverlay(msg.request, m.width, m.height)
@@ -1109,6 +1118,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
+			// If in bash mode, Ctrl+C/Esc exits bash mode instead of quitting
+			if m.bashMode {
+				m.bashMode = false
+				m.updatePrompt()
+				m.textarea.Reset()
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
 			return m, tea.Quit
 		case tea.KeyEnter:
 			// Alt+Enter (Option+Enter on Mac) adds newline
@@ -1122,6 +1138,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			input := m.textarea.Value()
 			if input == "" {
 				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// Check for bash mode exit commands
+			trimmedInput := strings.TrimSpace(input)
+			if m.bashMode && (trimmedInput == "exit" || trimmedInput == "quit") {
+				m.bashMode = false
+				m.updatePrompt()
+				m.textarea.Reset()
+				return m, tea.Batch(tiCmd, vpCmd)
+			}
+
+			// In bash mode, treat all input as shell commands
+			if m.bashMode {
+				m.textarea.Reset()
+				return m, m.executeBashCommand(input)
+			}
+
+			// Check for ! prefix (bash command) - works outside bash mode
+			if strings.HasPrefix(trimmedInput, "!") {
+				cmd := strings.TrimSpace(strings.TrimPrefix(trimmedInput, "!"))
+				m.textarea.Reset()
+				return m, m.executeBashCommand(cmd)
 			}
 
 			// Check if input is a slash command
@@ -1279,7 +1317,10 @@ func (m model) buildHeader() string {
 }
 
 func (m model) buildTips() string {
-	return tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+V to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
+	if m.bashMode {
+		return tipsStyle.Render(`  Bash Mode: Commands execute directly • Type 'exit' or Ctrl+C to return • Enter to run`)
+	}
+	return tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • !cmd for bash • /bash for mode • Ctrl+V to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
 }
 
 func (m model) buildTopStatus() string {
@@ -1309,6 +1350,9 @@ func (m model) buildInputBox() string {
 func (m model) buildBottomBar() string {
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
+	if m.bashMode {
+		bottomCenter = "🔧 BASH MODE • Enter to run • 'exit' to return"
+	}
 	bottomRight := m.buildTokenDisplay()
 
 	totalUsed := len(bottomLeft) + len(bottomCenter) + len(bottomRight)
