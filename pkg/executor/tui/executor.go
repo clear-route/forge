@@ -198,8 +198,9 @@ type model struct {
 	resultClassifier *ToolResultClassifier
 	resultSummarizer *ToolResultSummarizer
 	resultCache      *resultCache
-	lastToolCallID   string // Track the last tool call for 'v' shortcut
-	lastToolName     string // Track the last tool name
+	resultList       resultListModel // Result history list overlay
+	lastToolCallID   string          // Track the last tool call for 'v' shortcut
+	lastToolName     string          // Track the last tool name
 }
 
 // initialModel returns the initial state of the TUI.
@@ -239,6 +240,7 @@ func initialModel() model {
 		resultClassifier: NewToolResultClassifier(),
 		resultSummarizer: NewToolResultSummarizer(),
 		resultCache:      newResultCache(20),
+		resultList:       newResultListModel(),
 	}
 }
 
@@ -549,16 +551,16 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			displayText := summary + "\n" + preview
 			formatted := formatEntry("  ✓ ", displayText, toolStyle, m.width, false)
 			m.content.WriteString(formatted)
-			// Cache the full result for 'v' viewing
-			m.resultCache.store(m.lastToolCallID, resultStr)
+			// Cache the full result for viewing
+			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
 			
 		case TierSummaryOnly:
 			// Display summary only
 			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
 			formatted := formatEntry("  ✓ ", summary, toolStyle, m.width, false)
 			m.content.WriteString(formatted)
-			// Cache the full result for 'v' viewing
-			m.resultCache.store(m.lastToolCallID, resultStr)
+			// Cache the full result for viewing
+			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
 			
 		case TierOverlayOnly:
 			// Command execution already handled by overlay system
@@ -859,9 +861,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var spinnerCmd tea.Cmd
 	m.spinner, spinnerCmd = m.spinner.Update(msg)
 
-	// Only update textarea if no overlay is active
+	// Only update textarea if no overlay or result list is active
 	// This prevents the textarea from capturing scroll events when an overlay is open
-	if !m.overlay.isActive() {
+	if !m.overlay.isActive() && !m.resultList.active {
 		// Store old textarea height to detect changes
 		oldHeight := m.textarea.Height()
 		m.textarea, tiCmd = m.textarea.Update(msg)
@@ -873,9 +875,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch msg := msg.(type) {
+	case viewResultMsg:
+		// Handle result selection from the result list
+		if result, ok := m.resultCache.get(msg.resultID); ok {
+			// Close the result list
+			m.resultList.deactivate()
+			// Open the result in an overlay
+			overlay := NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
+			m.overlay.activate(OverlayModeToolResult, overlay)
+			return m, nil
+		}
+		// If result not found, just close the list
+		m.resultList.deactivate()
+		return m, nil
+		
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
 		m.viewport, _ = m.viewport.Update(msg)
+		
+		// Also update result list if active
+		if m.resultList.active {
+			updated, listCmd := m.resultList.Update(msg)
+			m.resultList = *updated.(*resultListModel)
+			return m, listCmd
+		}
 		m.width = msg.Width
 		m.height = msg.Height
 
@@ -987,10 +1010,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Try to get the cached result
 			if result, ok := m.resultCache.get(m.lastToolCallID); ok {
 				// Create overlay to display the full result
-				overlay := NewToolResultOverlay(m.lastToolName, result, m.width, m.height)
+				overlay := NewToolResultOverlay(m.lastToolName, result.Result, m.width, m.height)
 				m.overlay.activate(OverlayModeToolResult, overlay)
 				return m, nil
 			}
+		}
+		
+		// Handle Ctrl+R with Shift modifier to view result history list
+		// Note: Bubbletea doesn't support shift detection directly, so we'll use a different key
+		// Using Ctrl+L for "List" results instead
+		if msg.Type == tea.KeyCtrlL && !m.overlay.isActive() && !m.resultList.active {
+			// Get all cached results
+			allResults := m.resultCache.getAll()
+			if len(allResults) > 0 {
+				// Activate the result list
+				m.resultList.activate(allResults, m.width, m.height)
+				return m, nil
+			}
+		}
+
+		// If result list is active, forward key messages to it
+		if m.resultList.active {
+			updated, listCmd := m.resultList.Update(msg)
+			m.resultList = *updated.(*resultListModel)
+			
+			// Check if list wants to quit
+			if m.resultList.quitting {
+				m.resultList.deactivate()
+				return m, listCmd
+			}
+			
+			return m, listCmd
 		}
 
 		// If overlay is active, forward all key messages to it
@@ -1206,7 +1256,7 @@ func (m model) View() string {
 	╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
 
 	// Tips section
-	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+C to exit`)
+	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
 
 	// Top status bar
 	cwd, err := os.Getwd()
@@ -1309,6 +1359,11 @@ func (m model) View() string {
 	// Layer overlays on top of the base view using absolute positioning
 	if m.overlay.isActive() {
 		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
+	}
+
+	// Add result list as overlay if active
+	if m.resultList.active {
+		baseView = renderOverlay(baseView, &m.resultList, m.width, m.height)
 	}
 
 	// Add command palette as overlay if active
