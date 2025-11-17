@@ -24,9 +24,9 @@ func (i resultListItem) Title() string {
 }
 
 func (i resultListItem) Description() string {
-	// Truncate summary if too long
+	// Truncate summary if too long (77 chars + 3 for "..." = 80 total)
 	summary := i.result.Summary
-	if len(summary) > 80 {
+	if len(summary) > 77 {
 		summary = summary[:77] + "..."
 	}
 	return summary
