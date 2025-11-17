@@ -50,7 +50,7 @@ func (t *TaskCompletionTool) Execute(ctx context.Context, argsXML []byte) (strin
 		Result  string   `xml:"result"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &args); err != nil {
+	if err := UnmarshalXMLWithFallback(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments for %s: %w", taskCompletionToolName, err)
 	}
 

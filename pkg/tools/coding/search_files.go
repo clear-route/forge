@@ -72,7 +72,7 @@ func (t *SearchFilesTool) Execute(ctx context.Context, argsXML []byte) (string, 
 		ContextLines int      `xml:"context_lines"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

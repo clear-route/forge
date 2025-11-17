@@ -71,7 +71,7 @@ func (t *ExecuteCommandTool) Execute(ctx context.Context, argsXML []byte) (strin
 		Timeout    float64  `xml:"timeout"`
 		WorkingDir string   `xml:"working_dir"`
 	}
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("failed to parse input: %w", err)
 	}
 
@@ -235,7 +235,7 @@ func (t *ExecuteCommandTool) GeneratePreview(ctx context.Context, argsXML []byte
 		WorkingDir string   `xml:"working_dir"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
 

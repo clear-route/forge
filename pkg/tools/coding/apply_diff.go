@@ -75,7 +75,7 @@ func (t *ApplyDiffTool) Execute(ctx context.Context, argsXML []byte) (string, er
 		} `xml:"edits>edit"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 
@@ -196,7 +196,7 @@ func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, argsXML []byte) (*t
 		} `xml:"edits>edit"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 

@@ -66,7 +66,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, argsXML []byte) (string, er
 		Pattern   string   `xml:"pattern"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

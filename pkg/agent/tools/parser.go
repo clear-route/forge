@@ -15,6 +15,10 @@ const (
 // Compile regex once at package level for efficiency
 var toolRegex = regexp.MustCompile(`(?s)<tool>.*?</tool>`)
 
+// ampersandEntityRegex matches ampersands that are already part of XML entities
+// to avoid double-escaping them. Matches: &amp; &lt; &gt; &quot; &apos; &#123; &#xAB;
+var ampersandEntityRegex = regexp.MustCompile(`&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);`)
+
 // ParseToolCall extracts a tool call from an LLM response that contains
 // XML-formatted tool invocations.
 //
@@ -51,7 +55,7 @@ func ParseToolCall(text string) (*ToolCall, string, error) {
 	toolXML := strings.TrimSpace(matches[0])
 
 	var toolCall ToolCall
-	if err := xml.Unmarshal([]byte(toolXML), &toolCall); err != nil {
+	if err := UnmarshalXMLWithFallback([]byte(toolXML), &toolCall); err != nil {
 		// Include XML snippet in error for better debugging
 		snippet := toolXML
 		if len(snippet) > 200 {
@@ -120,4 +124,49 @@ func ValidateToolCall(tc *ToolCall) error {
 		return fmt.Errorf("server_name is required")
 	}
 	return nil
+}
+
+// UnmarshalXMLWithFallback attempts to unmarshal XML, with fallback to
+// escape unescaped ampersands if the initial parse fails.
+// This improves robustness when LLMs generate unescaped & characters.
+func UnmarshalXMLWithFallback(data []byte, v interface{}) error {
+	// Try normal unmarshaling first
+	err := xml.Unmarshal(data, v)
+	if err == nil {
+		return nil
+	}
+
+	// If parse failed, try escaping unescaped ampersands
+	escaped := escapeUnescapedAmpersands(data)
+	return xml.Unmarshal(escaped, v)
+}
+
+// escapeUnescapedAmpersands replaces bare & with &amp; while preserving
+// existing entities (&amp;, &lt;, &gt;, &quot;, &apos;, &#..;)
+func escapeUnescapedAmpersands(data []byte) []byte {
+	// Convert to string for regex processing
+	text := string(data)
+
+	// Find all positions of ampersands that are already part of entities
+	entityPositions := make(map[int]bool)
+	matches := ampersandEntityRegex.FindAllStringIndex(text, -1)
+	for _, match := range matches {
+		// Mark the position of the & that starts this entity
+		entityPositions[match[0]] = true
+	}
+
+	// Build result by escaping ampersands that aren't in entityPositions
+	var result strings.Builder
+	result.Grow(len(text) + 20) // Pre-allocate with some extra space for escapes
+
+	for i := 0; i < len(text); i++ {
+		if text[i] == '&' && !entityPositions[i] {
+			// This is an unescaped ampersand - escape it
+			result.WriteString("&amp;")
+		} else {
+			result.WriteByte(text[i])
+		}
+	}
+
+	return []byte(result.String())
 }

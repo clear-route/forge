@@ -64,7 +64,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, argsXML []byte) (string, err
 		EndLine   int      `xml:"end_line"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

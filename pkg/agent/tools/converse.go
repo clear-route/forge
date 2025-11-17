@@ -49,7 +49,7 @@ func (t *ConverseTool) Execute(ctx context.Context, argsXML []byte) (string, err
 		Message string   `xml:"message"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &args); err != nil {
+	if err := UnmarshalXMLWithFallback(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments for converse: %w", err)
 	}
 

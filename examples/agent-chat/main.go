@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/entrhq/forge/pkg/agent"
+	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/executor/tui"
 	"github.com/entrhq/forge/pkg/llm/openai"
 )
@@ -53,7 +54,7 @@ func (t *CalculatorTool) Execute(ctx context.Context, argsXML []byte) (string, e
 		B         float64  `xml:"b"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &args); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

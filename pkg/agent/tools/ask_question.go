@@ -60,7 +60,7 @@ func (t *AskQuestionTool) Execute(ctx context.Context, argsXML []byte) (string, 
 		Suggestions []string `xml:"suggestions>suggestion"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &args); err != nil {
+	if err := UnmarshalXMLWithFallback(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments for %s: %w", askQuestionToolName, err)
 	}
 

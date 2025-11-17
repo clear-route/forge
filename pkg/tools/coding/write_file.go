@@ -58,7 +58,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, argsXML []byte) (string, er
 		Content string   `xml:"content"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 
@@ -131,7 +131,7 @@ func (t *WriteFileTool) GeneratePreview(ctx context.Context, argsXML []byte) (*t
 		Content string   `xml:"content"`
 	}
 
-	if err := xml.Unmarshal(argsXML, &input); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 

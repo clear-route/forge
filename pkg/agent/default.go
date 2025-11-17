@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"log"
 	"os"
@@ -835,7 +834,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 
 	// Emit tool call event
 	var argsMap map[string]interface{}
-	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &argsMap); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
 		argsMap = make(map[string]interface{})
 	}
 	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
@@ -968,7 +967,7 @@ func (a *DefaultAgent) cleanupPendingApproval(responseChannel chan *types.Approv
 // parseToolArguments parses the tool arguments for the approval event
 func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
 	var argsMap map[string]interface{}
-	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &argsMap); err != nil {
+	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
 		argsMap = make(map[string]interface{})
 	}
 	return argsMap
