@@ -209,12 +209,12 @@ The tiered approach provides the best balance between transparency and usability
 💭 I'll read the configuration file to understand the current setup...
 
 🔧 read_file
-  ✓ Read 245 lines from config/settings.go (6.8 KB) [Press 'v' to view]
+  ✓ Read 245 lines from config/settings.go (6.8 KB) [Press Ctrl+V to view]
 
 💭 Now I'll search for all references to the API key...
 
 🔧 search_files  
-  ✓ Found 23 matches in 8 files [Press 'v' to view]
+  ✓ Found 23 matches in 8 files [Press Ctrl+V to view]
 
 💭 Based on the configuration, I can see the API key is loaded from...
 
@@ -239,7 +239,7 @@ The tiered approach provides the best balance between transparency and usability
 
 - **Implementation Complexity**: Need to categorize tools and implement tier logic
 - **Summary Generation**: Need good algorithms for generating summaries
-- **Learning Curve**: Users need to learn 'v' shortcut for viewing details
+- **Learning Curve**: Users need to learn Ctrl+V shortcut for viewing details
 - **Potential Information Loss**: If summaries are poor, users might miss important info
 - **State Management**: Need to track which results can be viewed in overlay
 
@@ -322,13 +322,13 @@ type ToolResultDisplayStrategy struct {
 
 ```go
 // read_file summary
-"Read {lineCount} lines from {filename} ({size}) [Press 'v' to view]"
+"Read {lineCount} lines from {filename} ({size}) [Press Ctrl+V to view]"
 
 // search_files summary  
-"Found {matchCount} matches in {fileCount} files [Press 'v' to view]"
+"Found {matchCount} matches in {fileCount} files [Press Ctrl+V to view]"
 
 // list_files summary
-"Listed {fileCount} files and {dirCount} directories [Press 'v' to view]"
+"Listed {fileCount} files and {dirCount} directories [Press Ctrl+V to view]"
 
 // write_file summary
 "Wrote {lineCount} lines to {filename} ({size})"
@@ -337,7 +337,7 @@ type ToolResultDisplayStrategy struct {
 "Applied {editCount} edits to {filename}"
 
 // Generic summary (fallback)
-"{toolName} completed ({resultSize}) [Press 'v' to view]"
+"{toolName} completed ({resultSize}) [Press Ctrl+V to view]"
 ```
 
 ### Result Viewer Overlay
@@ -448,7 +448,7 @@ Tier 2 (Summary + Preview):
     ... [42 more lines - press 'v' to view]
     
 Tier 3 (Summary Only):
-  ✓ Read 245 lines from settings.go (6.8 KB) [Press 'v' to view]
+  ✓ Read 245 lines from settings.go (6.8 KB) [Press Ctrl+V to view]
   
 Tier 4 (Overlay):
   ✓ Command completed (exit code: 0) [Viewing in overlay]
@@ -493,7 +493,7 @@ Tier 4 (Overlay):
 - **Clutter Reduction**: Typical coding session chat is 70-90% shorter
 - **Scannability**: Users can scan 50+ tool calls in one viewport
 - **Transparency**: 100% of tool executions visible with summaries
-- **Discoverability**: Users find 'v' shortcut within first session
+- **Discoverability**: Users find Ctrl+V shortcut within first session
 - **Detail Access**: <2s to view full result via overlay
 - **User Satisfaction**: Positive feedback on readability improvement
 
@@ -512,7 +512,7 @@ Tier 4 (Overlay):
 - Monitor overlay view count vs tool executions
 - Measure chat length before/after implementation
 - Collect user feedback on summary quality
-- Track 'v' shortcut usage patterns
+- Track Ctrl+V shortcut usage patterns
 
 ---
 
@@ -550,7 +550,7 @@ Tier 4 (Overlay):
    - **Rationale**: Enough for context, not overwhelming
 
 4. **Shortcut Discovery**: ✅ **DECIDED**
-   - **Decision**: Include in summary text: "[Press 'v' to view]"
+   - **Decision**: Include in summary text: "[Press Ctrl+V to view]"
    - **Rationale**: Immediate discoverability without requiring help lookup
 
 5. **Syntax Highlighting in Overlay**: ✅ **DECIDED**
@@ -597,12 +597,12 @@ User: "Can you refactor the authentication module?"
 💭 I'll first read the current authentication code to understand the structure...
 
 🔧 read_file
-  ✓ Read 234 lines from auth/handler.go (7.2 KB) [Press 'v' to view]
+  ✓ Read 234 lines from auth/handler.go (7.2 KB) [Press Ctrl+V to view]
 
 💭 Now I'll search for all authentication-related functions...
 
 🔧 search_files
-  ✓ Found 15 matches in 4 files [Press 'v' to view]
+  ✓ Found 15 matches in 4 files [Press Ctrl+V to view]
 
 💭 I see the issue - the authentication logic is spread across multiple files.
     I'll consolidate it into a single module with clear separation of concerns...
@@ -630,7 +630,7 @@ All open questions have been resolved:
 - ✅ Template-based summaries (fast, predictable)
 - ✅ Cache last 20 results (configurable)
 - ✅ 3-5 preview lines based on terminal height
-- ✅ Discovery via inline "[Press 'v' to view]" text
+- ✅ Discovery via inline "[Press Ctrl+V to view]" text
 - ✅ Auto-detect file type with 's' key toggle
 
 The proposal has been accepted and is ready for implementation following the 5-phase plan outlined above.

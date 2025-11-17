@@ -1007,8 +1007,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
-		// Handle Ctrl+R to view last tool result (before overlay or textarea processing)
-		if msg.Type == tea.KeyCtrlR && !m.overlay.isActive() && m.lastToolCallID != "" {
+		// Handle Ctrl+V to view last tool result (before overlay or textarea processing)
+		if msg.Type == tea.KeyCtrlV && !m.overlay.isActive() && m.lastToolCallID != "" {
 			// Try to get the cached result
 			if result, ok := m.resultCache.get(m.lastToolCallID); ok {
 				// Create overlay to display the full result
@@ -1279,7 +1279,7 @@ func (m model) buildHeader() string {
 }
 
 func (m model) buildTips() string {
-	return tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
+	return tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+V to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
 }
 
 func (m model) buildTopStatus() string {
