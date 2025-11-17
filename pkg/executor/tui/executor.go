@@ -181,6 +181,7 @@ type model struct {
 	isThinking               bool
 	agentBusy                bool
 	currentLoadingMessage    string
+	toolNameDisplayed        bool // Track if we've already displayed the tool name
 	width                    int
 	height                   int
 	ready                    bool
@@ -493,10 +494,27 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		m.isThinking = false
 		m.thinkingBuffer.Reset()
 
+	case types.EventTypeToolCallStart:
+		// Check if we have early tool name detection in metadata
+		if toolName, ok := event.Metadata["tool_name"].(string); ok && toolName != "" && !m.toolNameDisplayed {
+			// Display the tool name immediately when detected early
+			formatted := formatEntry("🔧 ", toolName, toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+			m.viewport.SetContent(m.content.String())
+			m.viewport.GotoBottom()
+			m.toolNameDisplayed = true
+		}
+		// If no tool name yet, we'll wait for EventTypeToolCall
+
 	case types.EventTypeToolCall:
-		formatted := formatEntry("🔧 ", event.ToolName, toolStyle, m.width, false)
-		m.content.WriteString(formatted)
-		m.content.WriteString("\n")
+		// Only display if we haven't already shown it from early detection
+		if !m.toolNameDisplayed {
+			formatted := formatEntry("🔧 ", event.ToolName, toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			m.content.WriteString("\n")
+		}
+		m.toolNameDisplayed = false // Reset for next tool call
 
 	case types.EventTypeToolResult:
 		resultStr := fmt.Sprintf("%v", event.ToolOutput)
