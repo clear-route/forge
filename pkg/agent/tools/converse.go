@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 )
 
@@ -43,12 +43,13 @@ func (t *ConverseTool) Schema() map[string]interface{} {
 }
 
 // Execute runs the tool and returns the conversational message
-func (t *ConverseTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *ConverseTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var args struct {
-		Message string `json:"message"`
+		XMLName xml.Name `xml:"arguments"`
+		Message string   `xml:"message"`
 	}
 
-	if err := json.Unmarshal(arguments, &args); err != nil {
+	if err := xml.Unmarshal(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments for converse: %w", err)
 	}
 

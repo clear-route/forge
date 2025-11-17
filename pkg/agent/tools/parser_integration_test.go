@@ -1,7 +1,7 @@
 package tools
 
 import (
-	"encoding/json"
+	"encoding/xml"
 	"testing"
 )
 
@@ -32,11 +32,12 @@ func TestXMLParserWithBooleanArgument(t *testing.T) {
 
 	// Unmarshal arguments into struct
 	var args struct {
-		Path      string `json:"path"`
-		Recursive bool   `json:"recursive"`
+		XMLName   xml.Name `xml:"arguments"`
+		Path      string   `xml:"path"`
+		Recursive bool     `xml:"recursive"`
 	}
 
-	if err := json.Unmarshal(toolCall.Arguments, &args); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
 		t.Fatalf("Failed to unmarshal arguments: %v", err)
 	}
 
@@ -68,12 +69,13 @@ func TestXMLParserWithNumericArguments(t *testing.T) {
 	}
 
 	var args struct {
-		Path      string `json:"path"`
-		LineStart int    `json:"line_start"`
-		LineEnd   int    `json:"line_end"`
+		XMLName   xml.Name `xml:"arguments"`
+		Path      string   `xml:"path"`
+		LineStart int      `xml:"line_start"`
+		LineEnd   int      `xml:"line_end"`
 	}
 
-	if err := json.Unmarshal(toolCall.Arguments, &args); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
 		t.Fatalf("Failed to unmarshal arguments: %v", err)
 	}
 
@@ -110,15 +112,16 @@ func TestXMLParserWithMixedTypes(t *testing.T) {
 	}
 
 	var args struct {
-		Name     string   `json:"name"`
-		Count    int      `json:"count"`
-		Ratio    float64  `json:"ratio"`
-		Enabled  bool     `json:"enabled"`
-		Disabled bool     `json:"disabled"`
-		Optional *string  `json:"optional"` // pointer to handle null
+		XMLName  xml.Name `xml:"arguments"`
+		Name     string   `xml:"name"`
+		Count    int      `xml:"count"`
+		Ratio    float64  `xml:"ratio"`
+		Enabled  bool     `xml:"enabled"`
+		Disabled bool     `xml:"disabled"`
+		Optional string   `xml:"optional"`
 	}
 
-	if err := json.Unmarshal(toolCall.Arguments, &args); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
 		t.Fatalf("Failed to unmarshal arguments: %v", err)
 	}
 
@@ -137,8 +140,8 @@ func TestXMLParserWithMixedTypes(t *testing.T) {
 	if args.Disabled {
 		t.Errorf("Expected disabled=false, got %v", args.Disabled)
 	}
-	if args.Optional != nil {
-		t.Errorf("Expected optional=nil, got %v", args.Optional)
+	if args.Optional != "null" {
+		t.Errorf("Expected optional='null', got %q", args.Optional)
 	}
 }
 
@@ -170,11 +173,12 @@ func main() {
 	}
 
 	var args struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Content string   `xml:"content"`
 	}
 
-	if err := json.Unmarshal(toolCall.Arguments, &args); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
 		t.Fatalf("Failed to unmarshal arguments: %v", err)
 	}
 
@@ -220,12 +224,13 @@ func TestXMLParserWithArrayArguments(t *testing.T) {
 	}
 
 	var args struct {
-		Path    string   `json:"path"`
-		Pattern string   `json:"pattern"`
-		Exclude []string `json:"exclude"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Pattern string   `xml:"pattern"`
+		Exclude []string `xml:"exclude"`
 	}
 
-	if err := json.Unmarshal(toolCall.Arguments, &args); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
 		t.Fatalf("Failed to unmarshal arguments: %v", err)
 	}
 

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -54,9 +53,11 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 			}
 
 			toolCall := tools.ToolCall{
-				ServerName: "local",
-				ToolName:   "test_tool",
-				Arguments:  json.RawMessage(`{"arg":"value"}`),
+				ServerName:   "local",
+				ToolName: "test_tool",
+				Arguments: tools.ArgumentsBlock{
+					InnerXML: []byte(`<arg>value</arg>`),
+				},
 			}
 
 			preview := &tools.ToolPreview{

@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 )
 
@@ -22,7 +21,7 @@ func TestTaskCompletionTool(t *testing.T) {
 	})
 
 	t.Run("Execute_Success", func(t *testing.T) {
-		args := json.RawMessage(`{"result": "Task completed successfully!"}`)
+		args := []byte(`<arguments><result>Task completed successfully!</result></arguments>`)
 		result, err := tool.Execute(context.Background(), args)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -33,18 +32,18 @@ func TestTaskCompletionTool(t *testing.T) {
 	})
 
 	t.Run("Execute_EmptyResult", func(t *testing.T) {
-		args := json.RawMessage(`{"result": ""}`)
+		args := []byte(`<arguments><result></result></arguments>`)
 		_, err := tool.Execute(context.Background(), args)
 		if err == nil {
 			t.Error("expected error for empty result")
 		}
 	})
 
-	t.Run("Execute_InvalidJSON", func(t *testing.T) {
-		args := json.RawMessage(`invalid json`)
+	t.Run("Execute_InvalidXML", func(t *testing.T) {
+		args := []byte(`invalid xml`)
 		_, err := tool.Execute(context.Background(), args)
 		if err == nil {
-			t.Error("expected error for invalid JSON")
+			t.Error("expected error for invalid XML")
 		}
 	})
 }
@@ -65,7 +64,7 @@ func TestAskQuestionTool(t *testing.T) {
 	})
 
 	t.Run("Execute_WithoutSuggestions", func(t *testing.T) {
-		args := json.RawMessage(`{"question": "What is your preferred color?"}`)
+		args := []byte(`<arguments><question>What is your preferred color?</question></arguments>`)
 		result, err := tool.Execute(context.Background(), args)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -76,7 +75,14 @@ func TestAskQuestionTool(t *testing.T) {
 	})
 
 	t.Run("Execute_WithSuggestions", func(t *testing.T) {
-		args := json.RawMessage(`{"question": "What is your preferred color?", "suggestions": ["Red", "Blue", "Green"]}`)
+		args := []byte(`<arguments>
+			<question>What is your preferred color?</question>
+			<suggestions>
+				<suggestion>Red</suggestion>
+				<suggestion>Blue</suggestion>
+				<suggestion>Green</suggestion>
+			</suggestions>
+		</arguments>`)
 		result, err := tool.Execute(context.Background(), args)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -88,7 +94,7 @@ func TestAskQuestionTool(t *testing.T) {
 	})
 
 	t.Run("Execute_EmptyQuestion", func(t *testing.T) {
-		args := json.RawMessage(`{"question": ""}`)
+		args := []byte(`<arguments><question></question></arguments>`)
 		_, err := tool.Execute(context.Background(), args)
 		if err == nil {
 			t.Error("expected error for empty question")
@@ -112,7 +118,7 @@ func TestConverseTool(t *testing.T) {
 	})
 
 	t.Run("Execute_Success", func(t *testing.T) {
-		args := json.RawMessage(`{"message": "Hello! How can I help you today?"}`)
+		args := []byte(`<arguments><message>Hello! How can I help you today?</message></arguments>`)
 		result, err := tool.Execute(context.Background(), args)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -123,7 +129,7 @@ func TestConverseTool(t *testing.T) {
 	})
 
 	t.Run("Execute_EmptyMessage", func(t *testing.T) {
-		args := json.RawMessage(`{"message": ""}`)
+		args := []byte(`<arguments><message></message></arguments>`)
 		_, err := tool.Execute(context.Background(), args)
 		if err == nil {
 			t.Error("expected error for empty message")

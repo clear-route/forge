@@ -80,10 +80,54 @@ Parameters:
 2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided
 3. **NEVER refer to tool names when speaking to the USER.** Instead of "I'll use task_completion", say "I'll complete this task"
 4. Before calling each tool, explain to the USER why you are taking this action (in your thinking)
-5. Use CDATA sections for any content containing code, diffs, JSON, or special characters
+5. **MANDATORY:** You MUST always include the server_name field. Omitting it will cause execution failure
+
+**CDATA USAGE RULES - CRITICAL:**
+✅ ALWAYS USE CDATA for ALL CODE/CONTENT fields:
+  - **REQUIRED:** ALL code content (Go, Python, JavaScript, TypeScript, etc.)
+  - **REQUIRED:** File content, diffs, search/replace patterns
+  - **REQUIRED:** Any text with special XML characters: &, <, >, ", '
+  - **REQUIRED:** JSON, HTML, XML content, regex patterns
+  - **REQUIRED:** Multi-line text, formatted output
+
+🚨 **MANDATORY FOR CODE:** All programming language code MUST be wrapped in CDATA
+  - Go code with pointers (&Type), references, operators
+  - Any code with operators: &, |, <, >, &&, ||, <<, >>
+  - String literals with quotes, escape sequences
+  - Template strings, HTML/JSX in code
+
+✅ CORRECT - CDATA for ALL code content:
+  <content><![CDATA[package main
+
+func example() *Config {
+	return &Config{name: "test"}
+}]]></content>
+  <search><![CDATA[const x = a && b || c]]></search>
+  <replace><![CDATA[const x = (a && b) || c]]></replace>
+
+❌ WRONG - Code WITHOUT CDATA (will cause XML parse errors):
+  <content>func example() *Config { return &Config{} }</content>
+  <search>const x = a && b</search>
+
+❌ DO NOT use CDATA for STRUCTURE (arrays, objects):
+  - NEVER wrap arrays or objects in CDATA
+  - Use nested XML elements for complex structures
+
+❌ WRONG - CDATA for structure:
+  <edits><![CDATA[{search: "...", replace: "..."}]]></edits>
+
+✅ CORRECT - Nested XML for arrays/objects:
+  <edits>
+    <edit>
+      <search><![CDATA[old code]]></search>
+      <replace><![CDATA[new code]]></replace>
+    </edit>
+  </edits>
+
+**STRUCTURE RULES:**
 6. Each argument must be its own XML element within the <arguments> tag
-7. **MANDATORY:** You MUST always include the server_name field. Omitting it will cause execution failure
-8. For complex nested structures, use nested XML elements
+7. For arrays of objects, use nested elements (not CDATA)
+8. For simple arrays, use repeated elements with the same name
 
 **CRITICAL INSTRUCTION:** Every single one of your responses MUST end with a valid tool call. There are no exceptions.
 - If a task is complete, use 'task_completion'

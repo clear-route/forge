@@ -2,7 +2,7 @@ package coding
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,15 +57,16 @@ func (t *ListFilesTool) Schema() map[string]interface{} {
 }
 
 // Execute lists files in the specified directory.
-func (t *ListFilesTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *ListFilesTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	// Parse arguments
 	var input struct {
-		Path      string `json:"path"`
-		Recursive bool   `json:"recursive"`
-		Pattern   string `json:"pattern"`
+		XMLName   xml.Name `xml:"arguments"`
+		Path      string   `xml:"path"`
+		Recursive bool     `xml:"recursive"`
+		Pattern   string   `xml:"pattern"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

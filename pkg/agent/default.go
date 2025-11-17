@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"os"
@@ -664,7 +664,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	// Check if tool requires approval
 	if previewable, ok := tool.(tools.Previewable); ok {
 		// Generate preview
-		preview, err := previewable.GeneratePreview(ctx, toolCall.Arguments)
+		preview, err := previewable.GeneratePreview(ctx, toolCall.GetArgumentsXML())
 		if err != nil {
 			// If preview generation fails, log error but continue with execution
 			// (degraded mode - execute without approval)
@@ -693,7 +693,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 
 	// Emit tool call event
 	var argsMap map[string]interface{}
-	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &argsMap); err != nil {
 		argsMap = make(map[string]interface{})
 	}
 	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
@@ -703,7 +703,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	ctxWithRegistry := context.WithValue(ctxWithEmitter, coding.CommandRegistryKey, &a.activeCommands)
 
 	// Execute the tool
-	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.Arguments)
+	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.GetArgumentsXML())
 	if toolErr != nil {
 		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
@@ -826,7 +826,7 @@ func (a *DefaultAgent) cleanupPendingApproval(responseChannel chan *types.Approv
 // parseToolArguments parses the tool arguments for the approval event
 func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
 	var argsMap map[string]interface{}
-	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &argsMap); err != nil {
 		argsMap = make(map[string]interface{})
 	}
 	return argsMap

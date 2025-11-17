@@ -3,7 +3,7 @@ package coding
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"strings"
@@ -56,15 +56,15 @@ func (t *ReadFileTool) Schema() map[string]interface{} {
 }
 
 // Execute reads the file and returns its contents.
-func (t *ReadFileTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
-	// Parse arguments
+func (t *ReadFileTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var input struct {
-		Path      string `json:"path"`
-		StartLine int    `json:"start_line,omitempty"`
-		EndLine   int    `json:"end_line,omitempty"`
+		XMLName   xml.Name `xml:"arguments"`
+		Path      string   `xml:"path"`
+		StartLine int      `xml:"start_line"`
+		EndLine   int      `xml:"end_line"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 )
 
@@ -53,13 +53,14 @@ func (t *AskQuestionTool) Schema() map[string]interface{} {
 }
 
 // Execute runs the tool and returns the question for the user
-func (t *AskQuestionTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *AskQuestionTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var args struct {
-		Question    string   `json:"question"`
-		Suggestions []string `json:"suggestions,omitempty"`
+		XMLName     xml.Name `xml:"arguments"`
+		Question    string   `xml:"question"`
+		Suggestions []string `xml:"suggestions>suggestion"`
 	}
 
-	if err := json.Unmarshal(arguments, &args); err != nil {
+	if err := xml.Unmarshal(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments for %s: %w", askQuestionToolName, err)
 	}
 

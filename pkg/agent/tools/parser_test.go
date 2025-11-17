@@ -194,9 +194,11 @@ func TestHasToolCall(t *testing.T) {
 func TestValidateToolCall(t *testing.T) {
 	t.Run("ValidToolCall", func(t *testing.T) {
 		tc := &ToolCall{
-			ServerName: "local",
-			ToolName:   "test_tool",
-			Arguments:  []byte(`{}`),
+			ServerName:   "local",
+			ToolName: "test_tool",
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err != nil {
 			t.Errorf("expected valid tool call, got error: %v", err)
@@ -212,7 +214,9 @@ func TestValidateToolCall(t *testing.T) {
 	t.Run("MissingToolName", func(t *testing.T) {
 		tc := &ToolCall{
 			ServerName: "local",
-			Arguments:  []byte(`{}`),
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err == nil {
 			t.Error("expected error for missing tool name")
@@ -221,8 +225,10 @@ func TestValidateToolCall(t *testing.T) {
 
 	t.Run("MissingServerName", func(t *testing.T) {
 		tc := &ToolCall{
-			ToolName:  "test_tool",
-			Arguments: []byte(`{}`),
+			ToolName: "test_tool",
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err == nil {
 			t.Error("expected error for missing server name")
