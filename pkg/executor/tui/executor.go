@@ -193,6 +193,13 @@ type model struct {
 	totalTokens           int // Cumulative total tokens (input + output)
 	currentContextTokens  int // Current conversation context size
 	maxContextTokens      int // Maximum allowed context size
+
+	// Tool result display
+	resultClassifier *ToolResultClassifier
+	resultSummarizer *ToolResultSummarizer
+	resultCache      *resultCache
+	lastToolCallID   string // Track the last tool call for 'v' shortcut
+	lastToolName     string // Track the last tool name
 }
 
 // initialModel returns the initial state of the TUI.
@@ -218,17 +225,20 @@ func initialModel() model {
 	s.Style = lipgloss.NewStyle().Foreground(salmonPink)
 
 	return model{
-		viewport:       vp,
-		textarea:       ta,
-		content:        &strings.Builder{},
-		thinkingBuffer: &strings.Builder{},
-		messageBuffer:  &strings.Builder{},
-		overlay:        newOverlayState(),
-		commandPalette: newCommandPalette(),
-		summarization:  &summarizationStatus{},
-		toast:          &toastNotification{},
-		spinner:        s,
-		agentBusy:      false,
+		viewport:         vp,
+		textarea:         ta,
+		content:          &strings.Builder{},
+		thinkingBuffer:   &strings.Builder{},
+		messageBuffer:    &strings.Builder{},
+		overlay:          newOverlayState(),
+		commandPalette:   newCommandPalette(),
+		summarization:    &summarizationStatus{},
+		toast:            &toastNotification{},
+		spinner:          s,
+		agentBusy:        false,
+		resultClassifier: NewToolResultClassifier(),
+		resultSummarizer: NewToolResultSummarizer(),
+		resultCache:      newResultCache(20),
 	}
 }
 
@@ -514,12 +524,47 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			m.content.WriteString(formatted)
 			m.content.WriteString("\n")
 		}
+		// Track tool call for result display
+		m.lastToolName = event.ToolName
+		// Generate a simple cache key using timestamp + tool name
+		m.lastToolCallID = fmt.Sprintf("%d_%s", time.Now().UnixNano(), event.ToolName)
 		m.toolNameDisplayed = false // Reset for next tool call
 
 	case types.EventTypeToolResult:
 		resultStr := fmt.Sprintf("%v", event.ToolOutput)
-		formatted := formatEntry("  ✓ ", resultStr, toolStyle, m.width, false)
-		m.content.WriteString(formatted)
+		
+		// Classify the tool result to determine display strategy
+		tier := m.resultClassifier.ClassifyToolResult(m.lastToolName, resultStr)
+		
+		switch tier {
+		case TierFullInline:
+			// Display full result inline (loop-breaking tools)
+			formatted := formatEntry("  ✓ ", resultStr, toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			
+		case TierSummaryWithPreview:
+			// Display summary + preview lines
+			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
+			preview := m.resultClassifier.GetPreviewLines(resultStr)
+			displayText := summary + "\n" + preview
+			formatted := formatEntry("  ✓ ", displayText, toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			// Cache the full result for 'v' viewing
+			m.resultCache.store(m.lastToolCallID, resultStr)
+			
+		case TierSummaryOnly:
+			// Display summary only
+			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
+			formatted := formatEntry("  ✓ ", summary, toolStyle, m.width, false)
+			m.content.WriteString(formatted)
+			// Cache the full result for 'v' viewing
+			m.resultCache.store(m.lastToolCallID, resultStr)
+			
+		case TierOverlayOnly:
+			// Command execution already handled by overlay system
+			// Don't display anything inline
+		}
+		
 		m.content.WriteString("\n\n")
 
 	case types.EventTypeMessageStart:
@@ -937,6 +982,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tiCmd, vpCmd)
 
 	case tea.KeyMsg:
+		// Handle Ctrl+R to view last tool result (before overlay or textarea processing)
+		if msg.Type == tea.KeyCtrlR && !m.overlay.isActive() && m.lastToolCallID != "" {
+			// Try to get the cached result
+			if result, ok := m.resultCache.get(m.lastToolCallID); ok {
+				// Create overlay to display the full result
+				overlay := NewToolResultOverlay(m.lastToolName, result, m.width, m.height)
+				m.overlay.activate(OverlayModeToolResult, overlay)
+				return m, nil
+			}
+		}
+
 		// If overlay is active, forward all key messages to it
 		if m.overlay.isActive() {
 			var overlayCmd tea.Cmd
@@ -1150,7 +1206,7 @@ func (m model) View() string {
 	╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
 
 	// Tips section
-	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+C to exit`)
+	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+C to exit`)
 
 	// Top status bar
 	cwd, err := os.Getwd()

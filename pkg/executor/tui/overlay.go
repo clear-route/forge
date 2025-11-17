@@ -27,6 +27,8 @@ const (
 	OverlayModeSettings
 	// OverlayModeContext shows the context information overlay
 	OverlayModeContext
+	// OverlayModeToolResult shows full tool result overlay
+	OverlayModeToolResult
 )
 
 // Overlay is the base interface for all overlay components
