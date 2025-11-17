@@ -68,8 +68,8 @@ func FormatToolSchema(tool tools.Tool) string {
 		builder.WriteString("*This is a loop-breaking tool - using it will end the current turn.*\n\n")
 	}
 
-	// Example usage
-	builder.WriteString(fmt.Sprintf("**Example:**\n```\n<tool>{\"server_name\": \"local\", \"tool_name\": \"%s\", \"arguments\": {...}}</tool>\n```\n\n",
+	// Example usage with XML format
+	builder.WriteString(fmt.Sprintf("**Example:**\n```xml\n<tool>\n<server_name>local</server_name>\n<tool_name>%s</tool_name>\n<arguments>\n  ...\n</arguments>\n</tool>\n```\n\n",
 		tool.Name()))
 
 	return builder.String()

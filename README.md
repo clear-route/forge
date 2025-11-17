@@ -36,12 +36,13 @@ import (
     "os"
 
     "github.com/entrhq/forge/pkg/agent"
-    "github.com/entrhq/forge/pkg/executor/cli"
+    "github.com/entrhq/forge/pkg/executor/tui"
     "github.com/entrhq/forge/pkg/llm/openai"
+    "github.com/entrhq/forge/pkg/tools/coding"
 )
 
 func main() {
-    // 1. Create an LLM provider
+    // Create LLM provider
     provider, err := openai.NewProvider(
         os.Getenv("OPENAI_API_KEY"),
         openai.WithModel("gpt-4o"),
@@ -50,102 +51,225 @@ func main() {
         log.Fatal(err)
     }
     
-    // 2. Create an agent with custom instructions
+    // Create coding agent with built-in tools
     ag := agent.NewDefaultAgent(provider,
-        agent.WithCustomInstructions("You are a helpful AI assistant."),
+        agent.WithCustomInstructions("You are an expert coding assistant."),
     )
     
-    // 3. Create a CLI executor
-    executor := cli.NewExecutor(ag)
+    // Register coding tools
+    coding.RegisterTools(ag, ".")
     
-    // 4. Run the agent
+    // Launch TUI executor
+    executor := tui.NewExecutor(ag)
     if err := executor.Run(context.Background()); err != nil {
         log.Fatal(err)
     }
 }
 ```
 
-## Documentation
+## 🎯 Key Features
 
-### 📚 [Complete Documentation](docs/)
+### 🖥️ Advanced Terminal UI
 
-**Getting Started:**
-- [Installation](docs/getting-started/installation.md) - Set up Forge in your project
-- [Quick Start](docs/getting-started/quick-start.md) - Build your first agent in 5 minutes
-- [Your First Agent](docs/getting-started/your-first-agent.md) - Detailed step-by-step tutorial
-- [Understanding the Agent Loop](docs/getting-started/understanding-agent-loop.md) - Core concepts explained
+- **Syntax Highlighting**: Full syntax highlighting for diffs and code blocks
+- **Diff Viewer**: Interactive unified diff viewer with color-coded changes
+- **Command Palette**: Quick access to settings, slash commands, and actions (Ctrl+P)
+- **Interactive Settings**: Live configuration of auto-approval, model parameters, and system behavior
+- **Slash Commands**: Built-in commands for common workflows (`/commit`, `/pr`, `/clear`, `/help`)
+- **Real-time Streaming**: See agent thinking, tool calls, and responses as they happen
 
-**Guides:**
-- [Building Custom Tools](docs/guides/building-custom-tools.md) - Extend agent capabilities
-- [Implementing LLM Providers](docs/guides/implementing-llm-providers.md) - Add new LLM support
-- [Creating Executors](docs/guides/creating-executors.md) - Custom execution environments
-- [Memory Management](docs/guides/memory-management.md) - Control conversation history
-- [Error Handling](docs/guides/error-handling.md) - Robust error recovery
+### 🛠️ Complete Coding Toolkit
 
-**Reference:**
-- [API Reference](docs/reference/) - Complete API documentation
-- [Built-in Tools](docs/reference/built-in-tools.md) - task_completion, ask_question, converse
-- [Configuration](docs/reference/configuration.md) - All configuration options
+**File Operations:**
+- `read_file` - Read files with optional line ranges
+- `write_file` - Create or overwrite files with automatic directory creation
+- `list_files` - List and filter files with glob patterns and recursive search
+- `search_files` - Regex search across files with context lines
 
-**Architecture:**
-- [Architecture Overview](docs/architecture/overview.md) - System design and components
-- [Agent Loop](docs/architecture/agent-loop.md) - How the agent loop works
-- [Tool System](docs/architecture/tool-system.md) - Tool architecture details
-- [Design Decisions](docs/architecture/design-decisions.md) - Key architectural choices
+**Code Manipulation:**
+- `apply_diff` - Surgical code edits with search/replace operations
+- `execute_command` - Run shell commands with streaming output and timeout control
 
-**Community:**
-- [FAQ](docs/community/faq.md) - Frequently asked questions
-- [Troubleshooting](docs/community/troubleshooting.md) - Common issues and solutions
-- [Best Practices](docs/community/best-practices.md) - Tips and recommendations
+**Agent Control:**
+- `task_completion` - Mark tasks complete and present results
+- `ask_question` - Request clarifying information from users
+- `converse` - Engage in natural conversation
 
-## Architecture
+### 🔐 Security & Control
 
-Forge is built with a clean, modular architecture:
+- **Workspace Guard**: Prevent operations outside designated directories
+- **File Ignore System**: Respect `.gitignore` and custom ignore patterns
+- **Tool Approval**: Review and approve tool executions before running
+- **Auto-Approval Whitelist**: Configure safe operations to run automatically
+- **Command Timeout**: Prevent runaway processes with configurable timeouts
 
-- **Agent Core** ([`pkg/agent`](pkg/agent)): Agent loop, tools, prompts, and memory
-- **LLM Providers** ([`pkg/llm`](pkg/llm)): Pluggable LLM provider implementations
-- **Executors** ([`pkg/executor`](pkg/executor)): Different execution environments (CLI, API, etc.)
-- **Types** ([`pkg/types`](pkg/types)): Shared types, events, and interfaces
+### 🧠 Smart Context Management
 
-### Key Components
+- **Token-Based Pruning**: Automatic conversation history management
+- **Tool Call Summarization**: Condense tool results to preserve context
+- **Composable Strategies**: Mix and match context management approaches
+- **Threshold-Based Trimming**: Keep conversation within model limits
 
-- **Tools** ([`pkg/agent/tools`](pkg/agent/tools)): Tool interface and built-in tools
-- **Prompts** ([`pkg/agent/prompts`](pkg/agent/prompts)): Dynamic prompt assembly with tool schemas
-- **Memory** ([`pkg/agent/memory`](pkg/agent/memory)): Conversation history management
-- **Stream Processing** ([`pkg/agent/core`](pkg/agent/core)): Real-time parsing of thinking, tools, and messages
+### 🔄 Git Workflow Integration
 
-See [Architecture Overview](docs/architecture/overview.md) for detailed documentation.
+- **Automated Commits**: Review and commit changes directly from the TUI
+- **Pull Request Creation**: Generate PRs with AI-written descriptions
+- **Change Tracking**: Monitor file modifications across agent sessions
+- **Diff Preview**: View changes before committing
 
-## Examples
+## 📚 Documentation
 
-Check out the [`examples/`](examples/) directory for working examples:
+### Getting Started
+- [Installation](docs/getting-started/installation.md) - Setup and configuration
+- [Quick Start](docs/getting-started/quick-start.md) - Build your first agent
+- [Your First Agent](docs/getting-started/your-first-agent.md) - Detailed tutorial
+- [Understanding the Agent Loop](docs/getting-started/understanding-agent-loop.md) - Core concepts
 
-- **Agent Chat** ([`examples/agent-chat`](examples/agent-chat)): Complete agent with tools, thinking, and custom tool registration
+### How-To Guides
+- [Configure Provider](docs/how-to/configure-provider.md) - LLM provider setup
+- [Create Custom Tools](docs/how-to/create-custom-tool.md) - Extend agent capabilities
+- [Manage Memory](docs/how-to/manage-memory.md) - Context and history management
+- [Handle Errors](docs/how-to/handle-errors.md) - Error recovery patterns
+- [Test Tools](docs/how-to/test-tools.md) - Testing strategies
+- [Optimize Performance](docs/how-to/optimize-performance.md) - Performance tuning
+- [Deploy to Production](docs/how-to/deploy-production.md) - Production deployment
 
-### Running the Example
+### Architecture
+- [Overview](docs/architecture/overview.md) - System architecture
+- [Agent Loop](docs/architecture/agent-loop.md) - Agent execution model
+- [Tool System](docs/architecture/tool-system.md) - Tool architecture
+- [Memory System](docs/architecture/memory-system.md) - Memory management
 
-```bash
-cd examples/agent-chat
-export OPENAI_API_KEY="your-api-key"
-go run main.go
+### Reference
+- [API Reference](docs/reference/api-reference.md) - Complete API docs
+- [Configuration](docs/reference/configuration.md) - All config options
+- [Tool Schema](docs/reference/tool-schema.md) - Tool definition format
+- [Message Format](docs/reference/message-format.md) - Message structure
+- [Error Handling](docs/reference/error-handling.md) - Error types and recovery
+- [Performance](docs/reference/performance.md) - Performance characteristics
+- [Testing](docs/reference/testing.md) - Testing framework
+- [Glossary](docs/reference/glossary.md) - Technical terms
+
+### Architecture Decision Records
+See [ADRs](docs/adr/) for detailed design decisions including:
+- [XML Tool Call Format](docs/adr/0019-xml-cdata-tool-call-format.md)
+- [Auto-Approval System](docs/adr/0017-auto-approval-and-settings-system.md)
+- [Context Management](docs/adr/0014-composable-context-management.md)
+- [Streaming Commands](docs/adr/0013-streaming-command-execution.md)
+- [TUI Design](docs/adr/0012-enhanced-tui-executor.md)
+
+## 🏗️ Architecture
+
+Forge is built with a clean, modular architecture designed for extensibility:
+
+```
+pkg/
+├── agent/          # Agent core, loop, prompts, memory
+│   ├── context/    # Context management strategies
+│   ├── git/        # Git integration
+│   ├── memory/     # Conversation history
+│   ├── prompts/    # Dynamic prompt assembly
+│   ├── slash/      # Slash command system
+│   └── tools/      # Tool interface and built-ins
+├── executor/       # Execution environments
+│   ├── cli/        # Command-line executor
+│   └── tui/        # Terminal UI executor
+├── llm/            # LLM provider abstraction
+│   ├── openai/     # OpenAI implementation
+│   ├── parser/     # Response parsing
+│   └── tokenizer/  # Token counting
+├── tools/          # Tool implementations
+│   └── coding/     # File and command tools
+├── config/         # Configuration management
+├── security/       # Security features
+│   └── workspace/  # Workspace isolation
+└── types/          # Shared types and events
 ```
 
-Try asking:
-- "What is 15 * 23?"
-- "Calculate (100 + 50) / 3"
-- "What's 144 divided by 12, then add 5?"
+### Key Design Principles
 
-## Development
+- **Interface-First**: Clean abstractions for maximum flexibility
+- **Event-Driven**: Real-time streaming of agent activities
+- **Composable**: Mix and match components as needed
+- **Testable**: Comprehensive test coverage (200+ tests)
+- **Type-Safe**: Strong typing with Go's type system
+
+## 💡 Examples
+
+### Basic Coding Agent
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+
+    "github.com/entrhq/forge/pkg/agent"
+    "github.com/entrhq/forge/pkg/executor/cli"
+    "github.com/entrhq/forge/pkg/llm/openai"
+    "github.com/entrhq/forge/pkg/tools/coding"
+)
+
+func main() {
+    provider, _ := openai.NewProvider(os.Getenv("OPENAI_API_KEY"))
+    
+    ag := agent.NewDefaultAgent(provider,
+        agent.WithCustomInstructions("You are a helpful coding assistant."),
+        agent.WithMaxIterations(50),
+    )
+    
+    // Register all coding tools
+    coding.RegisterTools(ag, ".")
+    
+    executor := cli.NewExecutor(ag)
+    executor.Run(context.Background())
+}
+```
+
+### With Custom Tools
+
+```go
+type WeatherTool struct{}
+
+func (t *WeatherTool) Name() string { return "get_weather" }
+func (t *WeatherTool) Description() string {
+    return "Get current weather for a location"
+}
+func (t *WeatherTool) Parameters() map[string]interface{} {
+    return map[string]interface{}{
+        "location": map[string]interface{}{
+            "type":        "string",
+            "description": "City name",
+            "required":    true,
+        },
+    }
+}
+func (t *WeatherTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+    location := args["location"].(string)
+    // Call weather API...
+    return fmt.Sprintf("Weather in %s: Sunny, 72°F", location), nil
+}
+
+// Register custom tool
+ag.RegisterTool(&WeatherTool{})
+```
+
+See [examples/](examples/) for complete working examples.
+
+## 🔧 Development
 
 ### Prerequisites
 
 - Go 1.21 or higher
-- Make (optional, but recommended)
+- Make (optional, recommended)
+- Git
 
 ### Setup
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/entrhq/forge.git
 cd forge
 
@@ -158,72 +282,103 @@ make test
 # Run linter
 make lint
 
-# Format code
-make fmt
+# Build CLI
+make build
 ```
 
-### Available Make Targets
+### Make Targets
 
-- `make test` - Run tests with coverage
-- `make lint` - Run linters
+- `make test` - Run all tests with coverage
+- `make lint` - Run linters (golangci-lint)
 - `make fmt` - Format code
-- `make examples` - Build example applications
-- `make run-example` - Run simple example
+- `make build` - Build Forge CLI
+- `make install` - Install Forge CLI
 - `make clean` - Clean build artifacts
-- `make all` - Run all checks and build examples
+- `make all` - Run all checks and build
 
-## Contributing
+### Running Tests
+
+```bash
+# All tests
+make test
+
+# Specific package
+go test ./pkg/agent/...
+
+# With coverage
+go test -cover ./...
+
+# Verbose
+go test -v ./pkg/tools/coding/
+```
+
+## 🤝 Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+### Areas for Contribution
+
+- 🔌 Additional LLM provider implementations (Anthropic, Google, etc.)
+- 🛠️ New tool implementations
+- 📝 Documentation improvements
+- 🐛 Bug fixes and performance improvements
+- ✨ New features and enhancements
+
 ### Code of Conduct
 
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Security
 
-For security issues, please see our [Security Policy](SECURITY.md).
+For security issues, see our [Security Policy](SECURITY.md).
 
-## Roadmap
+## 🗺️ Roadmap
 
-- [x] Streaming response support
-- [x] Basic CLI executor
-- [x] TUI executor (Gemini-inspired interface)
-- [x] OpenAI provider implementation
-- [x] Tool/function calling system
-- [x] Agent loop with infinite iterations
-- [x] Chain-of-thought reasoning
-- [x] Memory management and conversation history
-- [x] Token-based memory pruning
-- [x] Event-driven architecture
-- [x] Custom tool registration
-- [x] Self-healing error recovery with circuit breaker
-- [ ] Integration tests for full agent loop
-- [ ] Multi-agent coordination
-- [ ] Additional LLM provider implementations (Anthropic, Google, etc.)
-- [ ] Advanced executor implementations (HTTP API server, Slack bot, etc.)
-- [ ] Agent collaboration and handoffs
+### ✅ Completed
 
-See [Roadmap](docs/community/roadmap.md) for detailed plans.
+- [x] Core agent loop with tool execution
+- [x] OpenAI provider with streaming support
+- [x] Advanced TUI with syntax highlighting
+- [x] Complete coding toolkit (read, write, diff, search, execute)
+- [x] Context management with multiple strategies
+- [x] Auto-approval and settings system
+- [x] Git integration (commits and PRs)
+- [x] File ignore system for security
+- [x] Slash command system
+- [x] Self-healing error recovery
+- [x] XML/CDATA tool call format
+- [x] Comprehensive test suite (200+ tests)
 
-## License
+### 🚧 In Progress
+
+- [ ] Additional LLM providers (Anthropic Claude, Google Gemini)
+- [ ] Multi-agent coordination and handoffs
+- [ ] Advanced executor implementations (HTTP API, Slack bot)
+- [ ] Plugin system for third-party tools
+- [ ] Enhanced memory with vector storage
+
+### 🔮 Planned
+
+- [ ] Web-based UI
+- [ ] Agent marketplace and sharing
+- [ ] Observability and monitoring
+- [ ] Advanced debugging tools
+- [ ] Multi-modal support (vision, audio)
+
+See [ROADMAP.md](ROADMAP.md) for detailed plans.
+
+## 📄 License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-Built as part of the Entr Agent Platform.
+Built with ❤️ as part of the Entr Agent Platform.
+## 🔗 Links
 
----
-
-**Status**: 🚧 Under Active Development
-
-This framework is currently in early development. APIs may change as we iterate on the design.
-
-## Links
-
-- [Documentation](docs/) - Complete documentation
-- [Examples](examples/) - Working code examples
-- [Contributing](CONTRIBUTING.md) - How to contribute
-- [Changelog](CHANGELOG.md) - Version history
-- [Issues](https://github.com/entrhq/forge/issues) - Report bugs or request features
+- 📖 [Documentation](docs/) - Complete documentation
+- 💻 [Examples](examples/) - Working code examples  
+- 🐛 [Issues](https://github.com/entrhq/forge/issues) - Report bugs or request features
+- 💬 [Discussions](https://github.com/entrhq/forge/discussions) - Ask questions and share ideas
+- 📝 [Changelog](CHANGELOG.md) - Version history
+- 🤝 [Contributing](CONTRIBUTING.md) - Contribution guidelines

@@ -46,32 +46,44 @@ Before providing an answer or executing a tool, you MUST outline your thought pr
 const ToolCallingPrompt = `<tool_calling>
 You have access to a set of tools that you can execute. You use one tool per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish tasks, with each tool use informed by the result of the previous tool use.
 
-Tool use is formatted in XML-style tags with JSON payload:
+Tool use is formatted in pure XML with CDATA for complex content:
 
 <tool>
-{
-	"server_name": "local",
-	"tool_name": "tool_name_here",
-	"arguments": {
-		"param_key": "param_value"
-	}
-}
+<server_name>local</server_name>
+<tool_name>tool_name_here</tool_name>
+<arguments>
+  <param_key>param_value</param_key>
+</arguments>
+</tool>
+
+For content with code, diffs, or special characters, use CDATA sections:
+
+<tool>
+<tool_name>write_to_file</tool_name>
+<arguments>
+  <path>file.go</path>
+  <content><![CDATA[package main
+
+func main() {
+	fmt.Println("No escaping needed!")
+}]]></content>
+</arguments>
 </tool>
 
 Parameters:
 - server_name: (required) Always "local" for built-in tools
 - tool_name: (required) The name of the tool to execute
-- arguments: (required) A JSON object containing the tool's input parameters
+- arguments: (required) Nested XML elements for each parameter
 
 **CRITICAL RULES:**
 1. ALWAYS follow the tool call schema exactly as specified
 2. The conversation may reference tools that are no longer available. NEVER call tools that are not explicitly provided
 3. **NEVER refer to tool names when speaking to the USER.** Instead of "I'll use task_completion", say "I'll complete this task"
 4. Before calling each tool, explain to the USER why you are taking this action (in your thinking)
-5. The 'arguments' field MUST be valid JSON. If a tool requires a JSON string, it must be properly escaped
-6. The JSON payload MUST be directly embedded within the '<tool>' tags. DO NOT wrap it in markdown code fences or backticks
+5. Use CDATA sections for any content containing code, diffs, JSON, or special characters
+6. Each argument must be its own XML element within the <arguments> tag
 7. **MANDATORY:** You MUST always include the server_name field. Omitting it will cause execution failure
-8. The JSON must be compact without unnecessary whitespace to avoid parsing issues
+8. For complex nested structures, use nested XML elements
 
 **CRITICAL INSTRUCTION:** Every single one of your responses MUST end with a valid tool call. There are no exceptions.
 - If a task is complete, use 'task_completion'

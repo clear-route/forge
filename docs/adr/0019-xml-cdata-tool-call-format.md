@@ -380,6 +380,75 @@ LLM instruction: "If content contains `]]>`, split it as: `]]]]><![CDATA[>`"
 - Numbers, booleans
 - Small text values without special characters
 
+## Type Inference
+
+The XML parser automatically converts string values to appropriate types:
+
+### Automatic Type Conversion Rules
+
+1. **Booleans**: `true` or `false` (case-insensitive) → Go `bool`
+   ```xml
+   <recursive>true</recursive>        <!-- becomes bool(true) -->
+   <enabled>FALSE</enabled>           <!-- becomes bool(false) -->
+   ```
+
+2. **Null**: `null` (case-insensitive) → Go `nil`
+   ```xml
+   <optional>null</optional>          <!-- becomes nil -->
+   ```
+
+3. **Integers**: Numeric strings without decimal → Go `int` or `int64`
+   ```xml
+   <count>123</count>                 <!-- becomes int(123) -->
+   <line_start>1</line_start>         <!-- becomes int(1) -->
+   ```
+
+4. **Floats**: Numeric strings with decimal or scientific notation → Go `float64`
+   ```xml
+   <ratio>3.14</ratio>                <!-- becomes float64(3.14) -->
+   <value>1.23e10</value>             <!-- becomes float64(1.23e10) -->
+   ```
+
+5. **Strings**: Everything else remains as string
+   ```xml
+   <path>./src/main.go</path>         <!-- remains string -->
+   <name>hello</name>                 <!-- remains string -->
+   ```
+
+### Type Inference Examples
+
+```xml
+<tool>
+<server_name>local</server_name>
+<tool_name>example</tool_name>
+<arguments>
+  <name>test</name>              <!-- string -->
+  <count>42</count>              <!-- int -->
+  <ratio>3.14</ratio>            <!-- float64 -->
+  <enabled>true</enabled>        <!-- bool -->
+  <disabled>false</disabled>     <!-- bool -->
+  <optional>null</optional>      <!-- nil -->
+</arguments>
+</tool>
+```
+
+### Edge Cases
+
+- **Leading zeros**: `007` → `int(7)` (not string)
+- **Quoted values**: `"true"` → `string("true")` (not bool)
+- **Special floats**: `+Inf`, `-Inf`, `NaN` are parsed as `float64`
+- **CDATA content**: Always treated as string (no type conversion)
+- **Nested XML**: Recursively parsed into `map[string]interface{}`
+
+### Forcing String Type
+
+If you need the literal string `"true"` instead of boolean `true`:
+
+1. **Use quotes**: `<param>"true"</param>` → string `"true"`
+2. **Use CDATA**: `<param><![CDATA[true]]></param>` → string `true`
+
+Note: CDATA content is never type-converted and always remains as string.
+
 ---
 
 ## Validation

@@ -589,11 +589,13 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 		return true, errMsg
 	}
 
-	// Parse the tool call JSON
-	var toolCall tools.ToolCall
-	if err := json.Unmarshal([]byte(toolCallContent), &toolCall); err != nil {
+	// Parse the tool call (supports both XML and JSON formats)
+	// Wrap content in <tool> tags since streaming parser strips them
+	wrappedContent := "<tool>" + toolCallContent + "</tool>"
+	parsedToolCall, _, err := tools.ParseToolCall(wrappedContent)
+	if err != nil {
 		// Log the actual content for debugging
-		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed JSON content:\n%s\n", toolCallContent)))
+		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed to parse tool call:\n%s\n", toolCallContent)))
 
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:    prompts.ErrorTypeInvalidJSON,
@@ -606,9 +608,12 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 			return false, ""
 		}
 
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call JSON: %w", err)))
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call: %w", err)))
 		return true, errMsg
 	}
+
+	// Use the parsed tool call
+	toolCall := *parsedToolCall
 
 	// Validate required fields
 	if toolCall.ToolName == "" {
