@@ -53,8 +53,8 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 			}
 
 			toolCall := tools.ToolCall{
-				ServerName:   "local",
-				ToolName: "test_tool",
+				ServerName: "local",
+				ToolName:   "test_tool",
 				Arguments: tools.ArgumentsBlock{
 					InnerXML: []byte(`<arg>value</arg>`),
 				},

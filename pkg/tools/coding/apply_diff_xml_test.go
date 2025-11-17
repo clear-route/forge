@@ -85,8 +85,8 @@ func oldFunction() {
 
 const oldValue = 42
 `
-	if err := os.WriteFile(testFile, []byte(originalContent), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
+	if writeErr := os.WriteFile(testFile, []byte(originalContent), 0644); writeErr != nil {
+		t.Fatalf("Failed to create test file: %v", writeErr)
 	}
 
 	// Create workspace guard

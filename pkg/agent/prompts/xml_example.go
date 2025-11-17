@@ -56,8 +56,8 @@ func GenerateXMLExample(schema map[string]interface{}, toolName string) string {
 
 // generatePropertyExample creates an XML example for a single property
 func generatePropertyExample(name string, propSchema map[string]interface{}, indent string) string {
-	propType, _ := propSchema["type"].(string)
-	description, _ := propSchema["description"].(string)
+	propType, _ := propSchema["type"].(string)           //nolint:errcheck
+	description, _ := propSchema["description"].(string) //nolint:errcheck
 
 	switch propType {
 	case "string":
@@ -120,7 +120,7 @@ func generateArrayExample(name string, propSchema map[string]interface{}, indent
 			indent, name, name, indent, name, name)
 	}
 
-	itemType, _ := items["type"].(string)
+	itemType, _ := items["type"].(string) //nolint:errcheck
 
 	// If items are objects, use nested structure
 	if itemType == "object" {

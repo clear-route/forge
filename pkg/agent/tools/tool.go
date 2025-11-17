@@ -42,10 +42,10 @@ type Tool interface {
 
 // ToolCall represents a parsed tool invocation from the LLM's response
 type ToolCall struct {
-	XMLName      xml.Name       `xml:"tool"`
-	ServerName   string         `xml:"server_name"`
-	ToolName     string         `xml:"tool_name"`
-	Arguments    ArgumentsBlock `xml:"arguments"`
+	XMLName    xml.Name       `xml:"tool"`
+	ServerName string         `xml:"server_name"`
+	ToolName   string         `xml:"tool_name"`
+	Arguments  ArgumentsBlock `xml:"arguments"`
 }
 
 // ArgumentsBlock holds the raw XML of the arguments element
@@ -58,7 +58,7 @@ type ArgumentsBlock struct {
 func (tc *ToolCall) GetArgumentsXML() []byte {
 	const prefix = "<arguments>"
 	const suffix = "</arguments>"
-	
+
 	// Pre-allocate exact size needed
 	result := make([]byte, 0, len(prefix)+len(tc.Arguments.InnerXML)+len(suffix))
 	result = append(result, []byte(prefix)...)

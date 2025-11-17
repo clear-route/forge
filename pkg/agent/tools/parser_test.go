@@ -194,8 +194,8 @@ func TestHasToolCall(t *testing.T) {
 func TestValidateToolCall(t *testing.T) {
 	t.Run("ValidToolCall", func(t *testing.T) {
 		tc := &ToolCall{
-			ServerName:   "local",
-			ToolName: "test_tool",
+			ServerName: "local",
+			ToolName:   "test_tool",
 			Arguments: ArgumentsBlock{
 				InnerXML: []byte(``),
 			},

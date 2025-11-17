@@ -70,7 +70,7 @@ func FormatToolSchema(tool tools.Tool) string {
 
 	// Example usage with XML format
 	builder.WriteString("**Example:**\n```xml\n")
-	
+
 	// Check if tool provides custom XML example
 	if provider, ok := tool.(XMLExampleProvider); ok {
 		builder.WriteString(provider.XMLExample())
@@ -78,7 +78,7 @@ func FormatToolSchema(tool tools.Tool) string {
 		// Auto-generate from schema
 		builder.WriteString(GenerateXMLExample(schema, tool.Name()))
 	}
-	
+
 	builder.WriteString("\n```\n\n")
 
 	return builder.String()
