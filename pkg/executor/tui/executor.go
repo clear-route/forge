@@ -534,16 +534,16 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 
 	case types.EventTypeToolResult:
 		resultStr := fmt.Sprintf("%v", event.ToolOutput)
-		
+
 		// Classify the tool result to determine display strategy
 		tier := m.resultClassifier.ClassifyToolResult(m.lastToolName, resultStr)
-		
+
 		switch tier {
 		case TierFullInline:
 			// Display full result inline (loop-breaking tools)
 			formatted := formatEntry("  ✓ ", resultStr, toolStyle, m.width, false)
 			m.content.WriteString(formatted)
-			
+
 		case TierSummaryWithPreview:
 			// Display summary + preview lines
 			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
@@ -553,7 +553,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			m.content.WriteString(formatted)
 			// Cache the full result for viewing
 			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
-			
+
 		case TierSummaryOnly:
 			// Display summary only
 			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
@@ -561,12 +561,12 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			m.content.WriteString(formatted)
 			// Cache the full result for viewing
 			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
-			
+
 		case TierOverlayOnly:
 			// Command execution already handled by overlay system
 			// Don't display anything inline
 		}
-		
+
 		m.content.WriteString("\n\n")
 
 	case types.EventTypeMessageStart:
@@ -888,15 +888,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If result not found, just close the list
 		m.resultList.deactivate()
 		return m, nil
-		
+
 	case tea.WindowSizeMsg:
 		// Update viewport on window resize
 		m.viewport, _ = m.viewport.Update(msg)
-		
+
 		// Also update result list if active
 		if m.resultList.active {
 			updated, listCmd := m.resultList.Update(msg)
-			m.resultList = *updated.(*resultListModel)
+			if rl, ok := updated.(*resultListModel); ok {
+				m.resultList = *rl
+			}
 			return m, listCmd
 		}
 		m.width = msg.Width
@@ -1015,7 +1017,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		
+
 		// Handle Ctrl+R with Shift modifier to view result history list
 		// Note: Bubbletea doesn't support shift detection directly, so we'll use a different key
 		// Using Ctrl+L for "List" results instead
@@ -1032,14 +1034,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If result list is active, forward key messages to it
 		if m.resultList.active {
 			updated, listCmd := m.resultList.Update(msg)
-			m.resultList = *updated.(*resultListModel)
-			
+			if rl, ok := updated.(*resultListModel); ok {
+				m.resultList = *rl
+			}
+
 			// Check if list wants to quit
 			if m.resultList.quitting {
 				m.resultList.deactivate()
 				return m, listCmd
 			}
-			
+
 			return m, listCmd
 		}
 
@@ -1246,66 +1250,67 @@ func (m model) View() string {
 		return "Initializing..."
 	}
 
-	// ASCII art header with gradient effect
-	header := headerStyle.Render(`
+	// Build header and status sections
+	header := m.buildHeader()
+	tips := m.buildTips()
+	topStatus := m.buildTopStatus()
+	loadingIndicator := m.buildLoadingIndicator()
+	inputBox := m.buildInputBox()
+	bottomBar := m.buildBottomBar()
+
+	// Build viewport section
+	viewportSection := m.viewport.View()
+
+	// Assemble the base UI
+	baseView := m.assembleBaseView(header, tips, topStatus, viewportSection, loadingIndicator, inputBox, bottomBar)
+
+	// Layer overlays
+	return m.applyOverlays(baseView)
+}
+
+func (m model) buildHeader() string {
+	return headerStyle.Render(`
 	███████╗ ██████╗ ██████╗  ██████╗ ███████╗
 	██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
 	█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
 	██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
 	██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
 	╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝`)
+}
 
-	// Tips section
-	tips := tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
+func (m model) buildTips() string {
+	return tipsStyle.Render(`  Tips: Ask questions • Alt+Enter for new line • Enter to send • Ctrl+R to view last tool result • Ctrl+L for result history • Ctrl+C to exit`)
+}
 
-	// Top status bar
+func (m model) buildTopStatus() string {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "~"
 	}
-	topStatus := statusBarStyle.Render(fmt.Sprintf("  Working directory: %s", cwd))
+	return statusBarStyle.Render(fmt.Sprintf("  Working directory: %s", cwd))
+}
 
-	// Loading indicator (shown above input box when agent is busy)
-	var loadingIndicator string
-	if m.agentBusy {
-		loadingMsg := fmt.Sprintf("%s %s", m.spinner.View(), m.currentLoadingMessage)
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(salmonPink).
-			Width(m.width-4).
-			Padding(0, 2)
-		loadingIndicator = loadingStyle.Render(loadingMsg)
+func (m model) buildLoadingIndicator() string {
+	if !m.agentBusy {
+		return ""
 	}
+	loadingMsg := fmt.Sprintf("%s %s", m.spinner.View(), m.currentLoadingMessage)
+	loadingStyle := lipgloss.NewStyle().
+		Foreground(salmonPink).
+		Width(m.width-4).
+		Padding(0, 2)
+	return loadingStyle.Render(loadingMsg)
+}
 
-	// Input box
-	inputBox := inputBoxStyle.Width(m.width - 4).Render(m.textarea.View())
+func (m model) buildInputBox() string {
+	return inputBoxStyle.Width(m.width - 4).Render(m.textarea.View())
+}
 
-	// Bottom status bar with three sections
+func (m model) buildBottomBar() string {
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
+	bottomRight := m.buildTokenDisplay()
 
-	// Right section includes token usage if available
-	bottomRight := "Forge Agent"
-	if m.totalTokens > 0 {
-		// Format context with visual indicator if approaching limit
-		contextStr := formatTokenCount(m.currentContextTokens)
-		if m.maxContextTokens > 0 {
-			contextStr = fmt.Sprintf("%s/%s", contextStr, formatTokenCount(m.maxContextTokens))
-
-			// Add color indicator if context is >= 80% of max (approaching limit)
-			percentage := float64(m.currentContextTokens) / float64(m.maxContextTokens) * 100
-			if percentage >= 80 {
-				contextStr = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(contextStr) // Orange/red
-			}
-		}
-
-		bottomRight = fmt.Sprintf("◆ Context: %s | Input: %s | Output: %s | Total: %s",
-			contextStr,
-			formatTokenCount(m.totalPromptTokens),
-			formatTokenCount(m.totalCompletionTokens),
-			formatTokenCount(m.totalTokens))
-	}
-
-	// Calculate spacing
 	totalUsed := len(bottomLeft) + len(bottomCenter) + len(bottomRight)
 	leftPadding := (m.width - totalUsed) / 3
 	rightPadding := m.width - totalUsed - leftPadding*2
@@ -1316,63 +1321,76 @@ func (m model) View() string {
 		rightPadding = 2
 	}
 
-	bottomBar := statusBarStyle.Width(m.width).Render(
+	return statusBarStyle.Width(m.width).Render(
 		bottomLeft +
 			strings.Repeat(" ", leftPadding) +
 			bottomCenter +
 			strings.Repeat(" ", rightPadding) +
 			bottomRight,
 	)
+}
 
-	// Build viewport section - just the viewport itself
-	viewportSection := m.viewport.View()
+func (m model) buildTokenDisplay() string {
+	if m.totalTokens == 0 {
+		return "Forge Agent"
+	}
 
-	// Assemble the base UI without overlays
-	var baseView string
+	contextStr := formatTokenCount(m.currentContextTokens)
+	if m.maxContextTokens > 0 {
+		contextStr = fmt.Sprintf("%s/%s", contextStr, formatTokenCount(m.maxContextTokens))
+		percentage := float64(m.currentContextTokens) / float64(m.maxContextTokens) * 100
+		if percentage >= 80 {
+			contextStr = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(contextStr)
+		}
+	}
+
+	return fmt.Sprintf("◆ Context: %s | Input: %s | Output: %s | Total: %s",
+		contextStr,
+		formatTokenCount(m.totalPromptTokens),
+		formatTokenCount(m.totalCompletionTokens),
+		formatTokenCount(m.totalTokens))
+}
+
+func (m model) assembleBaseView(header, tips, topStatus, viewportSection, loadingIndicator, inputBox, bottomBar string) string {
 	if m.agentBusy {
-		// Include loading indicator when agent is busy
-		baseView = lipgloss.JoinVertical(
+		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			header,
 			tips,
 			topStatus,
-			"", // Blank line for spacing
+			"",
 			viewportSection,
 			loadingIndicator,
 			inputBox,
 			bottomBar,
 		)
-	} else {
-		// Normal view without loading indicator
-		baseView = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			tips,
-			topStatus,
-			"", // Blank line for spacing
-			viewportSection,
-			inputBox,
-			bottomBar,
-		)
 	}
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		tips,
+		topStatus,
+		"",
+		viewportSection,
+		inputBox,
+		bottomBar,
+	)
+}
 
-	// Layer overlays on top of the base view using absolute positioning
+func (m model) applyOverlays(baseView string) string {
 	if m.overlay.isActive() {
 		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
 	}
 
-	// Add result list as overlay if active
 	if m.resultList.active {
 		baseView = renderOverlay(baseView, &m.resultList, m.width, m.height)
 	}
 
-	// Add command palette as overlay if active
 	if m.commandPalette.active {
 		paletteContent := m.commandPalette.render(m.width)
 		baseView = renderToastOverlay(baseView, paletteContent)
 	}
 
-	// Add summarization status as overlay if active
 	if m.summarization.active {
 		summarizationContent := m.renderSummarizationStatus()
 		baseView = renderToastOverlay(baseView, summarizationContent)

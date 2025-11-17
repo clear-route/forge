@@ -39,7 +39,7 @@ type resultListDelegate struct {
 
 func newResultListDelegate() resultListDelegate {
 	d := list.NewDefaultDelegate()
-	
+
 	// Customize styles to match Forge theme
 	d.Styles.SelectedTitle = d.Styles.SelectedTitle.
 		Foreground(salmonPink).
@@ -47,7 +47,7 @@ func newResultListDelegate() resultListDelegate {
 	d.Styles.SelectedDesc = d.Styles.SelectedDesc.
 		Foreground(softGray).
 		BorderForeground(salmonPink)
-	
+
 	return resultListDelegate{DefaultDelegate: d}
 }
 
@@ -63,7 +63,7 @@ type resultListModel struct {
 // newResultListModel creates a new result list model
 func newResultListModel() resultListModel {
 	delegate := newResultListDelegate()
-	
+
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Tool Result History"
 	l.SetShowStatusBar(true)
@@ -72,7 +72,7 @@ func newResultListModel() resultListModel {
 		Foreground(salmonPink).
 		Bold(true).
 		Padding(0, 1)
-	
+
 	// Add custom key bindings
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
@@ -86,7 +86,7 @@ func newResultListModel() resultListModel {
 			),
 		}
 	}
-	
+
 	return resultListModel{
 		list:   l,
 		active: false,
@@ -98,13 +98,13 @@ func (m *resultListModel) activate(results []*CachedResult, width, height int) {
 	m.active = true
 	m.width = width
 	m.height = height
-	
+
 	// Convert cached results to list items
 	items := make([]list.Item, len(results))
 	for i, result := range results {
 		items[i] = resultListItem{result: result}
 	}
-	
+
 	m.list.SetItems(items)
 	m.list.SetSize(width-4, height-4)
 }
@@ -120,14 +120,14 @@ func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
-	
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc":
+		case "q", keyEsc:
 			m.quitting = true
 			return m, nil
-		case "enter":
+		case keyEnter:
 			// Return the selected result
 			if item, ok := m.list.SelectedItem().(resultListItem); ok {
 				// Signal that we want to view this result
@@ -142,7 +142,7 @@ func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		m.height = msg.Height
 		m.list.SetSize(msg.Width-4, msg.Height-4)
 	}
-	
+
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
@@ -153,7 +153,7 @@ func (m *resultListModel) View() string {
 	if !m.active {
 		return ""
 	}
-	
+
 	// Create a bordered container for the list
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -161,7 +161,7 @@ func (m *resultListModel) View() string {
 		Padding(1, 2).
 		Width(m.width - 4).
 		Height(m.height - 4)
-	
+
 	return boxStyle.Render(m.list.View())
 }
 

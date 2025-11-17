@@ -73,19 +73,6 @@ func (rc *resultCache) get(id string) (*CachedResult, bool) {
 }
 
 // getLast retrieves the most recently added result
-func (rc *resultCache) getLast() (*CachedResult, bool) {
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
-
-	if len(rc.order) == 0 {
-		return nil, false
-	}
-
-	lastID := rc.order[len(rc.order)-1]
-	result := rc.results[lastID]
-	return result, true
-}
-
 // getAll retrieves all cached results in reverse chronological order (newest first)
 func (rc *resultCache) getAll() []*CachedResult {
 	rc.mu.RLock()
@@ -113,21 +100,4 @@ func (rc *resultCache) remove(id string) {
 			break
 		}
 	}
-}
-
-// clear removes all results from the cache
-func (rc *resultCache) clear() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	rc.results = make(map[string]*CachedResult)
-	rc.order = make([]string, 0, rc.maxSize)
-}
-
-// size returns the current number of cached results
-func (rc *resultCache) size() int {
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
-
-	return len(rc.results)
 }

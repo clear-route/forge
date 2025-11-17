@@ -46,10 +46,9 @@ func NewToolResultOverlay(toolName, result string, width, height int) *ToolResul
 
 // Update handles messages
 func (o *ToolResultOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "v":
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "q", keyEsc, "v":
 			return nil, nil // Signal to close
 		}
 	}
