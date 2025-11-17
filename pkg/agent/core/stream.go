@@ -1,6 +1,9 @@
 package core
 
 import (
+	"context"
+	"errors"
+
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/parser"
 	"github.com/entrhq/forge/pkg/types"
@@ -65,7 +68,14 @@ func handleError(err error, state *streamState, emitEvent func(*types.AgentEvent
 	if state.messageStarted {
 		emitEvent(types.NewMessageEndEvent())
 	}
-	emitEvent(types.NewErrorEvent(err))
+	
+	// Don't emit error events for context cancellation - this is expected when user stops the agent
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		// Check if error message contains "context canceled" (some wrapped errors don't preserve type)
+		if err.Error() != "stream read error: context canceled" {
+			emitEvent(types.NewErrorEvent(err))
+		}
+	}
 }
 
 // handleContent processes content chunks based on type

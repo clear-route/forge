@@ -258,8 +258,14 @@ func (a *DefaultAgent) eventLoop(ctx context.Context) {
 				return
 			}
 
-			// Process the input
-			a.processInput(ctx, input)
+			// Handle cancellation immediately (synchronously) so it can interrupt ongoing processing
+			if input.IsCancel() {
+				a.processInput(ctx, input)
+				continue
+			}
+			
+			// Process other inputs asynchronously so eventLoop can continue handling cancel requests
+			go a.processInput(ctx, input)
 
 		case approval := <-a.channels.Approval:
 			if approval == nil {
@@ -337,6 +343,17 @@ func (a *DefaultAgent) runAgentLoop(ctx context.Context) {
 	var errorContext string
 
 	for {
+		// Check if context was cancelled (e.g., via /stop command)
+		select {
+		case <-ctx.Done():
+			// Context cancelled - stop the agent loop
+			// Emit a user-friendly message about the cancellation
+			a.memory.Add(types.NewUserMessage("Operation stopped by user."))
+			return
+		default:
+			// Continue with iteration
+		}
+
 		// Execute one iteration with optional error context from previous iteration
 		shouldContinue, nextErrorContext := a.executeIteration(ctx, errorContext)
 		if !shouldContinue {
@@ -414,6 +431,10 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 	// Get response from LLM
 	stream, err := a.provider.StreamCompletion(ctx, messages)
 	if err != nil {
+		// Check if this is a context cancellation (user stopped the agent)
+		if ctx.Err() != nil {
+			return false, "" // Stop silently - user requested cancellation
+		}
 		// Terminal error - LLM/API failures should stop the loop
 		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to start completion: %w", err)))
 		return false, ""
@@ -675,8 +696,18 @@ func (a *DefaultAgent) resetErrorTracking() {
 // processToolCall handles parsing, validation, and execution of tool calls
 // Returns (shouldContinue, errorContext) following the same pattern as executeIteration
 func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
+	// Check if context was cancelled before processing
+	if ctx.Err() != nil {
+		return false, "" // Stop silently - user requested cancellation
+	}
+	
 	// Check if tool call exists
 	if toolCallContent == "" {
+		// If context was cancelled, this is expected (stream was interrupted)
+		if ctx.Err() != nil {
+			return false, ""
+		}
+		
 		a.emitEvent(types.NewNoToolCallEvent())
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type: prompts.ErrorTypeNoToolCall,

@@ -1,3 +1,9 @@
+// Package slash provides git operation handlers for slash commands.
+// This package handles the execution of /commit and /pr commands after
+// they have been approved by the user in the TUI.
+//
+// Note: The TUI (pkg/executor/tui/slash_commands.go) handles command parsing,
+// validation, and user interaction. This package only executes the git operations.
 package slash
 
 import (
@@ -20,7 +26,6 @@ type Handler struct {
 	tracker         *git.ModificationTracker
 	commitGenerator *git.CommitMessageGenerator
 	prGenerator     *git.PRGenerator
-	cancelFunc      context.CancelFunc
 }
 
 func NewHandler(
@@ -28,14 +33,12 @@ func NewHandler(
 	tracker *git.ModificationTracker,
 	commitGen *git.CommitMessageGenerator,
 	prGen *git.PRGenerator,
-	cancelFunc context.CancelFunc,
 ) *Handler {
 	return &Handler{
 		workingDir:      workingDir,
 		tracker:         tracker,
 		commitGenerator: commitGen,
 		prGenerator:     prGen,
-		cancelFunc:      cancelFunc,
 	}
 }
 
@@ -59,10 +62,6 @@ func Parse(input string) (*Command, bool) {
 
 func (h *Handler) Execute(ctx context.Context, cmd *Command) (string, error) {
 	switch cmd.Name {
-	case "help":
-		return h.handleHelp(), nil
-	case "stop":
-		return h.handleStop(), nil
 	case "commit":
 		return h.handleCommit(ctx, cmd.Arg)
 	case "pr":
@@ -70,22 +69,6 @@ func (h *Handler) Execute(ctx context.Context, cmd *Command) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown command: /%s", cmd.Name)
 	}
-}
-
-func (h *Handler) handleHelp() string {
-	return "Available Commands:\n" +
-		"/help - Show help\n" +
-		"/stop - Stop operation\n" +
-		"/commit [msg] - Create commit\n" +
-		"/pr [title] - Create PR\n"
-}
-
-func (h *Handler) handleStop() string {
-	if h.cancelFunc != nil {
-		h.cancelFunc()
-		return "Stopped"
-	}
-	return "Nothing to stop"
 }
 
 func (h *Handler) handleCommit(ctx context.Context, customMessage string) (string, error) {

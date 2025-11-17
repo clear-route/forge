@@ -94,7 +94,7 @@ func (e *Executor) Run(ctx context.Context) error {
 		tracker := git.NewModificationTracker()
 		model.commitGen = git.NewCommitMessageGenerator(llmClient)
 		model.prGen = git.NewPRGenerator(llmClient)
-		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen, nil)
+		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen)
 	}
 
 	e.program = tea.NewProgram(
