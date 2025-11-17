@@ -14,6 +14,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
 	"github.com/entrhq/forge/pkg/tools/coding"
@@ -459,7 +460,7 @@ func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string
 // buildSystemPrompt constructs the system prompt with tool schemas and custom instructions
 func (a *DefaultAgent) buildSystemPrompt() string {
 	builder := prompts.NewPromptBuilder().
-		WithTools(a.GetTools())
+		WithTools(a.getToolsList())
 
 	// Add user's custom instructions if provided
 	if a.customInstructions != "" {
@@ -506,7 +507,20 @@ func (a *DefaultAgent) RegisterTool(tool tools.Tool) error {
 }
 
 // GetTools returns a list of all available tools (built-in + custom)
-func (a *DefaultAgent) GetTools() []tools.Tool {
+// This is used internally for prompt building and memory
+func (a *DefaultAgent) GetTools() []interface{} {
+	a.toolsMu.RLock()
+	defer a.toolsMu.RUnlock()
+
+	toolsList := make([]interface{}, 0, len(a.tools))
+	for _, tool := range a.tools {
+		toolsList = append(toolsList, tool)
+	}
+	return toolsList
+}
+
+// getToolsList returns tools as []tools.Tool for internal use
+func (a *DefaultAgent) getToolsList() []tools.Tool {
 	a.toolsMu.RLock()
 	defer a.toolsMu.RUnlock()
 
@@ -629,7 +643,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:           prompts.ErrorTypeUnknownTool,
 			ToolName:       toolCall.ToolName,
-			AvailableTools: a.GetTools(),
+			AvailableTools: a.getToolsList(),
 		})
 
 		// Track error and check circuit breaker
@@ -763,79 +777,152 @@ func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolC
 	responseChannel := make(chan *types.ApprovalResponse, 1)
 
 	// Store pending approval
+	a.setupPendingApproval(approvalID, toolCall, responseChannel)
+
+	// Clean up pending approval when done
+	defer a.cleanupPendingApproval(responseChannel)
+
+	// Parse tool input for event
+	argsMap := a.parseToolArguments(toolCall)
+
+	// Check for auto-approval
+	if approved, autoApproved := a.checkAutoApproval(approvalID, toolCall, argsMap); autoApproved {
+		return approved, false
+	}
+
+	// Emit approval request event (tool requires manual approval)
+	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
+
+	// Wait for response with timeout
+	return a.waitForApprovalResponse(ctx, approvalID, toolCall, responseChannel, preview)
+}
+
+// setupPendingApproval stores the pending approval request
+func (a *DefaultAgent) setupPendingApproval(approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse) {
 	a.approvalMu.Lock()
+	defer a.approvalMu.Unlock()
+
 	a.pendingApproval = &pendingApproval{
 		approvalID: approvalID,
 		toolName:   toolCall.ToolName,
 		toolCall:   toolCall,
 		response:   responseChannel,
 	}
+}
+
+// cleanupPendingApproval cleans up the pending approval
+func (a *DefaultAgent) cleanupPendingApproval(responseChannel chan *types.ApprovalResponse) {
+	a.approvalMu.Lock()
+	a.pendingApproval = nil
 	a.approvalMu.Unlock()
+	close(responseChannel)
+}
 
-	// Clean up pending approval when done
-	defer func() {
-		a.approvalMu.Lock()
-		a.pendingApproval = nil
-		a.approvalMu.Unlock()
-		close(responseChannel)
-	}()
-
-	// Parse tool input for event
+// parseToolArguments parses the tool arguments for the approval event
+func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
 	var argsMap map[string]interface{}
 	if err := json.Unmarshal(toolCall.Arguments, &argsMap); err != nil {
 		argsMap = make(map[string]interface{})
 	}
+	return argsMap
+}
 
-	// Emit approval request event
-	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
+// checkAutoApproval checks if the tool or command should be auto-approved
+// Returns (approved, autoApproved) where autoApproved indicates if a decision was made
+func (a *DefaultAgent) checkAutoApproval(approvalID string, toolCall tools.ToolCall, argsMap map[string]interface{}) (bool, bool) {
+	// Check if tool is auto-approved
+	if config.IsToolAutoApproved(toolCall.ToolName) {
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+		return true, true
+	}
 
-	// Wait for response with timeout
+	// For execute_command, check command whitelist
+	if toolCall.ToolName == "execute_command" {
+		if a.isCommandWhitelisted(approvalID, argsMap) {
+			return true, true
+		}
+	}
+
+	return false, false
+}
+
+// isCommandWhitelisted checks if a command is whitelisted
+func (a *DefaultAgent) isCommandWhitelisted(approvalID string, argsMap map[string]interface{}) bool {
+	cmdInterface, ok := argsMap["command"]
+	if !ok {
+		return false
+	}
+
+	cmd, ok := cmdInterface.(string)
+	if !ok {
+		return false
+	}
+
+	if config.IsCommandWhitelisted(cmd) {
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, "execute_command"))
+		return true
+	}
+
+	return false
+}
+
+// waitForApprovalResponse waits for the user's approval response
+func (a *DefaultAgent) waitForApprovalResponse(ctx context.Context, approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse, preview *tools.ToolPreview) (bool, bool) {
 	timeout := time.NewTimer(a.approvalTimeout)
 	defer timeout.Stop()
 
 	select {
 	case <-ctx.Done():
-		// Context canceled
 		return false, false
 
 	case <-timeout.C:
-		// Timeout - emit timeout event and reject
 		a.emitEvent(types.NewToolApprovalTimeoutEvent(approvalID, toolCall.ToolName))
 		return false, true
 
 	case approval := <-a.channels.Approval:
-		// Got approval directly from executor (handles deadlock case)
-		if approval == nil {
-			return false, false
-		}
-
-		// Verify it's for this approval request
-		if approval.ApprovalID != approvalID {
-			// Put it back for the right handler - but this shouldn't happen
-			// Just ignore and keep waiting
-			select {
-			case a.channels.Approval <- approval:
-			default:
-			}
-			// Continue waiting
-			return a.requestApproval(ctx, toolCall, preview)
-		}
-
-		// Process the approval
-		if approval.IsGranted() {
-			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-			return true, false
-		}
-		a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
-		return false, false
+		return a.handleDirectApproval(ctx, approval, approvalID, toolCall, preview)
 
 	case response := <-responseChannel:
-		// Got response from internal channel (via handleApprovalResponse)
-		if response.IsGranted() {
-			a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-			return true, false
-		}
-		a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
+		approved := a.handleChannelResponse(approvalID, toolCall, response)
+		return approved, false
+	}
+}
+
+// handleDirectApproval handles approval received directly from executor channel
+func (a *DefaultAgent) handleDirectApproval(ctx context.Context, approval *types.ApprovalResponse, approvalID string, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
+	if approval == nil {
 		return false, false
 	}
+
+	// Verify it's for this approval request
+	if approval.ApprovalID != approvalID {
+		// Put it back for the right handler
+		select {
+		case a.channels.Approval <- approval:
+		default:
+		}
+		// Continue waiting
+		return a.requestApproval(ctx, toolCall, preview)
+	}
+
+	// Process the approval
+	if approval.IsGranted() {
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+		return true, false
+	}
+
+	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
+	return false, false
+}
+
+// handleChannelResponse handles response from internal response channel
+// Returns true if approved, false if rejected
+func (a *DefaultAgent) handleChannelResponse(approvalID string, toolCall tools.ToolCall, response *types.ApprovalResponse) bool {
+	if response.IsGranted() {
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+		return true
+	}
+
+	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
+	return false
 }

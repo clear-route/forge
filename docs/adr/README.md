@@ -76,6 +76,9 @@ Proposed → Accepted → [Deprecated or Superseded]
 | [0012](0012-enhanced-tui-executor.md) | Enhanced TUI Executor | Accepted |
 | [0013](0013-streaming-command-execution.md) | Streaming Command Execution with Interactive Overlay | Accepted |
 | [0014](0014-composable-context-management.md) | Composable Context Management with Strategy Pattern | Proposed |
+| [0015](0015-buffered-tool-call-summarization.md) | Buffered Tool Call Summarization with Parallel Processing | Accepted |
+| [0016](0016-file-ignore-system.md) | File Ignore System for Coding Tools | Proposed |
+| [0017](0017-auto-approval-and-settings-system.md) | Auto-Approval and Interactive Settings System | Accepted |
 
 ## Resources
 

@@ -16,6 +16,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent"
 	agentcontext "github.com/entrhq/forge/pkg/agent/context"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	appconfig "github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/executor/tui"
 	"github.com/entrhq/forge/pkg/llm/openai"
 	"github.com/entrhq/forge/pkg/security/workspace"
@@ -130,6 +131,11 @@ func (c *Config) validate() error {
 
 // run executes the main application logic
 func run(ctx context.Context, config *Config) error {
+	// Initialize global configuration (for auto-approval and command whitelist)
+	if err := appconfig.Initialize(""); err != nil {
+		return fmt.Errorf("failed to initialize configuration: %w", err)
+	}
+
 	// Create OpenAI provider with optional base URL
 	providerOpts := []openai.ProviderOption{
 		openai.WithModel(config.Model),

@@ -82,6 +82,15 @@ func init() {
 		MinArgs:          0,
 		MaxArgs:          -1, // Unlimited for PR title
 	})
+
+	registerCommand(&SlashCommand{
+		Name:        "settings",
+		Description: "Open settings configuration",
+		Type:        CommandTypeTUI,
+		Handler:     handleSettingsCommand,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
 }
 
 // registerCommand adds a command to the registry

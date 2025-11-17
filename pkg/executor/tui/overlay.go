@@ -23,6 +23,8 @@ const (
 	OverlayModeHelp
 	// OverlayModeSlashCommandPreview shows slash command preview
 	OverlayModeSlashCommandPreview
+	// OverlayModeSettings shows the settings overlay
+	OverlayModeSettings
 )
 
 // Overlay is the base interface for all overlay components

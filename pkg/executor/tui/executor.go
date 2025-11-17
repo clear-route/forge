@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/entrhq/forge/pkg/agent/git"
 	"github.com/entrhq/forge/pkg/agent/slash"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/types"
 )
@@ -73,6 +75,12 @@ func (e *Executor) Run(ctx context.Context) error {
 	// Start the agent first
 	if err := e.agent.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start agent: %w", err)
+	}
+
+	// Discover tools from agent and populate config
+	if err := config.DiscoverToolsFromAgent(e.agent); err != nil {
+		// Log error but don't fail - config system is optional
+		log.Printf("Warning: failed to discover tools from agent: %v", err)
 	}
 
 	model := initialModel()

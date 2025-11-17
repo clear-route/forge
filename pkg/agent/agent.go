@@ -47,4 +47,8 @@ type Agent interface {
 	// GetChannels returns the communication channels for this agent.
 	// The executor uses these channels to send input and receive output.
 	GetChannels() *types.AgentChannels
+
+	// GetTools returns a list of all available tools registered with the agent.
+	// This includes both built-in tools and any custom tools that have been registered.
+	GetTools() []interface{}
 }
