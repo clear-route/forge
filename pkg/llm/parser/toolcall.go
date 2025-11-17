@@ -8,9 +8,9 @@ import (
 // It maintains state across multiple content chunks to handle tags that span chunks.
 type ToolCallParser struct {
 	buffer      strings.Builder
-	inToolCall  bool
-	inTag       bool // true when we're buffering a potential tag (saw '<' but not yet '>')
 	toolContent strings.Builder
+	inToolCall  bool
+	inTag       bool
 }
 
 // NewToolCallParser creates a new tool call parser.
@@ -22,8 +22,9 @@ func NewToolCallParser() *ToolCallParser {
 type ContentType string
 
 const (
-	ContentTypeToolCall ContentType = "tool_call"
-	ContentTypeRegular  ContentType = "regular"
+	ContentTypeToolCall      ContentType = "tool_call"
+	ContentTypeToolCallStart ContentType = "tool_call_start"
+	ContentTypeRegular       ContentType = "regular"
 )
 
 // ParsedContent represents parsed content with its type
@@ -76,35 +77,35 @@ func (p *ToolCallParser) handleToolStart() *ParsedContent {
 	textBefore := bufStr[:len(bufStr)-6] // Everything except "<tool>"
 
 	p.buffer.Reset()
-	p.inToolCall = true
 	p.toolContent.Reset()
+	p.inToolCall = true
 
-	if textBefore != "" {
-		return &ParsedContent{
-			Type:    ContentTypeRegular,
-			Content: textBefore,
-		}
+	// Always return a tool call start signal (even if there's no text before)
+	// This allows immediate emission of tool call start event
+	return &ParsedContent{
+		Type:    ContentTypeToolCallStart,
+		Content: textBefore, // May be empty, which is fine
 	}
-	return nil
 }
 
 // handleToolEnd processes the end of </tool> tag
 func (p *ToolCallParser) handleToolEnd() *ParsedContent {
-	// Get content before </tool>
+	// First, move any remaining buffer content (minus the "</tool>" tag) to toolContent
 	bufStr := p.buffer.String()
-	textBefore := bufStr[:len(bufStr)-7] // Everything except "</tool>"
-
+	if len(bufStr) >= 7 {
+		// Add everything except the "</tool>" tag to toolContent
+		contentBeforeTag := bufStr[:len(bufStr)-7]
+		p.toolContent.WriteString(contentBeforeTag)
+	}
+	
 	p.buffer.Reset()
 	p.inToolCall = false
 
-	// Add any remaining buffered content to tool content
-	p.toolContent.WriteString(textBefore)
-	content := p.toolContent.String()
+	// Get the accumulated tool content
+	content := strings.TrimSpace(p.toolContent.String())
 	p.toolContent.Reset()
 
-	// Trim any trailing whitespace or stray characters
-	content = strings.TrimSpace(content)
-
+	// Return empty tool call even if content is empty
 	return &ParsedContent{
 		Type:    ContentTypeToolCall,
 		Content: content,
@@ -195,8 +196,8 @@ func (p *ToolCallParser) flushBufferIfNotInTag() *ParsedContent {
 		return nil
 	}
 
-	// If we're in a tool call, accumulate to toolContent but DON'T emit
-	// The content will only be emitted when we see the complete </tool> tag
+	// When inside a tool call, accumulate flushed content into toolContent
+	// instead of emitting it immediately. We'll emit when </tool> is detected.
 	if p.inToolCall {
 		p.toolContent.WriteString(flushText)
 		return nil
@@ -215,7 +216,29 @@ func (p *ToolCallParser) appendContent(toolCallContent, regularContent, newConte
 		return toolCallContent, regularContent
 	}
 
+	// Handle tool call start - return it as toolCallContent (for signaling)
+	// but don't append the text content (it should go to regularContent if present)
+	if newContent.Type == ContentTypeToolCallStart {
+		// If there's text before the <tool> tag, add it to regularContent
+		if newContent.Content != "" {
+			if regularContent == nil {
+				regularContent = &ParsedContent{
+					Type:    ContentTypeRegular,
+					Content: newContent.Content,
+				}
+			} else {
+				regularContent.Content += newContent.Content
+			}
+		}
+		// Return the start signal as toolCallContent
+		return newContent, regularContent
+	}
+
 	if newContent.Type == ContentTypeToolCall {
+		// If we already have a tool call start signal, replace it with the complete tool call
+		if toolCallContent != nil && toolCallContent.Type == ContentTypeToolCallStart {
+			return newContent, regularContent
+		}
 		if toolCallContent == nil {
 			return newContent, regularContent
 		}
@@ -235,40 +258,55 @@ func (p *ToolCallParser) IsInToolCall() bool {
 	return p.inToolCall
 }
 
+// GetAccumulatedToolContent returns the currently accumulated tool content
+// This is useful for extracting partial information like tool name before the tool call is complete
+func (p *ToolCallParser) GetAccumulatedToolContent() string {
+	return p.toolContent.String()
+}
+
 // Flush returns any remaining buffered content and resets the parser.
 // This should be called at the end of a stream to ensure all content is processed.
 func (p *ToolCallParser) Flush() (toolCallContent, regularContent *ParsedContent) {
-	text := p.buffer.String()
-	if text == "" && p.toolContent.Len() == 0 {
-		return nil, nil
-	}
-
-	// If we have tool content buffered, return it
-	if p.toolContent.Len() > 0 {
-		toolCallContent = &ParsedContent{
-			Type:    ContentTypeToolCall,
-			Content: p.toolContent.String(),
-		}
-		p.toolContent.Reset()
-	}
-
-	// Return any remaining buffer as regular content
-	if text != "" {
-		regularContent = &ParsedContent{
-			Type:    ContentTypeRegular,
-			Content: text,
-		}
+	// First flush any buffered content into toolContent if we're in a tool call
+	if p.inToolCall && p.buffer.Len() > 0 {
+		p.toolContent.WriteString(p.buffer.String())
 		p.buffer.Reset()
 	}
 
-	p.inToolCall = false
-	return toolCallContent, regularContent
+	// If we're in a tool call, return accumulated tool content
+	if p.inToolCall {
+		p.inToolCall = false
+		content := strings.TrimSpace(p.toolContent.String())
+		p.toolContent.Reset()
+		
+		if content != "" {
+			toolCallContent = &ParsedContent{
+				Type:    ContentTypeToolCall,
+				Content: content,
+			}
+			return toolCallContent, nil
+		}
+		return nil, nil
+	}
+
+	// Otherwise, return buffered content as regular content
+	text := p.buffer.String()
+	p.buffer.Reset()
+	
+	if text == "" {
+		return nil, nil
+	}
+
+	regularContent = &ParsedContent{
+		Type:    ContentTypeRegular,
+		Content: text,
+	}
+	return nil, regularContent
 }
 
 // Reset clears all parser state
 func (p *ToolCallParser) Reset() {
 	p.buffer.Reset()
-	p.toolContent.Reset()
 	p.inToolCall = false
 	p.inTag = false
 }

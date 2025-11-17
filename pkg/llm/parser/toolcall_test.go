@@ -117,8 +117,12 @@ func TestToolCallParser_IncompleteTagAtBoundary(t *testing.T) {
 
 	// Complete the opening tag and send content
 	toolCall, regular = parser.Parse("tool>content")
-	if toolCall != nil || regular != nil {
-		t.Errorf("Expected nil while in tool call, got toolCall=%v, regular=%v", toolCall, regular)
+	// With early emission, we now get a tool_call_start signal when <tool> is detected
+	if toolCall == nil || toolCall.Type != ContentTypeToolCallStart {
+		t.Errorf("Expected tool_call_start signal, got toolCall=%v", toolCall)
+	}
+	if regular != nil {
+		t.Errorf("Expected no regular content, got %v", regular)
 	}
 
 	// Send closing tag
