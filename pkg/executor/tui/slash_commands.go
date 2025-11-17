@@ -463,7 +463,7 @@ func handleContextCommand(m *model, args []string) interface{} {
 	}
 
 	contextInfo := m.agent.GetContextInfo()
-	
+
 	// Add token usage from TUI tracking
 	freeTokens := 0
 	usagePercent := 0.0

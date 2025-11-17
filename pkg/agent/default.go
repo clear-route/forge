@@ -528,15 +528,15 @@ func (a *DefaultAgent) GetContextInfo() *ContextInfo {
 	baseSystemPrompt := prompts.NewPromptBuilder().
 		WithCustomInstructions(a.customInstructions).
 		Build()
-	
+
 	// Build just the tools section to calculate tool tokens
 	toolsSection := ""
 	if len(a.tools) > 0 {
-		toolsSection = "<available_tools>\n" + 
-			prompts.FormatToolSchemas(a.getToolsList()) + 
+		toolsSection = "<available_tools>\n" +
+			prompts.FormatToolSchemas(a.getToolsList()) +
 			"</available_tools>\n\n"
 	}
-	
+
 	// Calculate token counts for each section
 	systemPromptTokens := 0
 	toolTokens := 0
@@ -544,13 +544,13 @@ func (a *DefaultAgent) GetContextInfo() *ContextInfo {
 		systemPromptTokens = a.tokenizer.CountTokens(baseSystemPrompt)
 		toolTokens = a.tokenizer.CountTokens(toolsSection)
 	}
-	
+
 	// Build full system prompt for current context calculation
 	fullSystemPrompt := prompts.NewPromptBuilder().
 		WithTools(a.getToolsList()).
 		WithCustomInstructions(a.customInstructions).
 		Build()
-	
+
 	// Get tool names
 	toolNames := make([]string, 0, len(a.tools))
 	for name := range a.tools {
@@ -560,7 +560,7 @@ func (a *DefaultAgent) GetContextInfo() *ContextInfo {
 	// Get message history stats
 	messages := a.memory.GetAll()
 	messageCount := len(messages)
-	
+
 	// Count conversation turns (user messages)
 	conversationTurns := 0
 	for _, msg := range messages {
@@ -584,7 +584,7 @@ func (a *DefaultAgent) GetContextInfo() *ContextInfo {
 		}
 		currentTokens = conversationTokens + len(fullSystemPrompt)/4
 	}
-	
+
 	// Get max tokens from context manager
 	maxTokens := 0
 	if a.contextManager != nil {

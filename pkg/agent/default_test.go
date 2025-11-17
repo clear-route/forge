@@ -111,13 +111,13 @@ func TestTokenCountingWithMessages(t *testing.T) {
 	// Verify conversation tokens are non-zero
 	if info.ConversationTokens == 0 {
 		t.Errorf("Expected non-zero conversation tokens, got 0. Messages in memory: %d", len(agent.memory.GetAll()))
-		
+
 		// Debug: print actual messages
 		messages := agent.memory.GetAll()
 		for i, msg := range messages {
 			t.Logf("Message %d: Role=%v, Content length=%d", i, msg.Role, len(msg.Content))
 		}
-		
+
 		// Verify tokenizer state
 		t.Logf("Tokenizer nil: %v", agent.tokenizer == nil)
 	}
@@ -135,11 +135,11 @@ func TestTokenCountingWithMessages(t *testing.T) {
 		for _, msg := range messages {
 			fallbackCount += (len(msg.Content) + len(string(msg.Role)) + 12) / 4
 		}
-		
+
 		if fallbackCount == 0 {
 			t.Errorf("Fallback counting also returned 0, but we have %d messages", len(messages))
 		}
-		
+
 		t.Logf("Fallback counting calculated %d tokens for %d messages", fallbackCount, len(messages))
 	}
 }

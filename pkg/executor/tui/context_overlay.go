@@ -24,10 +24,10 @@ type ContextInfo struct {
 	CustomInstructions bool
 
 	// Tool system
-	ToolCount         int
-	ToolTokens        int
-	ToolNames         []string
-	CurrentToolCall   string
+	ToolCount          int
+	ToolTokens         int
+	ToolNames          []string
+	CurrentToolCall    string
 	HasPendingToolCall bool
 
 	// Message history
@@ -50,7 +50,7 @@ type ContextInfo struct {
 // NewContextOverlay creates a new context information overlay
 func NewContextOverlay(info *ContextInfo) *ContextOverlay {
 	content := buildContextContent(info)
-	
+
 	vp := viewport.New(76, 20)
 	vp.Style = lipgloss.NewStyle()
 	vp.SetContent(content)
@@ -102,21 +102,22 @@ func buildContextContent(info *ContextInfo) string {
 		formatTokenCount(info.MaxContextTokens),
 		info.UsagePercent))
 	b.WriteString(fmt.Sprintf("  Free Space:         %s tokens\n", formatTokenCount(info.FreeTokens)))
-	
+
 	// Add a progress bar
 	barWidth := 40
 	filledWidth := int(float64(barWidth) * info.UsagePercent / 100.0)
 	emptyWidth := barWidth - filledWidth
-	
+
 	var barColor lipgloss.Color
-	if info.UsagePercent < 70 {
+	switch {
+	case info.UsagePercent < 70:
 		barColor = lipgloss.Color("#98C379") // Green
-	} else if info.UsagePercent < 90 {
+	case info.UsagePercent < 90:
 		barColor = lipgloss.Color("#E5C07B") // Yellow
-	} else {
+	default:
 		barColor = lipgloss.Color("#E06C75") // Red
 	}
-	
+
 	filled := lipgloss.NewStyle().Foreground(barColor).Render(strings.Repeat("█", filledWidth))
 	empty := lipgloss.NewStyle().Foreground(lipgloss.Color("#3E4451")).Render(strings.Repeat("░", emptyWidth))
 	b.WriteString(fmt.Sprintf("  [%s%s]\n", filled, empty))
@@ -130,17 +131,6 @@ func buildContextContent(info *ContextInfo) string {
 	b.WriteString(fmt.Sprintf("  Total:              %s\n", formatTokenCount(info.TotalTokens)))
 
 	return b.String()
-}
-
-// formatNumber formats a number with thousands separators
-func formatNumber(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	if n < 1000000 {
-		return fmt.Sprintf("%d,%03d", n/1000, n%1000)
-	}
-	return fmt.Sprintf("%d,%03d,%03d", n/1000000, (n/1000)%1000, n%1000)
 }
 
 // Update handles messages for the context overlay
