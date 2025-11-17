@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"html"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,9 +16,6 @@ import (
 // executeBashCommand executes a shell command directly, bypassing the agent
 func (m model) executeBashCommand(command string) tea.Cmd {
 	return func() tea.Msg {
-		// Generate unique execution ID
-		executionID := fmt.Sprintf("bash-%d", time.Now().UnixNano())
-
 		// Get the tool from agent's tool registry
 		toolIface := m.agent.GetTool("execute_command")
 		if toolIface == nil {
@@ -41,7 +39,7 @@ func (m model) executeBashCommand(command string) tea.Cmd {
 		}
 
 		// Prepare XML arguments for the tool
-		argsXML := fmt.Sprintf("<arguments><command>%s</command></arguments>", command)
+		argsXML := fmt.Sprintf("<arguments><command>%s</command></arguments>", html.EscapeString(command))
 
 		// Create context with event emitter for streaming support
 		// Note: The execute_command tool will send its own CommandExecutionStart event
@@ -54,16 +52,6 @@ func (m model) executeBashCommand(command string) tea.Cmd {
 
 		// Send completion or error event
 		if err != nil {
-			m.channels.Event <- &types.AgentEvent{
-				Type:  types.EventTypeCommandExecutionFailed,
-				Error: err,
-				CommandExecution: &types.CommandExecution{
-					ExecutionID: executionID,
-					Command:     command,
-					WorkingDir:  m.workspaceDir,
-					ExitCode:    1,
-				},
-			}
 			return toastMsg{
 				message: "Command Failed",
 				details: fmt.Sprintf("Error: %v", err),
