@@ -83,29 +83,29 @@ func (e *Executor) Run(ctx context.Context) error {
 		log.Printf("Warning: failed to discover tools from agent: %v", err)
 	}
 
-	model := initialModel()
-	model.agent = e.agent
-	model.channels = e.agent.GetChannels()
-	model.workspaceDir = e.workspaceDir
+	m := initialModel()
+	m.agent = e.agent
+	m.channels = e.agent.GetChannels()
+	m.workspaceDir = e.workspaceDir
 
 	// Initialize slash handler for git operations
 	if e.provider != nil && e.workspaceDir != "" {
 		llmClient := newLLMAdapter(e.provider)
 		tracker := git.NewModificationTracker()
-		model.commitGen = git.NewCommitMessageGenerator(llmClient)
-		model.prGen = git.NewPRGenerator(llmClient)
-		model.slashHandler = slash.NewHandler(e.workspaceDir, tracker, model.commitGen, model.prGen)
+		m.commitGen = git.NewCommitMessageGenerator(llmClient)
+		m.prGen = git.NewPRGenerator(llmClient)
+		m.slashHandler = slash.NewHandler(e.workspaceDir, tracker, m.commitGen, m.prGen)
 	}
 
 	e.program = tea.NewProgram(
-		model,
+		m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
 
 	go func() {
 		// Listen for agent events and forward them to the TUI
-		for event := range model.channels.Event {
+		for event := range m.channels.Event {
 			e.program.Send(event)
 		}
 	}()
@@ -180,7 +180,7 @@ type model struct {
 	spinner                  spinner.Model
 	isThinking               bool
 	agentBusy                bool
-	bashMode                 bool   // Track if in bash mode
+	bashMode                 bool // Track if in bash mode
 	currentLoadingMessage    string
 	toolNameDisplayed        bool // Track if we've already displayed the tool name
 	width                    int
