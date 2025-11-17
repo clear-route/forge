@@ -263,7 +263,7 @@ func (a *DefaultAgent) eventLoop(ctx context.Context) {
 				a.processInput(ctx, input)
 				continue
 			}
-			
+
 			// Process other inputs asynchronously so eventLoop can continue handling cancel requests
 			go a.processInput(ctx, input)
 
@@ -343,10 +343,10 @@ func (a *DefaultAgent) runAgentLoop(ctx context.Context) {
 	var errorContext string
 
 	for {
-		// Check if context was cancelled (e.g., via /stop command)
+		// Check if context was canceled (e.g., via /stop command)
 		select {
 		case <-ctx.Done():
-			// Context cancelled - stop the agent loop
+			// Context canceled - stop the agent loop
 			// Emit a user-friendly message about the cancellation
 			a.memory.Add(types.NewUserMessage("Operation stopped by user."))
 			return
@@ -696,18 +696,18 @@ func (a *DefaultAgent) resetErrorTracking() {
 // processToolCall handles parsing, validation, and execution of tool calls
 // Returns (shouldContinue, errorContext) following the same pattern as executeIteration
 func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
-	// Check if context was cancelled before processing
+	// Check if context was canceled before processing
 	if ctx.Err() != nil {
 		return false, "" // Stop silently - user requested cancellation
 	}
-	
+
 	// Check if tool call exists
 	if toolCallContent == "" {
-		// If context was cancelled, this is expected (stream was interrupted)
+		// If context was canceled, this is expected (stream was interrupted)
 		if ctx.Err() != nil {
 			return false, ""
 		}
-		
+
 		a.emitEvent(types.NewNoToolCallEvent())
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type: prompts.ErrorTypeNoToolCall,
