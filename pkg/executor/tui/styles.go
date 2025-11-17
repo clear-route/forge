@@ -50,6 +50,9 @@ var (
 	toolStyle = lipgloss.NewStyle().
 			Foreground(mintGreen)
 
+	toolResultStyle = lipgloss.NewStyle().
+			Foreground(brightWhite)
+
 	errorStyle = lipgloss.NewStyle().
 			Foreground(salmonPink)
 

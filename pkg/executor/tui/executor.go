@@ -297,18 +297,26 @@ func formatEntry(icon string, text string, style lipgloss.Style, width int, icon
 
 // wordWrap manually wraps text at word boundaries without adding any padding
 // It also handles long strings without spaces by breaking them at character boundaries
+// Preserves leading whitespace from the original text
 func wordWrap(text string, width int) string {
 	if width <= 0 {
 		width = 80
 	}
 
-	words := strings.Fields(text)
+	// Extract and preserve leading whitespace
+	leadingSpace := ""
+	trimmed := strings.TrimLeft(text, " \t")
+	if len(trimmed) < len(text) {
+		leadingSpace = text[:len(text)-len(trimmed)]
+	}
+
+	words := strings.Fields(trimmed)
 	if len(words) == 0 {
 		return text
 	}
 
 	var result strings.Builder
-	currentLine := ""
+	currentLine := leadingSpace // Start first line with leading space
 
 	for _, word := range words {
 		// If a single word is longer than width, break it up
@@ -542,7 +550,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		switch tier {
 		case TierFullInline:
 			// Display full result inline (loop-breaking tools)
-			formatted := formatEntry("  ✓ ", resultStr, toolStyle, m.width, false)
+			formatted := formatEntry("    ✓ ", resultStr, toolResultStyle, m.width, false)
 			m.content.WriteString(formatted)
 
 		case TierSummaryWithPreview:
@@ -550,7 +558,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
 			preview := m.resultClassifier.GetPreviewLines(resultStr)
 			displayText := summary + "\n" + preview
-			formatted := formatEntry("  ✓ ", displayText, toolStyle, m.width, false)
+			formatted := formatEntry("    ✓ ", displayText, toolResultStyle, m.width, false)
 			m.content.WriteString(formatted)
 			// Cache the full result for viewing
 			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
@@ -558,7 +566,7 @@ func (m *model) handleAgentEvent(event *types.AgentEvent) {
 		case TierSummaryOnly:
 			// Display summary only
 			summary := m.resultSummarizer.GenerateSummary(m.lastToolName, resultStr)
-			formatted := formatEntry("  ✓ ", summary, toolStyle, m.width, false)
+			formatted := formatEntry("    ✓ ", summary, toolResultStyle, m.width, false)
 			m.content.WriteString(formatted)
 			// Cache the full result for viewing
 			m.resultCache.store(m.lastToolCallID, m.lastToolName, resultStr, summary)
