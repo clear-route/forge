@@ -1004,83 +1004,20 @@ func (s *InteractiveSettingsOverlay) handleConfirmInput(msg tea.Msg) (Overlay, t
 
 // renderWithDialog renders the settings view with an input dialog overlay
 func (s *InteractiveSettingsOverlay) renderWithDialog() string {
-	// Render base settings view (dimmed)
-	baseView := s.renderBaseView(true)
-
 	// Render dialog on top
 	dialogView := s.renderInputDialog()
 
 	// Layer dialog over base view
-	return s.layerDialogOver(baseView, dialogView)
+	return s.layerDialogOver(dialogView)
 }
 
 // renderWithConfirmation renders the settings view with a confirmation dialog overlay
 func (s *InteractiveSettingsOverlay) renderWithConfirmation() string {
-	// Render base settings view (dimmed)
-	baseView := s.renderBaseView(true)
-
 	// Render confirmation dialog on top
 	dialogView := s.renderConfirmDialog()
 
 	// Layer dialog over base view
-	return s.layerDialogOver(baseView, dialogView)
-}
-
-// renderBaseView renders the main settings view
-func (s *InteractiveSettingsOverlay) renderBaseView(dimmed bool) string {
-	var content strings.Builder
-
-	// Title
-	titleStyle := OverlayTitleStyle
-	if dimmed {
-		titleStyle = titleStyle.Foreground(mutedGray)
-	}
-	title := titleStyle.Render("⚙️  Settings")
-	content.WriteString(title)
-	content.WriteString("\n\n")
-
-	// Help text
-	helpText := s.buildHelpText()
-	helpStyle := OverlaySubtitleStyle
-	if dimmed {
-		helpStyle = helpStyle.Foreground(mutedGray)
-	}
-	content.WriteString(helpStyle.Render(helpText))
-	content.WriteString("\n\n")
-
-	// Render sections
-	for i, section := range s.sections {
-		if i > 0 {
-			content.WriteString("\n")
-		}
-		sectionView := s.renderSection(section, i == s.selectedSection)
-		if dimmed {
-			// Apply dimmed style to section
-			sectionView = lipgloss.NewStyle().Foreground(mutedGray).Render(sectionView)
-		}
-		content.WriteString(sectionView)
-	}
-
-	// Status bar
-	if s.hasChanges {
-		content.WriteString("\n\n")
-		saveHint := lipgloss.NewStyle().
-			Foreground(salmonPink).
-			Bold(true).
-			Render("● Unsaved changes - Press Ctrl+S to save")
-		content.WriteString(saveHint)
-	}
-
-	// Create bordered box
-	boxStyle := CreateOverlayContainerStyle(s.width - 4).Height(s.height - 4)
-
-	return lipgloss.Place(
-		s.width,
-		s.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		boxStyle.Render(content.String()),
-	)
+	return s.layerDialogOver(dialogView)
 }
 
 // renderInputDialog renders an input dialog
@@ -1235,7 +1172,7 @@ func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
 }
 
 // layerDialogOver layers a dialog over the base view
-func (s *InteractiveSettingsOverlay) layerDialogOver(_, dialogView string) string {
+func (s *InteractiveSettingsOverlay) layerDialogOver(dialogView string) string {
 	// Place dialog in center
 	return lipgloss.Place(
 		s.width,

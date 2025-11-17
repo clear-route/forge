@@ -224,6 +224,7 @@ func matchesPattern(command, pattern, matchType string) bool {
 }
 
 // AddPattern adds a new pattern to the whitelist.
+// Defaults to "prefix" type for backward compatibility.
 func (s *CommandWhitelistSection) AddPattern(pattern, description string) error {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
@@ -240,6 +241,7 @@ func (s *CommandWhitelistSection) AddPattern(pattern, description string) error 
 	s.patterns = append(s.patterns, WhitelistPattern{
 		Pattern:     pattern,
 		Description: description,
+		Type:        "prefix", // Default to prefix for consistency with SetData
 	})
 
 	return nil
@@ -262,12 +264,14 @@ func (s *CommandWhitelistSection) GetPatterns() []WhitelistPattern {
 		copy[i] = WhitelistPattern{
 			Pattern:     p.Pattern,
 			Description: p.Description,
+			Type:        p.Type,
 		}
 	}
 	return copy
 }
 
 // UpdatePattern updates a pattern at the specified index.
+// Preserves the existing Type field.
 func (s *CommandWhitelistSection) UpdatePattern(index int, pattern, description string) error {
 	if index < 0 || index >= len(s.patterns) {
 		return fmt.Errorf("invalid pattern index: %d", index)
@@ -288,6 +292,7 @@ func (s *CommandWhitelistSection) UpdatePattern(index int, pattern, description 
 	s.patterns[index] = WhitelistPattern{
 		Pattern:     pattern,
 		Description: description,
+		Type:        s.patterns[index].Type, // Preserve existing type
 	}
 
 	return nil
