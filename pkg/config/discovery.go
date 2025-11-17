@@ -49,17 +49,17 @@ func DiscoverToolsFromAgent(agent interface{}) error {
 		if namer, ok := tool.(toolNamer); ok {
 			toolName = namer.Name()
 		}
-		
+
 		// Use reflection to check if the tool has a GeneratePreview method
 		// This is necessary because the tools are returned as []interface{} which loses type information
 		toolType := reflect.TypeOf(tool)
-		
+
 		// Check if the type has a GeneratePreview method
 		method, hasMethod := toolType.MethodByName("GeneratePreview")
 		if !hasMethod {
 			continue
 		}
-		
+
 		// Verify the method signature matches what we expect
 		// GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error)
 		// The method should have 3 inputs (receiver, context, json.RawMessage) and 2 outputs (pointer, error)
@@ -67,7 +67,7 @@ func DiscoverToolsFromAgent(agent interface{}) error {
 		if methodType.NumIn() != 3 || methodType.NumOut() != 2 {
 			continue
 		}
-		
+
 		// Tool implements Previewable interface, add it to config
 		if toolName != "" {
 			autoApproval.EnsureToolExists(toolName)

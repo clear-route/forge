@@ -95,7 +95,10 @@ func (s *CommandWhitelistSection) SetData(data map[string]interface{}) error {
 			return fmt.Errorf("invalid pattern at index %d: missing or invalid pattern field", i)
 		}
 
-		description, _ := patternMap["description"].(string)
+		description, ok := patternMap["description"].(string)
+		if !ok {
+			description = "" // Default to empty string if description is missing
+		}
 
 		patterns = append(patterns, WhitelistPattern{
 			Pattern:     pattern,

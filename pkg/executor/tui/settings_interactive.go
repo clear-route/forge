@@ -29,8 +29,8 @@ type InteractiveSettingsOverlay struct {
 	scrollOffset int
 
 	// Dialog state
-	activeDialog      *inputDialog
-	confirmDialog     *confirmDialog
+	activeDialog  *inputDialog
+	confirmDialog *confirmDialog
 }
 
 // settingsSection represents a section with its items
@@ -70,14 +70,14 @@ type inputDialog struct {
 
 // inputField represents a single input field in a dialog
 type inputField struct {
-	label      string
-	key        string
-	value      string
-	fieldType  fieldType
-	options    []string // For radio buttons
-	maxLength  int
-	validator  func(string) error
-	errorMsg   string
+	label     string
+	key       string
+	value     string
+	fieldType fieldType
+	options   []string // For radio buttons
+	maxLength int
+	validator func(string) error
+	errorMsg  string
 }
 
 // fieldType defines the type of input field
@@ -156,7 +156,7 @@ func (s *InteractiveSettingsOverlay) loadSettings() {
 				section.items = append(section.items, item)
 			}
 
-		case "command_whitelist":
+		case sectionIDCommandWhitelist:
 			// Show patterns as list items
 			if patterns, ok := data["patterns"].([]interface{}); ok {
 				for i, p := range patterns {
@@ -197,78 +197,83 @@ func (s *InteractiveSettingsOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		return s.handleConfirmInput(msg)
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "q":
-			if s.hasChanges {
-				// Show confirmation dialog
-				s.showUnsavedChangesDialog()
-				return s, nil
-			}
-			return nil, nil
-
-		case "ctrl+s":
-			// Save changes
-			if s.hasChanges {
-				if err := s.saveSettings(); err == nil {
-					s.hasChanges = false
-				}
-			}
-			return s, nil
-
-		case "up", "k":
-			s.navigateUp()
-			return s, nil
-
-		case "down", "j":
-			s.navigateDown()
-			return s, nil
-
-		case "left", "h":
-			s.navigateLeft()
-			return s, nil
-
-		case "right", "l":
-			s.navigateRight()
-			return s, nil
-
-		case " ", "enter":
-			s.toggleCurrent()
-			return s, nil
-
-		case "tab":
-			s.nextSection()
-			return s, nil
-
-		case "shift+tab":
-			s.prevSection()
-			return s, nil
-
-		case "a":
-			// Add new pattern (only in whitelist section)
-			if s.isInWhitelistSection() {
-				s.showAddPatternDialog()
-			}
-			return s, nil
-
-		case "e":
-			// Edit selected pattern
-			if s.isInWhitelistSection() && s.isPatternSelected() {
-				s.showEditPatternDialog()
-			}
-			return s, nil
-
-		case "d":
-			// Delete selected pattern
-			if s.isInWhitelistSection() && s.isPatternSelected() {
-				s.showDeleteConfirmation()
-			}
-			return s, nil
-		}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return s, nil
 	}
 
+	return s.handleKeyPress(keyMsg)
+}
+
+// handleKeyPress processes keyboard input for the settings overlay
+func (s *InteractiveSettingsOverlay) handleKeyPress(keyMsg tea.KeyMsg) (Overlay, tea.Cmd) {
+	switch keyMsg.String() {
+	case keyEsc, "q":
+		return s.handleEscape()
+	case "ctrl+s":
+		return s.handleSave()
+	case "up", "k":
+		s.navigateUp()
+	case "down", "j":
+		s.navigateDown()
+	case "left", "h":
+		s.navigateLeft()
+	case "right", "l":
+		s.navigateRight()
+	case " ", keyEnter:
+		s.toggleCurrent()
+	case keyTab:
+		s.nextSection()
+	case "shift+tab":
+		s.prevSection()
+	case "a":
+		s.handleAddPattern()
+	case "e":
+		s.handleEditPattern()
+	case "d":
+		s.handleDeletePattern()
+	}
 	return s, nil
+}
+
+// handleEscape handles the escape key press
+func (s *InteractiveSettingsOverlay) handleEscape() (Overlay, tea.Cmd) {
+	if s.hasChanges {
+		s.showUnsavedChangesDialog()
+		return s, nil
+	}
+	return nil, nil
+}
+
+// handleSave handles the save command
+func (s *InteractiveSettingsOverlay) handleSave() (Overlay, tea.Cmd) {
+	if s.hasChanges {
+		if err := s.saveSettings(); err == nil {
+			s.hasChanges = false
+		}
+	}
+	return s, nil
+}
+
+// handleAddPattern handles adding a new pattern
+func (s *InteractiveSettingsOverlay) handleAddPattern() {
+	if s.isInWhitelistSection() {
+		s.showAddPatternDialog()
+	}
+}
+
+// handleEditPattern handles editing a selected pattern
+func (s *InteractiveSettingsOverlay) handleEditPattern() {
+	if s.isInWhitelistSection() && s.isPatternSelected() {
+		s.showEditPatternDialog()
+	}
+}
+
+// handleDeletePattern handles deleting a selected pattern
+func (s *InteractiveSettingsOverlay) handleDeletePattern() {
+	if s.isInWhitelistSection() && s.isPatternSelected() {
+		s.showDeleteConfirmation()
+	}
 }
 
 // navigateUp moves selection up
@@ -614,7 +619,7 @@ func (s *InteractiveSettingsOverlay) showEditPatternDialog() {
 
 	section := &s.sections[s.selectedSection]
 	item := section.items[s.selectedItem]
-	
+
 	patternMap, ok := item.value.(map[string]interface{})
 	if !ok {
 		return
@@ -676,7 +681,7 @@ func (s *InteractiveSettingsOverlay) showDeleteConfirmation() {
 
 	section := &s.sections[s.selectedSection]
 	item := section.items[s.selectedItem]
-	
+
 	patternMap, ok := item.value.(map[string]interface{})
 	if !ok {
 		return
@@ -812,7 +817,7 @@ func (s *InteractiveSettingsOverlay) deletePattern(index int) {
 
 	// Remove the item
 	section.items = append(section.items[:index], section.items[index+1:]...)
-	
+
 	// Adjust selected item if needed
 	if s.selectedItem >= len(section.items) && s.selectedItem > 0 {
 		s.selectedItem = len(section.items) - 1
@@ -827,101 +832,132 @@ func (s *InteractiveSettingsOverlay) handleDialogInput(msg tea.Msg) (Overlay, te
 		return s, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
-			if s.activeDialog.onCancel != nil {
-				s.activeDialog.onCancel()
-			}
-			return s, nil
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return s, nil
+	}
 
-		case "enter":
-			// Validate and confirm
-			values := make(map[string]string)
-			for _, field := range s.activeDialog.fields {
-				values[field.key] = field.value
-				
-				// Run validator if present
-				if field.validator != nil {
-					if err := field.validator(field.value); err != nil {
-						field.errorMsg = err.Error()
-						return s, nil
-					}
-				}
-			}
+	switch keyMsg.String() {
+	case keyEsc:
+		return s.handleDialogCancel()
+	case "enter":
+		return s.handleDialogConfirm()
+	case "tab", "down":
+		s.moveToNextDialogField()
+	case "shift+tab", "up":
+		s.moveToPrevDialogField()
+	case " ":
+		s.handleDialogSpace()
+	case "backspace":
+		s.handleDialogBackspace()
+	default:
+		s.handleDialogCharInput(keyMsg)
+	}
 
-			// Call onConfirm
-			if s.activeDialog.onConfirm != nil {
-				if err := s.activeDialog.onConfirm(values); err != nil {
-					// Show error
-					return s, nil
-				}
-			}
-			return s, nil
+	return s, nil
+}
 
-		case "tab", "down":
-			// Move to next field
-			s.activeDialog.selectedField++
-			if s.activeDialog.selectedField >= len(s.activeDialog.fields) {
-				s.activeDialog.selectedField = 0
-			}
-			return s, nil
+// handleDialogCancel handles canceling the dialog
+func (s *InteractiveSettingsOverlay) handleDialogCancel() (Overlay, tea.Cmd) {
+	if s.activeDialog.onCancel != nil {
+		s.activeDialog.onCancel()
+	}
+	return s, nil
+}
 
-		case "shift+tab", "up":
-			// Move to previous field
-			s.activeDialog.selectedField--
-			if s.activeDialog.selectedField < 0 {
-				s.activeDialog.selectedField = len(s.activeDialog.fields) - 1
-			}
-			return s, nil
+// handleDialogConfirm validates and confirms the dialog input
+func (s *InteractiveSettingsOverlay) handleDialogConfirm() (Overlay, tea.Cmd) {
+	values := make(map[string]string)
 
-		case " ":
-			// Handle space for both radio buttons and text fields
-			field := &s.activeDialog.fields[s.activeDialog.selectedField]
-			if field.fieldType == fieldTypeRadio && len(field.options) > 0 {
-				// Toggle radio button
-				currentIdx := 0
-				for i, opt := range field.options {
-					if opt == field.value {
-						currentIdx = i
-						break
-					}
-				}
-				nextIdx := (currentIdx + 1) % len(field.options)
-				field.value = field.options[nextIdx]
-			} else if field.fieldType == fieldTypeText {
-				// Add space to text field
-				if field.maxLength == 0 || len(field.value) < field.maxLength {
-					field.value += " "
-					field.errorMsg = ""
-				}
-			}
-			return s, nil
+	// Validate all fields
+	for i := range s.activeDialog.fields {
+		field := &s.activeDialog.fields[i]
+		values[field.key] = field.value
 
-		case "backspace":
-			// Delete character from text field
-			field := &s.activeDialog.fields[s.activeDialog.selectedField]
-			if field.fieldType == fieldTypeText && len(field.value) > 0 {
-				field.value = field.value[:len(field.value)-1]
-				field.errorMsg = ""
+		if field.validator != nil {
+			if err := field.validator(field.value); err != nil {
+				field.errorMsg = err.Error()
+				return s, nil
 			}
-			return s, nil
+		}
+	}
 
-		default:
-			// Add character to text field
-			field := &s.activeDialog.fields[s.activeDialog.selectedField]
-			if field.fieldType == fieldTypeText {
-				if len(msg.String()) == 1 && (field.maxLength == 0 || len(field.value) < field.maxLength) {
-					field.value += msg.String()
-					field.errorMsg = ""
-				}
-			}
+	// Call onConfirm callback
+	if s.activeDialog.onConfirm != nil {
+		if err := s.activeDialog.onConfirm(values); err != nil {
 			return s, nil
 		}
 	}
 
 	return s, nil
+}
+
+// moveToNextDialogField moves to the next field in the dialog
+func (s *InteractiveSettingsOverlay) moveToNextDialogField() {
+	s.activeDialog.selectedField++
+	if s.activeDialog.selectedField >= len(s.activeDialog.fields) {
+		s.activeDialog.selectedField = 0
+	}
+}
+
+// moveToPrevDialogField moves to the previous field in the dialog
+func (s *InteractiveSettingsOverlay) moveToPrevDialogField() {
+	s.activeDialog.selectedField--
+	if s.activeDialog.selectedField < 0 {
+		s.activeDialog.selectedField = len(s.activeDialog.fields) - 1
+	}
+}
+
+// handleDialogSpace handles space key in dialog (toggle radio or add space to text)
+func (s *InteractiveSettingsOverlay) handleDialogSpace() {
+	field := &s.activeDialog.fields[s.activeDialog.selectedField]
+
+	if field.fieldType == fieldTypeRadio && len(field.options) > 0 {
+		s.toggleRadioButton(field)
+	} else if field.fieldType == fieldTypeText {
+		s.addSpaceToTextField(field)
+	}
+}
+
+// toggleRadioButton toggles the radio button to next option
+func (s *InteractiveSettingsOverlay) toggleRadioButton(field *inputField) {
+	currentIdx := 0
+	for i, opt := range field.options {
+		if opt == field.value {
+			currentIdx = i
+			break
+		}
+	}
+	nextIdx := (currentIdx + 1) % len(field.options)
+	field.value = field.options[nextIdx]
+}
+
+// addSpaceToTextField adds a space character to the text field
+func (s *InteractiveSettingsOverlay) addSpaceToTextField(field *inputField) {
+	if field.maxLength == 0 || len(field.value) < field.maxLength {
+		field.value += " "
+		field.errorMsg = ""
+	}
+}
+
+// handleDialogBackspace handles backspace key in dialog
+func (s *InteractiveSettingsOverlay) handleDialogBackspace() {
+	field := &s.activeDialog.fields[s.activeDialog.selectedField]
+	if field.fieldType == fieldTypeText && len(field.value) > 0 {
+		field.value = field.value[:len(field.value)-1]
+		field.errorMsg = ""
+	}
+}
+
+// handleDialogCharInput handles character input in dialog
+func (s *InteractiveSettingsOverlay) handleDialogCharInput(keyMsg tea.KeyMsg) {
+	field := &s.activeDialog.fields[s.activeDialog.selectedField]
+	if field.fieldType == fieldTypeText {
+		if len(keyMsg.String()) == 1 && (field.maxLength == 0 || len(field.value) < field.maxLength) {
+			field.value += keyMsg.String()
+			field.errorMsg = ""
+		}
+	}
 }
 
 // handleConfirmInput handles keyboard input for confirmation dialogs
@@ -930,9 +966,8 @@ func (s *InteractiveSettingsOverlay) handleConfirmInput(msg tea.Msg) (Overlay, t
 		return s, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
 		case "y", "Y":
 			if s.confirmDialog.onYes != nil {
 				s.confirmDialog.onYes()
@@ -1083,8 +1118,8 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 
 			// Character count or error
 			if field.errorMsg != "" {
-				errorStyle := lipgloss.NewStyle().Foreground(salmonPink)
-				content.WriteString(errorStyle.Render(field.errorMsg))
+				errMsgStyle := lipgloss.NewStyle().Foreground(salmonPink)
+				content.WriteString(errMsgStyle.Render(field.errorMsg))
 				content.WriteString("\n")
 			} else if field.maxLength > 0 {
 				countStyle := lipgloss.NewStyle().Foreground(mutedGray)
@@ -1187,7 +1222,7 @@ func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
 }
 
 // layerDialogOver layers a dialog over the base view
-func (s *InteractiveSettingsOverlay) layerDialogOver(baseView, dialogView string) string {
+func (s *InteractiveSettingsOverlay) layerDialogOver(_, dialogView string) string {
 	// Place dialog in center
 	return lipgloss.Place(
 		s.width,
@@ -1237,7 +1272,7 @@ func (s *InteractiveSettingsOverlay) renderListItem(item settingsItem, isSelecte
 
 // renderError renders an error message
 func (s *InteractiveSettingsOverlay) renderError(message string) string {
-	errorStyle := lipgloss.NewStyle().
+	errMsgStyle := lipgloss.NewStyle().
 		Foreground(salmonPink).
 		Bold(true)
 
@@ -1249,7 +1284,7 @@ func (s *InteractiveSettingsOverlay) renderError(message string) string {
 		Width(s.width - 4).
 		Height(s.height - 4)
 
-	content := errorStyle.Render("Error: ") + message
+	content := errMsgStyle.Render("Error: ") + message
 
 	return lipgloss.Place(
 		s.width,

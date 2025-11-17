@@ -94,17 +94,17 @@ func (d *DiffViewer) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 // handleKeyMsg processes keyboard input for the diff viewer
 func (d *DiffViewer) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "esc", "ctrl+r":
+	case "ctrl+c", keyEsc, "ctrl+r":
 		return d.handleReject()
 	case "ctrl+a":
 		return d.handleApprove()
-	case "tab":
+	case keyTab:
 		return d.handleToggleSelection()
-	case "enter":
+	case keyEnter:
 		return d.handleSubmit()
-	case "left", "h":
+	case keyLeft, "h":
 		return d.handleSelectAccept()
-	case "right", "l":
+	case keyRight, "l":
 		return d.handleSelectReject()
 	default:
 		return d.handleViewportScroll(msg)

@@ -9,6 +9,11 @@ import (
 	"github.com/entrhq/forge/pkg/config"
 )
 
+const (
+	sectionIDAutoApproval     = "auto_approval"
+	sectionIDCommandWhitelist = "command_whitelist"
+)
+
 // SettingsOverlay displays and manages application settings
 type SettingsOverlay struct {
 	width   int
@@ -27,10 +32,9 @@ func NewSettingsOverlay(width, height int) *SettingsOverlay {
 
 // Update handles messages for the settings overlay
 func (s *SettingsOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "q":
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case keyEsc, "q":
 			// Close overlay
 			return nil, nil
 		}
@@ -47,19 +51,19 @@ func (s *SettingsOverlay) View() string {
 	}
 
 	manager := config.Global()
-	
+
 	var content strings.Builder
-	
+
 	// Title using Forge colors
 	title := OverlayTitleStyle.Render("⚙️  Settings")
 	content.WriteString(title)
 	content.WriteString("\n\n")
-	
+
 	// Instructions using Forge subtitle style
 	instructions := OverlaySubtitleStyle.Render("Press [Esc] or [q] to close • Settings are saved to ~/.forge/config.json")
 	content.WriteString(instructions)
 	content.WriteString("\n\n")
-	
+
 	// Render each section
 	sections := manager.GetSections()
 	for i, section := range sections {
@@ -68,13 +72,13 @@ func (s *SettingsOverlay) View() string {
 		}
 		content.WriteString(s.renderSection(section))
 	}
-	
+
 	content.WriteString("\n\n")
 	content.WriteString(OverlayHelpStyle.Render("Note: Full settings editor with interactive controls coming soon!"))
-	
+
 	// Use Forge overlay container style
 	boxStyle := CreateOverlayContainerStyle(s.width - 4).Height(s.height - 4)
-	
+
 	return lipgloss.Place(
 		s.width,
 		s.height,
@@ -87,15 +91,15 @@ func (s *SettingsOverlay) View() string {
 // renderSection renders a single configuration section
 func (s *SettingsOverlay) renderSection(section config.Section) string {
 	var out strings.Builder
-	
+
 	// Section title using mint green (success color)
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(mintGreen)
-	
+
 	out.WriteString(titleStyle.Render("▸ " + section.Title()))
 	out.WriteString("\n")
-	
+
 	// Section description using muted gray
 	if desc := section.Description(); desc != "" {
 		descStyle := lipgloss.NewStyle().
@@ -105,19 +109,19 @@ func (s *SettingsOverlay) renderSection(section config.Section) string {
 		out.WriteString(descStyle.Render(desc))
 		out.WriteString("\n")
 	}
-	
+
 	// Section data
 	data := section.Data()
 	if len(data) == 0 {
 		out.WriteString("  (no settings configured)\n")
 		return out.String()
 	}
-	
+
 	// Render based on section type
 	switch section.ID() {
-	case "auto_approval":
+	case sectionIDAutoApproval:
 		s.renderAutoApprovalData(&out, data)
-	case "command_whitelist":
+	case sectionIDCommandWhitelist:
 		s.renderCommandWhitelistData(&out, data)
 	default:
 		// Generic rendering
@@ -125,7 +129,7 @@ func (s *SettingsOverlay) renderSection(section config.Section) string {
 			out.WriteString(fmt.Sprintf("  %s: %v\n", key, value))
 		}
 	}
-	
+
 	return out.String()
 }
 
@@ -136,7 +140,7 @@ func (s *SettingsOverlay) renderAutoApprovalData(out *strings.Builder, data map[
 		out.WriteString("  Edit ~/.forge/config.json to enable auto-approval for specific tools.\n")
 		return
 	}
-	
+
 	// Count enabled tools
 	enabledCount := 0
 	for _, v := range data {
@@ -144,9 +148,9 @@ func (s *SettingsOverlay) renderAutoApprovalData(out *strings.Builder, data map[
 			enabledCount++
 		}
 	}
-	
+
 	out.WriteString(fmt.Sprintf("  %d/%d tools auto-approved\n", enabledCount, len(data)))
-	
+
 	// Show first few enabled tools
 	shown := 0
 	maxShow := 3
@@ -170,15 +174,15 @@ func (s *SettingsOverlay) renderCommandWhitelistData(out *strings.Builder, data 
 		out.WriteString("  No commands whitelisted\n")
 		return
 	}
-	
+
 	patternsList, ok := patterns.([]interface{})
 	if !ok || len(patternsList) == 0 {
 		out.WriteString("  No commands whitelisted\n")
 		return
 	}
-	
+
 	out.WriteString(fmt.Sprintf("  %d command pattern(s) whitelisted\n", len(patternsList)))
-	
+
 	// Show first few patterns
 	maxShow := 3
 	for i, p := range patternsList {
@@ -186,7 +190,7 @@ func (s *SettingsOverlay) renderCommandWhitelistData(out *strings.Builder, data 
 			out.WriteString(fmt.Sprintf("    ... and %d more\n", len(patternsList)-maxShow))
 			break
 		}
-		
+
 		if patternMap, ok := p.(map[string]interface{}); ok {
 			pattern := patternMap["pattern"]
 			desc := patternMap["description"]
@@ -201,19 +205,19 @@ func (s *SettingsOverlay) renderCommandWhitelistData(out *strings.Builder, data 
 
 // renderError renders an error message
 func (s *SettingsOverlay) renderError(message string) string {
-	errorStyle := lipgloss.NewStyle().
+	errStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("1")).
 		Bold(true)
-	
+
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("1")).
 		Padding(1, 2).
 		Width(s.width - 4).
 		Height(s.height - 4)
-	
-	content := errorStyle.Render("Error: ") + message
-	
+
+	content := errStyle.Render("Error: ") + message
+
 	return lipgloss.Place(
 		s.width,
 		s.height,

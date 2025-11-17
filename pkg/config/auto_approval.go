@@ -1,8 +1,8 @@
 package config
 
 import (
-	"maps"
 	"fmt"
+	"maps"
 )
 
 // AutoApprovalSection manages auto-approval settings for tools.
