@@ -51,4 +51,36 @@ type Agent interface {
 	// GetTools returns a list of all available tools registered with the agent.
 	// This includes both built-in tools and any custom tools that have been registered.
 	GetTools() []interface{}
+
+	// GetContextInfo returns detailed context information for debugging and display.
+	// This includes system prompt length, tool count, message history, and token usage.
+	GetContextInfo() *ContextInfo
+}
+
+// ContextInfo contains detailed agent context statistics
+type ContextInfo struct {
+	// System prompt
+	SystemPromptTokens int
+	CustomInstructions bool
+
+	// Tool system
+	ToolCount  int
+	ToolTokens int
+	ToolNames  []string
+
+	// Message history
+	MessageCount       int
+	ConversationTurns  int
+	ConversationTokens int
+
+	// Token usage - current context
+	CurrentContextTokens int
+	MaxContextTokens     int
+	FreeTokens           int
+	UsagePercent         float64
+
+	// Token usage - cumulative across all API calls
+	TotalPromptTokens     int
+	TotalCompletionTokens int
+	TotalTokens           int
 }

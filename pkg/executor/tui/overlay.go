@@ -25,6 +25,8 @@ const (
 	OverlayModeSlashCommandPreview
 	// OverlayModeSettings shows the settings overlay
 	OverlayModeSettings
+	// OverlayModeContext shows the context information overlay
+	OverlayModeContext
 )
 
 // Overlay is the base interface for all overlay components

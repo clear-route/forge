@@ -91,6 +91,15 @@ func init() {
 		MinArgs:     0,
 		MaxArgs:     0,
 	})
+
+	registerCommand(&SlashCommand{
+		Name:        "context",
+		Description: "Show detailed context information",
+		Type:        CommandTypeTUI,
+		Handler:     handleContextCommand,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
 }
 
 // registerCommand adds a command to the registry
@@ -443,6 +452,50 @@ func getCurrentBranch(workingDir string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// handleContextCommand shows detailed context information
+func handleContextCommand(m *model, args []string) interface{} {
+	// Get context info from agent
+	if m.agent == nil {
+		m.showToast("Error", "Agent not available", "❌", true)
+		return nil
+	}
+
+	contextInfo := m.agent.GetContextInfo()
+	
+	// Add token usage from TUI tracking
+	freeTokens := 0
+	usagePercent := 0.0
+	if contextInfo.MaxContextTokens > 0 {
+		freeTokens = contextInfo.MaxContextTokens - contextInfo.CurrentContextTokens
+		usagePercent = float64(contextInfo.CurrentContextTokens) / float64(contextInfo.MaxContextTokens) * 100.0
+	}
+
+	// Build overlay info structure
+	overlayInfo := &ContextInfo{
+		SystemPromptTokens:    contextInfo.SystemPromptTokens,
+		CustomInstructions:    contextInfo.CustomInstructions,
+		ToolCount:             contextInfo.ToolCount,
+		ToolTokens:            contextInfo.ToolTokens,
+		ToolNames:             contextInfo.ToolNames,
+		MessageCount:          contextInfo.MessageCount,
+		ConversationTurns:     contextInfo.ConversationTurns,
+		ConversationTokens:    contextInfo.ConversationTokens,
+		CurrentContextTokens:  contextInfo.CurrentContextTokens,
+		MaxContextTokens:      contextInfo.MaxContextTokens,
+		FreeTokens:            freeTokens,
+		UsagePercent:          usagePercent,
+		TotalPromptTokens:     m.totalPromptTokens,
+		TotalCompletionTokens: m.totalCompletionTokens,
+		TotalTokens:           m.totalTokens,
+	}
+
+	// Create and activate context overlay
+	contextOverlay := NewContextOverlay(overlayInfo)
+	m.overlay.activate(OverlayModeContext, contextOverlay)
+
+	return nil
 }
 
 // toastMsg is a message type for showing toast notifications

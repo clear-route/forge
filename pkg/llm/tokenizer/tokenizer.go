@@ -69,6 +69,9 @@ func (t *Tokenizer) CountMessagesTokens(messages []*types.Message) int {
 	for _, msg := range messages {
 		total += t.CountMessageTokens(msg)
 	}
-	// Add 3 tokens for reply priming
-	return total + 3
+	// Add 3 tokens for reply priming (only if there are messages)
+	if len(messages) > 0 {
+		total += 3
+	}
+	return total
 }

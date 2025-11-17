@@ -519,6 +519,108 @@ func (a *DefaultAgent) GetTools() []interface{} {
 	return toolsList
 }
 
+// GetContextInfo returns detailed context information for debugging and display
+func (a *DefaultAgent) GetContextInfo() *ContextInfo {
+	a.toolsMu.RLock()
+	defer a.toolsMu.RUnlock()
+
+	// Build system prompt without tools to calculate base system tokens
+	baseSystemPrompt := prompts.NewPromptBuilder().
+		WithCustomInstructions(a.customInstructions).
+		Build()
+	
+	// Build just the tools section to calculate tool tokens
+	toolsSection := ""
+	if len(a.tools) > 0 {
+		toolsSection = "<available_tools>\n" + 
+			prompts.FormatToolSchemas(a.getToolsList()) + 
+			"</available_tools>\n\n"
+	}
+	
+	// Calculate token counts for each section
+	systemPromptTokens := 0
+	toolTokens := 0
+	if a.tokenizer != nil {
+		systemPromptTokens = a.tokenizer.CountTokens(baseSystemPrompt)
+		toolTokens = a.tokenizer.CountTokens(toolsSection)
+	}
+	
+	// Build full system prompt for current context calculation
+	fullSystemPrompt := prompts.NewPromptBuilder().
+		WithTools(a.getToolsList()).
+		WithCustomInstructions(a.customInstructions).
+		Build()
+	
+	// Get tool names
+	toolNames := make([]string, 0, len(a.tools))
+	for name := range a.tools {
+		toolNames = append(toolNames, name)
+	}
+
+	// Get message history stats
+	messages := a.memory.GetAll()
+	messageCount := len(messages)
+	
+	// Count conversation turns (user messages)
+	conversationTurns := 0
+	for _, msg := range messages {
+		if msg.Role == types.RoleUser {
+			conversationTurns++
+		}
+	}
+
+	// Calculate token counts
+	conversationTokens := 0
+	currentTokens := 0
+	if a.tokenizer != nil {
+		conversationTokens = a.tokenizer.CountMessagesTokens(messages)
+		// Calculate current context tokens
+		currentTokens = conversationTokens + a.tokenizer.CountTokens(fullSystemPrompt)
+	} else {
+		// Fallback: approximate token counting when tokenizer is unavailable
+		// Use rough estimate of 1 token ≈ 4 characters
+		for _, msg := range messages {
+			conversationTokens += (len(msg.Content) + len(string(msg.Role)) + 12) / 4 // +12 for message overhead
+		}
+		currentTokens = conversationTokens + len(fullSystemPrompt)/4
+	}
+	
+	// Get max tokens from context manager
+	maxTokens := 0
+	if a.contextManager != nil {
+		maxTokens = a.contextManager.GetMaxTokens()
+	}
+
+	// Calculate free tokens and usage percentage
+	freeTokens := 0
+	usagePercent := 0.0
+	if maxTokens > 0 {
+		freeTokens = maxTokens - currentTokens
+		if freeTokens < 0 {
+			freeTokens = 0
+		}
+		usagePercent = float64(currentTokens) / float64(maxTokens) * 100.0
+	}
+
+	return &ContextInfo{
+		SystemPromptTokens:    systemPromptTokens,
+		CustomInstructions:    a.customInstructions != "",
+		ToolCount:             len(a.tools),
+		ToolTokens:            toolTokens,
+		ToolNames:             toolNames,
+		MessageCount:          messageCount,
+		ConversationTurns:     conversationTurns,
+		ConversationTokens:    conversationTokens,
+		CurrentContextTokens:  currentTokens,
+		MaxContextTokens:      maxTokens,
+		FreeTokens:            freeTokens,
+		UsagePercent:          usagePercent,
+		TotalPromptTokens:     0, // These will be filled by the executor from its tracking
+		TotalCompletionTokens: 0,
+		TotalTokens:           0,
+	}
+}
+
 // getToolsList returns tools as []tools.Tool for internal use
 func (a *DefaultAgent) getToolsList() []tools.Tool {
 	a.toolsMu.RLock()
