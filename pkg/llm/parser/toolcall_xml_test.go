@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -165,5 +166,5 @@ func TestToolCallParser_XMLWithSpecialCharacters(t *testing.T) {
 
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || contains(s[1:], substr)))
+	return strings.Contains(s, substr)
 }

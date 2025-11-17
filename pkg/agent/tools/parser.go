@@ -82,8 +82,6 @@ func ParseToolCall(text string) (*ToolCall, string, error) {
 // the tool call itself, and any remaining text after the tool call.
 // If no tool call is found, it returns the entire text as thinking with nil tool call.
 func ExtractThinkingAndToolCall(text string) (thinking string, toolCall *ToolCall, remaining string, err error) {
-	toolRegex := regexp.MustCompile(`(?s)<tool>.*?</tool>`)
-
 	if !toolRegex.MatchString(text) {
 		return text, nil, "", nil
 	}
@@ -107,7 +105,6 @@ func ExtractThinkingAndToolCall(text string) (thinking string, toolCall *ToolCal
 
 // HasToolCall checks if the text contains a tool call.
 func HasToolCall(text string) bool {
-	toolRegex := regexp.MustCompile(`(?s)<tool>.*?</tool>`)
 	return toolRegex.MatchString(text)
 }
 
