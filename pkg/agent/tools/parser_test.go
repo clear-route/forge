@@ -7,7 +7,13 @@ import (
 func TestParseToolCall(t *testing.T) {
 	t.Run("ValidToolCall", func(t *testing.T) {
 		text := `Some thinking here
-<tool>{"server_name": "local", "tool_name": "task_completion", "arguments": {"result": "Done!"}}</tool>
+<tool>
+<server_name>local</server_name>
+<tool_name>task_completion</tool_name>
+<arguments>
+  <result>Done!</result>
+</arguments>
+</tool>
 Some remaining text`
 
 		toolCall, remaining, err := ParseToolCall(text)
@@ -29,7 +35,12 @@ Some remaining text`
 	})
 
 	t.Run("ToolCallWithoutServerName", func(t *testing.T) {
-		text := `<tool>{"tool_name": "ask_question", "arguments": {"question": "What?"}}</tool>`
+		text := `<tool>
+<tool_name>ask_question</tool_name>
+<arguments>
+  <question>What?</question>
+</arguments>
+</tool>`
 
 		toolCall, _, err := ParseToolCall(text)
 		if err != nil {
@@ -57,17 +68,20 @@ Some remaining text`
 		}
 	})
 
-	t.Run("InvalidJSON", func(t *testing.T) {
-		text := `<tool>not valid json</tool>`
+	t.Run("InvalidXML", func(t *testing.T) {
+		text := `<tool>not valid xml</tool>`
 
 		_, _, err := ParseToolCall(text)
 		if err == nil {
-			t.Error("expected error for invalid JSON")
+			t.Error("expected error for invalid XML")
 		}
 	})
 
 	t.Run("MissingToolName", func(t *testing.T) {
-		text := `<tool>{"server_name": "local", "arguments": {}}</tool>`
+		text := `<tool>
+<server_name>local</server_name>
+<arguments></arguments>
+</tool>`
 
 		_, _, err := ParseToolCall(text)
 		if err == nil {
@@ -81,7 +95,12 @@ func TestExtractThinkingAndToolCall(t *testing.T) {
 		text := `I need to complete this task.
 Let me use the completion tool.
 
-<tool>{"tool_name": "task_completion", "arguments": {"result": "All done!"}}</tool>
+<tool>
+<tool_name>task_completion</tool_name>
+<arguments>
+  <result>All done!</result>
+</arguments>
+</tool>
 
 After thought.`
 
@@ -109,7 +128,12 @@ After thought.`
 	})
 
 	t.Run("OnlyToolCall", func(t *testing.T) {
-		text := `<tool>{"tool_name": "converse", "arguments": {"message": "Hi!"}}</tool>`
+		text := `<tool>
+<tool_name>converse</tool_name>
+<arguments>
+  <message>Hi!</message>
+</arguments>
+</tool>`
 
 		thinking, toolCall, _, err := ExtractThinkingAndToolCall(text)
 		if err != nil {
@@ -146,7 +170,7 @@ After thought.`
 
 func TestHasToolCall(t *testing.T) {
 	t.Run("HasToolCall", func(t *testing.T) {
-		text := `Some text <tool>{"tool_name": "test"}</tool> more text`
+		text := `Some text <tool><tool_name>test</tool_name></tool> more text`
 		if !HasToolCall(text) {
 			t.Error("expected HasToolCall to return true")
 		}
@@ -172,7 +196,9 @@ func TestValidateToolCall(t *testing.T) {
 		tc := &ToolCall{
 			ServerName: "local",
 			ToolName:   "test_tool",
-			Arguments:  []byte(`{}`),
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err != nil {
 			t.Errorf("expected valid tool call, got error: %v", err)
@@ -188,7 +214,9 @@ func TestValidateToolCall(t *testing.T) {
 	t.Run("MissingToolName", func(t *testing.T) {
 		tc := &ToolCall{
 			ServerName: "local",
-			Arguments:  []byte(`{}`),
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err == nil {
 			t.Error("expected error for missing tool name")
@@ -197,8 +225,10 @@ func TestValidateToolCall(t *testing.T) {
 
 	t.Run("MissingServerName", func(t *testing.T) {
 		tc := &ToolCall{
-			ToolName:  "test_tool",
-			Arguments: []byte(`{}`),
+			ToolName: "test_tool",
+			Arguments: ArgumentsBlock{
+				InnerXML: []byte(``),
+			},
 		}
 		if err := ValidateToolCall(tc); err == nil {
 			t.Error("expected error for missing server name")

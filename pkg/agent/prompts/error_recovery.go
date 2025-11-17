@@ -12,7 +12,7 @@ type ErrorRecoveryType string
 
 const (
 	ErrorTypeNoToolCall      ErrorRecoveryType = "no_tool_call"
-	ErrorTypeInvalidJSON     ErrorRecoveryType = "invalid_json"
+	ErrorTypeInvalidXML      ErrorRecoveryType = "invalid_xml"
 	ErrorTypeMissingToolName ErrorRecoveryType = "missing_tool_name"
 	ErrorTypeUnknownTool     ErrorRecoveryType = "unknown_tool"
 	ErrorTypeToolExecution   ErrorRecoveryType = "tool_execution"
@@ -33,7 +33,7 @@ func BuildErrorRecoveryMessage(ctx ErrorRecoveryContext) string {
 	switch ctx.Type {
 	case ErrorTypeNoToolCall:
 		return buildNoToolCallError()
-	case ErrorTypeInvalidJSON:
+	case ErrorTypeInvalidXML:
 		return buildParseError(ctx.Error, ctx.Content)
 	case ErrorTypeMissingToolName:
 		return buildMissingToolNameError()

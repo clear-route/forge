@@ -92,24 +92,6 @@ func TestErrorMessageBuilders(t *testing.T) {
 		}
 	})
 
-	t.Run("BuildParseError", func(t *testing.T) {
-		testErr := &testError{msg: "invalid JSON"}
-		msg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:    prompts.ErrorTypeInvalidJSON,
-			Error:   testErr,
-			Content: `{"bad": json}`,
-		})
-
-		if msg == "" {
-			t.Error("should return non-empty message")
-		}
-
-		// Should include the error details
-		if len(msg) < 50 {
-			t.Error("error message should be detailed")
-		}
-	})
-
 	t.Run("BuildMissingToolNameError", func(t *testing.T) {
 		msg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type: prompts.ErrorTypeMissingToolName,

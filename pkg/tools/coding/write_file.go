@@ -2,7 +2,7 @@ package coding
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,14 +51,14 @@ func (t *WriteFileTool) Schema() map[string]interface{} {
 }
 
 // Execute writes content to the specified file.
-func (t *WriteFileTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
-	// Parse arguments
+func (t *WriteFileTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var input struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Content string   `xml:"content"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 
@@ -124,13 +124,14 @@ func (t *WriteFileTool) IsLoopBreaking() bool {
 }
 
 // GeneratePreview implements the Previewable interface to show what will be written.
-func (t *WriteFileTool) GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error) {
+func (t *WriteFileTool) GeneratePreview(ctx context.Context, argsXML []byte) (*tools.ToolPreview, error) {
 	var input struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Content string   `xml:"content"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 

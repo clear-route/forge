@@ -2,7 +2,7 @@ package coding
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"strings"
@@ -65,16 +65,17 @@ func (t *ApplyDiffTool) Schema() map[string]interface{} {
 }
 
 // Execute performs the search/replace operations on the file.
-func (t *ApplyDiffTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (t *ApplyDiffTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var input struct {
-		Path  string `json:"path"`
-		Edits []struct {
-			Search  string `json:"search"`
-			Replace string `json:"replace"`
-		} `json:"edits"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Edits   []struct {
+			Search  string `xml:"search"`
+			Replace string `xml:"replace"`
+		} `xml:"edits>edit"`
 	}
 
-	if err := json.Unmarshal(args, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 
@@ -159,17 +160,43 @@ func (t *ApplyDiffTool) IsLoopBreaking() bool {
 	return false
 }
 
+// XMLExample provides a concrete XML usage example for this tool.
+func (t *ApplyDiffTool) XMLExample() string {
+	return `<tool>
+<server_name>local</server_name>
+<tool_name>apply_diff</tool_name>
+<arguments>
+  <path>src/main.go</path>
+  <edits>
+    <edit>
+      <search><![CDATA[func oldFunction() {
+	return "old"
+}]]></search>
+      <replace><![CDATA[func newFunction() {
+	return "new"
+}]]></replace>
+    </edit>
+    <edit>
+      <search><![CDATA[const oldValue = 42]]></search>
+      <replace><![CDATA[const newValue = 100]]></replace>
+    </edit>
+  </edits>
+</arguments>
+</tool>`
+}
+
 // GeneratePreview implements the Previewable interface to show a diff preview.
-func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, args json.RawMessage) (*tools.ToolPreview, error) {
+func (t *ApplyDiffTool) GeneratePreview(ctx context.Context, argsXML []byte) (*tools.ToolPreview, error) {
 	var input struct {
-		Path  string `json:"path"`
-		Edits []struct {
-			Search  string `json:"search"`
-			Replace string `json:"replace"`
-		} `json:"edits"`
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Edits   []struct {
+			Search  string `xml:"search"`
+			Replace string `xml:"replace"`
+		} `xml:"edits>edit"`
 	}
 
-	if err := json.Unmarshal(args, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 

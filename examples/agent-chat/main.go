@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"os"
@@ -45,14 +45,15 @@ func (t *CalculatorTool) Schema() map[string]interface{} {
 	}
 }
 
-func (t *CalculatorTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *CalculatorTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var args struct {
-		Operation string  `json:"operation"`
-		A         float64 `json:"a"`
-		B         float64 `json:"b"`
+		XMLName   xml.Name `xml:"arguments"`
+		Operation string   `xml:"operation"`
+		A         float64  `xml:"a"`
+		B         float64  `xml:"b"`
 	}
 
-	if err := json.Unmarshal(arguments, &args); err != nil {
+	if err := xml.Unmarshal(argsXML, &args); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

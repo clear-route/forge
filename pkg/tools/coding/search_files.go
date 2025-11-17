@@ -3,7 +3,7 @@ package coding
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,16 +62,17 @@ func (t *SearchFilesTool) Schema() map[string]interface{} {
 }
 
 // Execute searches for the pattern in files.
-func (t *SearchFilesTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *SearchFilesTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	// Parse arguments
 	var input struct {
-		Path         string `json:"path"`
-		Pattern      string `json:"pattern"`
-		FilePattern  string `json:"file_pattern"`
-		ContextLines int    `json:"context_lines"`
+		XMLName      xml.Name `xml:"arguments"`
+		Path         string   `xml:"path"`
+		Pattern      string   `xml:"pattern"`
+		FilePattern  string   `xml:"file_pattern"`
+		ContextLines int      `xml:"context_lines"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 

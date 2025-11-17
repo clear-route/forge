@@ -1,9 +1,11 @@
 # 2. Use XML Format for Tool Calls
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0019](0019-xml-cdata-tool-call-format.md)
 **Date:** 2025-10-28
 **Deciders:** Forge Core Team
 **Technical Story:** Establishing a reliable, provider-agnostic format for LLM tool invocation
+
+> **Note:** This ADR described the original XML+JSON hybrid format. It has been superseded by ADR-0019 which implements a pure XML+CDATA format to eliminate JSON parsing issues with complex payloads.
 
 ---
 

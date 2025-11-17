@@ -3,7 +3,7 @@ package coding
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os/exec"
@@ -64,13 +64,14 @@ func (t *ExecuteCommandTool) Schema() map[string]interface{} {
 // Execute runs the command with streaming output support
 //
 //nolint:gocyclo // Complexity is acceptable for command execution logic
-func (t *ExecuteCommandTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (t *ExecuteCommandTool) Execute(ctx context.Context, argsXML []byte) (string, error) {
 	var input struct {
-		Command    string  `json:"command"`
-		Timeout    float64 `json:"timeout"`
-		WorkingDir string  `json:"working_dir"`
+		XMLName    xml.Name `xml:"arguments"`
+		Command    string   `xml:"command"`
+		Timeout    float64  `xml:"timeout"`
+		WorkingDir string   `xml:"working_dir"`
 	}
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return "", fmt.Errorf("failed to parse input: %w", err)
 	}
 
@@ -226,14 +227,15 @@ func (t *ExecuteCommandTool) IsLoopBreaking() bool {
 }
 
 // GeneratePreview implements the Previewable interface to show command details before execution.
-func (t *ExecuteCommandTool) GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error) {
+func (t *ExecuteCommandTool) GeneratePreview(ctx context.Context, argsXML []byte) (*tools.ToolPreview, error) {
 	var input struct {
-		Command    string  `json:"command"`
-		Timeout    float64 `json:"timeout"`
-		WorkingDir string  `json:"working_dir"`
+		XMLName    xml.Name `xml:"arguments"`
+		Command    string   `xml:"command"`
+		Timeout    float64  `xml:"timeout"`
+		WorkingDir string   `xml:"working_dir"`
 	}
 
-	if err := json.Unmarshal(arguments, &input); err != nil {
+	if err := xml.Unmarshal(argsXML, &input); err != nil {
 		return nil, fmt.Errorf("failed to parse input: %w", err)
 	}
 

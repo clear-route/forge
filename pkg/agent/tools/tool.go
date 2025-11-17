@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/xml"
 )
 
 // Tool represents a capability that an agent can use during execution.
@@ -11,7 +11,13 @@ import (
 //
 // Example tool call format from LLM:
 //
-//	<tool>{"server_name": "local", "tool_name": "task_completion", "arguments": {"result": "Task done!"}}</tool>
+//	<tool>
+//	<server_name>local</server_name>
+//	<tool_name>task_completion</tool_name>
+//	<arguments>
+//	  <result>Task completed successfully</result>
+//	</arguments>
+//	</tool>
 type Tool interface {
 	// Name returns the unique identifier for this tool (e.g., "task_completion")
 	Name() string
@@ -24,9 +30,9 @@ type Tool interface {
 	// of the arguments that this tool accepts
 	Schema() map[string]interface{}
 
-	// Execute runs the tool with the given arguments and returns a result string
-	// The arguments are validated against the schema before execution
-	Execute(ctx context.Context, arguments json.RawMessage) (string, error)
+	// Execute runs the tool with the given XML arguments and returns a result string
+	// The arguments should be unmarshaled from XML into the tool's argument struct
+	Execute(ctx context.Context, argumentsXML []byte) (string, error)
 
 	// IsLoopBreaking indicates whether this tool should terminate the agent loop
 	// Loop-breaking tools (like task_completion, ask_question, converse) will
@@ -36,9 +42,29 @@ type Tool interface {
 
 // ToolCall represents a parsed tool invocation from the LLM's response
 type ToolCall struct {
-	ServerName string          `json:"server_name"`
-	ToolName   string          `json:"tool_name"`
-	Arguments  json.RawMessage `json:"arguments"`
+	XMLName    xml.Name       `xml:"tool"`
+	ServerName string         `xml:"server_name"`
+	ToolName   string         `xml:"tool_name"`
+	Arguments  ArgumentsBlock `xml:"arguments"`
+}
+
+// ArgumentsBlock holds the raw XML of the arguments element
+type ArgumentsBlock struct {
+	InnerXML []byte `xml:",innerxml"`
+}
+
+// GetArgumentsXML returns the arguments wrapped in <arguments> tags for unmarshaling.
+// Uses efficient byte slice operations to avoid multiple string allocations.
+func (tc *ToolCall) GetArgumentsXML() []byte {
+	const prefix = "<arguments>"
+	const suffix = "</arguments>"
+
+	// Pre-allocate exact size needed
+	result := make([]byte, 0, len(prefix)+len(tc.Arguments.InnerXML)+len(suffix))
+	result = append(result, []byte(prefix)...)
+	result = append(result, tc.Arguments.InnerXML...)
+	result = append(result, []byte(suffix)...)
+	return result
 }
 
 // Previewable is an optional interface that tools can implement to provide
@@ -47,7 +73,7 @@ type ToolCall struct {
 type Previewable interface {
 	// GeneratePreview creates a preview of what this tool will do with the given arguments.
 	// Returns a ToolPreview containing the preview data and metadata.
-	GeneratePreview(ctx context.Context, arguments json.RawMessage) (*ToolPreview, error)
+	GeneratePreview(ctx context.Context, argumentsXML []byte) (*ToolPreview, error)
 }
 
 // ToolPreview represents a preview of what a tool will do.
