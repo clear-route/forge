@@ -97,7 +97,7 @@ func (p *ToolCallParser) handleToolEnd() *ParsedContent {
 		contentBeforeTag := bufStr[:len(bufStr)-7]
 		p.toolContent.WriteString(contentBeforeTag)
 	}
-	
+
 	p.buffer.Reset()
 	p.inToolCall = false
 
@@ -278,7 +278,7 @@ func (p *ToolCallParser) Flush() (toolCallContent, regularContent *ParsedContent
 		p.inToolCall = false
 		content := strings.TrimSpace(p.toolContent.String())
 		p.toolContent.Reset()
-		
+
 		if content != "" {
 			toolCallContent = &ParsedContent{
 				Type:    ContentTypeToolCall,
@@ -292,7 +292,7 @@ func (p *ToolCallParser) Flush() (toolCallContent, regularContent *ParsedContent
 	// Otherwise, return buffered content as regular content
 	text := p.buffer.String()
 	p.buffer.Reset()
-	
+
 	if text == "" {
 		return nil, nil
 	}

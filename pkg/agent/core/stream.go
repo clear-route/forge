@@ -131,19 +131,7 @@ func handleMessageContent(content string, state *streamState, emitEvent func(*ty
 	}
 
 	// Check for tool name in accumulated content after tool call start
-	// This allows early display of the tool name before the complete tool call is received
-	if state.toolCallStarted && !state.toolNameDetected {
-		accumulatedContent := state.toolCallParser.GetAccumulatedToolContent()
-		
-		if toolName := extractToolNameFromPartial(accumulatedContent); toolName != "" {
-			state.toolNameDetected = true
-			
-			// Emit tool call start event with tool name for immediate UI feedback
-			event := types.NewToolCallStartEvent()
-			event.Metadata["tool_name"] = toolName
-			emitEvent(event)
-		}
-	}
+	checkAndEmitToolName(state, emitEvent)
 
 	// Handle complete tool call content (when </tool> is detected)
 	if toolCallContent != nil && toolCallContent.Type == "tool_call" && toolCallContent.Content != "" {
@@ -152,20 +140,43 @@ func handleMessageContent(content string, state *streamState, emitEvent func(*ty
 
 	// Handle regular message content
 	if regularContent != nil && regularContent.Content != "" {
-		// End tool call if it was active
-		if state.toolCallStarted {
-			emitEvent(types.NewToolCallEndEvent())
-			state.toolCallStarted = false
-			state.toolNameDetected = false // Reset for next tool call
-		}
-
-		if !state.messageStarted {
-			emitEvent(types.NewMessageStartEvent())
-			state.messageStarted = true
-		}
-		emitEvent(types.NewMessageContentEvent(regularContent.Content))
-		state.assistantContent += regularContent.Content
+		handleRegularContent(regularContent.Content, state, emitEvent)
 	}
+}
+
+// checkAndEmitToolName checks for tool name in accumulated content and emits early detection event
+func checkAndEmitToolName(state *streamState, emitEvent func(*types.AgentEvent)) {
+	if !state.toolCallStarted || state.toolNameDetected {
+		return
+	}
+
+	accumulatedContent := state.toolCallParser.GetAccumulatedToolContent()
+	toolName := extractToolNameFromPartial(accumulatedContent)
+
+	if toolName != "" {
+		state.toolNameDetected = true
+		event := types.NewToolCallStartEvent()
+		event.Metadata["tool_name"] = toolName
+		emitEvent(event)
+	}
+}
+
+// handleRegularContent processes regular message content
+func handleRegularContent(content string, state *streamState, emitEvent func(*types.AgentEvent)) {
+	// End tool call if it was active
+	if state.toolCallStarted {
+		emitEvent(types.NewToolCallEndEvent())
+		state.toolCallStarted = false
+		state.toolNameDetected = false
+	}
+
+	if !state.messageStarted {
+		emitEvent(types.NewMessageStartEvent())
+		state.messageStarted = true
+	}
+
+	emitEvent(types.NewMessageContentEvent(content))
+	state.assistantContent += content
 }
 
 // handleToolCallContent processes tool call XML content
