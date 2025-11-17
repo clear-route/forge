@@ -48,6 +48,10 @@ type Agent interface {
 	// The executor uses these channels to send input and receive output.
 	GetChannels() *types.AgentChannels
 
+	// GetTool retrieves a specific tool by name from the agent's tool registry.
+	// Returns nil if the tool is not found.
+	GetTool(name string) interface{}
+
 	// GetTools returns a list of all available tools registered with the agent.
 	// This includes both built-in tools and any custom tools that have been registered.
 	GetTools() []interface{}

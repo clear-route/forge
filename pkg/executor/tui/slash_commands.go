@@ -100,6 +100,15 @@ func init() {
 		MinArgs:     0,
 		MaxArgs:     0,
 	})
+
+	registerCommand(&SlashCommand{
+		Name:        "bash",
+		Description: "Enter bash mode for running shell commands",
+		Type:        CommandTypeTUI,
+		Handler:     handleBashCommand,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
 }
 
 // registerCommand adds a command to the registry
@@ -495,6 +504,14 @@ func handleContextCommand(m *model, args []string) interface{} {
 	contextOverlay := NewContextOverlay(overlayInfo)
 	m.overlay.activate(OverlayModeContext, contextOverlay)
 
+	return nil
+}
+
+// handleBashCommand enters bash mode for running shell commands
+func handleBashCommand(m *model, args []string) interface{} {
+	m.bashMode = true
+	m.updatePrompt()
+	m.showToast("Bash Mode", "Entered bash mode. Commands will be executed directly. Type 'exit' or press Ctrl+C to return.", "🔧", false)
 	return nil
 }
 
