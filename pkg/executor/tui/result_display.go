@@ -95,7 +95,7 @@ func (c *ToolResultClassifier) GetPreviewLines(result string) string {
 
 	preview := strings.Join(lines[:c.previewLines], "\n")
 	remainingLines := len(lines) - c.previewLines
-	return fmt.Sprintf("%s\n  ... [%d more lines - Ctrl+R to view]", preview, remainingLines)
+	return fmt.Sprintf("%s\n  ... [%d more lines - Ctrl+V to view full result]", preview, remainingLines)
 }
 
 // ToolResultSummarizer generates summaries for tool results
@@ -116,17 +116,17 @@ func (s *ToolResultSummarizer) GenerateSummary(toolName string, result string) s
 		// Extract filename from result if possible (first line often has it in comments)
 		filename := s.extractFilename(result)
 		if filename != "" {
-			return fmt.Sprintf("Read %d lines from %s (%.1f KB) [Ctrl+R to view]", lineCount, filename, sizeKB)
+			return fmt.Sprintf("Read %d lines from %s (%.1f KB) [Ctrl+V to view]", lineCount, filename, sizeKB)
 		}
-		return fmt.Sprintf("Read %d lines (%.1f KB) [Ctrl+R to view]", lineCount, sizeKB)
+		return fmt.Sprintf("Read %d lines (%.1f KB) [Ctrl+V to view]", lineCount, sizeKB)
 
 	case "search_files":
 		matchCount, fileCount := s.parseSearchResults(result)
-		return fmt.Sprintf("Found %d matches in %d files [Ctrl+R to view]", matchCount, fileCount)
+		return fmt.Sprintf("Found %d matches in %d files [Ctrl+V to view]", matchCount, fileCount)
 
 	case "list_files":
 		fileCount, dirCount := s.parseListResults(result)
-		return fmt.Sprintf("Listed %d files and %d directories [Ctrl+R to view]", fileCount, dirCount)
+		return fmt.Sprintf("Listed %d files and %d directories [Ctrl+V to view]", fileCount, dirCount)
 
 	case "write_file":
 		filename := s.extractFilename(result)
@@ -145,7 +145,7 @@ func (s *ToolResultSummarizer) GenerateSummary(toolName string, result string) s
 
 	default:
 		// Generic summary for unknown tools
-		return fmt.Sprintf("%s completed (%d lines, %.1f KB) [Ctrl+R to view]", toolName, lineCount, sizeKB)
+		return fmt.Sprintf("%s completed (%d lines, %.1f KB) [Ctrl+V to view]", toolName, lineCount, sizeKB)
 	}
 }
 

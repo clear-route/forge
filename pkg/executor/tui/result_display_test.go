@@ -318,19 +318,19 @@ func TestGenerateSummary(t *testing.T) {
 			name:     "read_file with filename",
 			toolName: "read_file",
 			result:   "Reading pkg/config/settings.go\nline 1\nline 2\nline 3",
-			contains: []string{"Read", "lines", "settings.go", "Ctrl+R"},
+			contains: []string{"Read", "lines", "settings.go", "Ctrl+V"},
 		},
 		{
 			name:     "search_files",
 			toolName: "search_files",
 			result:   "file1.go:10: match\nfile2.py:20: match\nfile3.js:30: match",
-			contains: []string{"Found", "matches", "files", "Ctrl+R"},
+			contains: []string{"Found", "matches", "files", "Ctrl+V"},
 		},
 		{
 			name:     "list_files",
 			toolName: "list_files",
 			result:   "📁 dir1\n📄 file1.go\n📄 file2.py\n📁 dir2",
-			contains: []string{"Listed", "files", "directories", "Ctrl+R"},
+			contains: []string{"Listed", "files", "directories", "Ctrl+V"},
 		},
 		{
 			name:     "write_file with filename",
@@ -348,7 +348,7 @@ func TestGenerateSummary(t *testing.T) {
 			name:     "generic tool",
 			toolName: "unknown_tool",
 			result:   "Some result\nwith multiple\nlines",
-			contains: []string{"unknown_tool", "completed", "lines", "Ctrl+R"},
+			contains: []string{"unknown_tool", "completed", "lines", "Ctrl+V"},
 		},
 	}
 
