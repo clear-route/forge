@@ -57,7 +57,7 @@ func NewFileStore(path string) (*FileStore, error) {
 
 	// Try to load existing config, but don't fail if it doesn't exist
 	if err := store.Load(); err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return nil, fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
 
 	return store, nil

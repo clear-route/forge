@@ -62,8 +62,9 @@ func DiscoverToolsFromAgent(agent interface{}) error {
 
 		// Verify the method signature matches what we expect
 		// GeneratePreview(ctx context.Context, arguments json.RawMessage) (*tools.ToolPreview, error)
-		// The method should have 3 inputs (receiver, context, json.RawMessage) and 2 outputs (pointer, error)
 		methodType := method.Type
+		// NumIn() == 3: receiver + 2 params (context.Context, json.RawMessage)
+		// NumOut() == 2: pointer return value + error
 		if methodType.NumIn() != 3 || methodType.NumOut() != 2 {
 			continue
 		}

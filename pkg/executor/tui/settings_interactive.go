@@ -716,18 +716,20 @@ func (s *InteractiveSettingsOverlay) showUnsavedChangesDialog() {
 		message: "⚠️  You have unsaved changes.",
 		details: []string{
 			"",
-			"Do you want to save before closing?",
+			"Y - Save and close",
+			"N - Discard and close",
+			"Esc - Cancel (return to editing)",
 		},
 		onYes: func() {
 			if err := s.saveSettings(); err == nil {
 				s.hasChanges = false
 			}
 			s.confirmDialog = nil
-			// Close the overlay by returning nil in next update
 		},
 		onNo: func() {
-			s.confirmDialog = nil
 			// Discard changes and close
+			s.hasChanges = false
+			s.confirmDialog = nil
 		},
 	}
 }
@@ -972,16 +974,27 @@ func (s *InteractiveSettingsOverlay) handleConfirmInput(msg tea.Msg) (Overlay, t
 			if s.confirmDialog.onYes != nil {
 				s.confirmDialog.onYes()
 			}
-			// If this was unsaved changes dialog and user said yes, close overlay
-			if s.confirmDialog == nil && !s.hasChanges {
+			// Check if we should close the overlay after saving
+			shouldClose := s.confirmDialog == nil && !s.hasChanges
+			if shouldClose {
 				return nil, nil
 			}
 			return s, nil
 
-		case "n", "N", "esc":
+		case "n", "N":
 			if s.confirmDialog.onNo != nil {
 				s.confirmDialog.onNo()
 			}
+			// Check if we should close the overlay after discarding
+			shouldClose := s.confirmDialog == nil && !s.hasChanges
+			if shouldClose {
+				return nil, nil
+			}
+			return s, nil
+
+		case keyEsc:
+			// Cancel - just close dialog and return to editing
+			s.confirmDialog = nil
 			return s, nil
 		}
 	}

@@ -9,6 +9,7 @@ import (
 type WhitelistPattern struct {
 	Pattern     string `json:"pattern"`
 	Description string `json:"description"`
+	Type        string `json:"type"` // "prefix" or "exact"
 }
 
 // CommandWhitelistSection manages the whitelist of commands that can be auto-approved.
@@ -21,16 +22,19 @@ func NewCommandWhitelistSection() *CommandWhitelistSection {
 	return &CommandWhitelistSection{
 		patterns: []WhitelistPattern{
 			{
-				Pattern:     "npm",
-				Description: "All npm commands",
-			},
-			{
 				Pattern:     "git status",
 				Description: "Git status and variations",
+				Type:        "prefix",
 			},
 			{
 				Pattern:     "ls",
 				Description: "List directory",
+				Type:        "prefix",
+			},
+			{
+				Pattern:     "pwd",
+				Description: "Get current directory",
+				Type:        "exact",
 			},
 		},
 	}
@@ -59,6 +63,7 @@ func (s *CommandWhitelistSection) Data() map[string]interface{} {
 		patternsData[i] = map[string]interface{}{
 			"pattern":     p.Pattern,
 			"description": p.Description,
+			"type":        p.Type,
 		}
 	}
 
@@ -95,14 +100,29 @@ func (s *CommandWhitelistSection) SetData(data map[string]interface{}) error {
 			return fmt.Errorf("invalid pattern at index %d: missing or invalid pattern field", i)
 		}
 
-		description, ok := patternMap["description"].(string)
-		if !ok {
-			description = "" // Default to empty string if description is missing
+		descriptionVal, hasDescription := patternMap["description"]
+		description, ok := descriptionVal.(string)
+		if hasDescription && !ok {
+			return fmt.Errorf("invalid pattern at index %d: description field is not a string (got %T)", i, descriptionVal)
+		}
+		if !hasDescription {
+			description = ""
+		}
+
+		// Get type field, default to "prefix" if not specified
+		patternType := "prefix"
+		if typeVal, hasType := patternMap["type"]; hasType {
+			if typeStr, ok := typeVal.(string); ok {
+				if typeStr == "exact" || typeStr == "prefix" {
+					patternType = typeStr
+				}
+			}
 		}
 
 		patterns = append(patterns, WhitelistPattern{
 			Pattern:     pattern,
 			Description: description,
+			Type:        patternType,
 		})
 	}
 
@@ -141,13 +161,17 @@ func (s *CommandWhitelistSection) Reset() {
 // IsCommandWhitelisted checks if a command matches any whitelist pattern.
 //
 // Pattern matching rules:
-//   - Single word pattern (e.g., "npm") matches any command starting with that word
-//   - Multi-word pattern (e.g., "npm install") matches commands starting with that phrase
+//   - Type "exact": Command must exactly match the pattern
+//   - Type "prefix": Command must start with the pattern (followed by space or end)
 //
-// Examples:
+// Examples for prefix type:
 //   - Pattern "npm" matches: "npm", "npm install", "npm run build"
 //   - Pattern "npm install" matches: "npm install", "npm install express"
 //   - Pattern "git status" matches: "git status", "git status --short"
+//
+// Examples for exact type:
+//   - Pattern "ls" matches only: "ls" (not "ls -la")
+//   - Pattern "git status" matches only: "git status" (not "git status --short")
 func (s *CommandWhitelistSection) IsCommandWhitelisted(command string) bool {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -155,7 +179,7 @@ func (s *CommandWhitelistSection) IsCommandWhitelisted(command string) bool {
 	}
 
 	for _, pattern := range s.patterns {
-		if matchesPattern(command, pattern.Pattern) {
+		if matchesPattern(command, pattern.Pattern, pattern.Type) {
 			return true
 		}
 	}
@@ -163,17 +187,22 @@ func (s *CommandWhitelistSection) IsCommandWhitelisted(command string) bool {
 	return false
 }
 
-// matchesPattern checks if a command matches a pattern using prefix matching.
-func matchesPattern(command, pattern string) bool {
+// matchesPattern checks if a command matches a pattern based on the match type.
+func matchesPattern(command, pattern, matchType string) bool {
 	pattern = strings.TrimSpace(pattern)
 	command = strings.TrimSpace(command)
 
-	// Exact match
+	// Exact match (works for both types)
 	if command == pattern {
 		return true
 	}
 
-	// Check if command starts with pattern followed by space
+	// For exact type, only exact match is allowed
+	if matchType == "exact" {
+		return false
+	}
+
+	// For prefix type (or unspecified), check if command starts with pattern followed by space
 	// This ensures "npm install" matches "npm install express" but not "npminstall"
 	if strings.HasPrefix(command, pattern+" ") {
 		return true
