@@ -937,17 +937,20 @@ func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]in
 // checkAutoApproval checks if the tool or command should be auto-approved
 // Returns (approved, autoApproved) where autoApproved indicates if a decision was made
 func (a *DefaultAgent) checkAutoApproval(approvalID string, toolCall tools.ToolCall, argsMap map[string]interface{}) (bool, bool) {
-	// Check if tool is auto-approved
-	if config.IsToolAutoApproved(toolCall.ToolName) {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true, true
-	}
-
-	// For execute_command, check command whitelist
+	// Special handling for execute_command: always check command whitelist first
+	// The execute_command tool uses a per-command whitelist, not tool-level auto-approval
 	if toolCall.ToolName == "execute_command" {
 		if a.isCommandWhitelisted(approvalID, argsMap) {
 			return true, true
 		}
+		// For execute_command, we only check the whitelist, not the tool-level auto-approval
+		return false, false
+	}
+
+	// For all other tools, check if tool is auto-approved
+	if config.IsToolAutoApproved(toolCall.ToolName) {
+		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
+		return true, true
 	}
 
 	return false, false
