@@ -217,8 +217,15 @@ func (m model) renderSummarizationStatus() string {
 	}
 
 	bar := strings.Repeat("━", filledWidth) + strings.Repeat("━", barWidth-filledWidth)
-	progressLine := fmt.Sprintf("%s %.0f%%", bar, m.summarization.progressPercent)
-	content.WriteString(progressLine)
+	// Show both item count and percentage
+	if m.summarization.totalItems > 0 {
+		progressLine := fmt.Sprintf("%s %d/%d items (%.0f%%)",
+			bar, m.summarization.itemsProcessed, m.summarization.totalItems, m.summarization.progressPercent)
+		content.WriteString(progressLine)
+	} else {
+		progressLine := fmt.Sprintf("%s %.0f%%", bar, m.summarization.progressPercent)
+		content.WriteString(progressLine)
+	}
 	content.WriteString("\n")
 
 	// Current item description

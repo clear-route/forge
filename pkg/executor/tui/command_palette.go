@@ -149,7 +149,7 @@ func (cp *CommandPalette) render(width int) string {
 			Bold(i == cp.selectedIndex)
 
 		descStyle := lipgloss.NewStyle().
-			Foreground(softGray)
+			Foreground(mutedGray)
 
 		if i == cp.selectedIndex {
 			// Highlighted background for selected item
@@ -170,7 +170,7 @@ func (cp *CommandPalette) render(width int) string {
 	// Footer hint
 	if len(cp.filteredCommands) > maxVisible {
 		footerStyle := lipgloss.NewStyle().
-			Foreground(softGray).
+			Foreground(mutedGray).
 			Italic(true).
 			PaddingLeft(1)
 		sb.WriteString(footerStyle.Render("... and more. Keep typing to filter."))

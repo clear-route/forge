@@ -45,7 +45,7 @@ type model struct {
 	// Agent state
 	isThinking            bool
 	agentBusy             bool
-	bashMode              bool   // Track if in bash mode
+	bashMode              bool // Track if in bash mode
 	currentLoadingMessage string
 	toolNameDisplayed     bool // Track if we've already displayed the tool name
 
@@ -116,4 +116,3 @@ type toastNotification struct {
 	isError   bool
 	showUntil time.Time
 }
-

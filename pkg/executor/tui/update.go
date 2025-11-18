@@ -16,7 +16,7 @@ func initDebugLog() {
 	if debugLog != nil {
 		return // Already initialized
 	}
-	
+
 	// Create debug log file
 	f, err := os.OpenFile("forge-tui-debug.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -31,6 +31,8 @@ func initDebugLog() {
 
 // Update handles all state updates for the TUI model.
 // This is the main event loop handler for Bubble Tea.
+//
+//nolint:gocyclo
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
@@ -92,10 +94,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if oldHeight != newHeight && m.ready {
 			m.recalculateLayout()
 		}
-		
+
 		// Check if we should activate/deactivate command palette based on input
 		value := m.textarea.Value()
-		
+
 		// Handle command palette activation/deactivation based on input
 		switch {
 		case value == "/" && !m.commandPalette.active:
@@ -110,7 +112,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Deactivate palette if input no longer starts with /
 			m.commandPalette.deactivate()
 		}
-		
+
 		// Auto-adjust textarea height based on content after any key press
 		m.updateTextAreaHeight()
 	}
@@ -153,7 +155,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case *types.AgentEvent:
 		debugLog.Printf("Received *types.AgentEvent: %s", msg.Type)
-		
+
 		// If overlay is active and it's a command execution event, forward to overlay
 		if m.overlay.isActive() && msg.IsCommandExecutionEvent() {
 			var overlayCmd tea.Cmd
@@ -162,7 +164,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleAgentEvent(msg)
 			return m, tea.Batch(tiCmd, vpCmd, overlayCmd, spinnerCmd)
 		}
-		
+
 		// Update viewport BEFORE handling event (important for streaming)
 		m.viewport, vpCmd = m.viewport.Update(msg)
 		m.handleAgentEvent(msg)
@@ -195,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		debugLog.Printf("Received tea.KeyMsg: %s", msg.String())
 		return m.handleKeyPress(msg, vpCmd, tiCmd, spinnerCmd)
-	
+
 	default:
 		debugLog.Printf("Received unknown message type: %T", msg)
 	}
@@ -311,10 +313,10 @@ func (m model) handleBashCommandResult(msg bashCommandResultMsg) (tea.Model, tea
 	m.content.WriteString(fmt.Sprintf("[%s] Command completed:\n", msg.timestamp))
 	m.content.WriteString(msg.result)
 	m.content.WriteString("\n\n")
-	
+
 	m.viewport.SetContent(m.content.String())
 	m.viewport.GotoBottom()
-	
+
 	return m, nil
 }
 
@@ -359,6 +361,16 @@ func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) 
 
 	// Handle key presses based on type
 	switch msg.Type {
+	case tea.KeyEsc:
+		// Escape exits bash mode if active
+		if m.bashMode {
+			m.bashMode = false
+			m.textarea.Reset()
+			m.updatePrompt()
+			m.recalculateLayout()
+			return m, nil
+		}
+
 	case tea.KeyCtrlC:
 		return m.handleCtrlC()
 
@@ -393,6 +405,7 @@ func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
 	if m.bashMode {
 		m.bashMode = false
 		m.textarea.Reset()
+		m.updatePrompt()
 		m.recalculateLayout()
 		return m, nil
 	}
@@ -490,7 +503,7 @@ func (m model) handleBashModeInput(input string, tiCmd, vpCmd, spinnerCmd tea.Cm
 // handleSlashCommand processes slash commands
 func (m model) handleSlashCommand(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Do NOT display slash commands in chat history - they are executed silently
-	
+
 	// Clear the input area
 	m.textarea.Reset()
 

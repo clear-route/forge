@@ -302,6 +302,34 @@ case tea.MouseMsg:
     // Route mouse events to viewport for scrolling
     m.viewport, vpCmd = m.viewport.Update(msg)
     return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
+
+### 15. ✅ FIXED: Command Output Formatting/Indentation Lost
+**File:** `pkg/executor/tui/events.go`  
+**Severity:** Medium  
+**Impact:** Command output lost indentation and formatting due to style rendering
+
+**Problem:**
+The `handleCommandExecutionOutput()` function was applying `commandOutputStyle.Render()` to command output, which reformats/wraps text and destroys original formatting:
+```go
+m.content.WriteString(commandOutputStyle.Render(event.CommandExecution.Output))
+```
+
+**Solution:**
+Write command output directly without styling to preserve original formatting:
+```go
+// Write output directly without styling to preserve formatting/indentation
+if event.CommandExecution != nil && event.CommandExecution.Output != "" {
+    m.content.WriteString(event.CommandExecution.Output)
+}
+```
+
+This preserves:
+- Original indentation (spaces/tabs)
+- Line breaks and formatting
+- Code structure in command output
+- Table formatting, etc.
+
+---
 ```
 
 ---
@@ -346,5 +374,116 @@ Status: Manual testing required
 5. Document any additional findings
 
 ---
+
+---
+
+### 16. ✅ FIXED: Summarization Progress Display
+**File:** `pkg/executor/tui/view.go`  
+**Severity:** Medium  
+**Impact:** Progress bar showed only percentage, not item counts
+
+**Problem:**
+```go
+progressLine := fmt.Sprintf("%s %.0f%%", bar, m.summarization.progressPercent)
+```
+
+The progress bar only showed percentage. User feedback indicated:
+- Missing "X/Y items" display
+- Percentage calculation was already cumulative (based on ItemsProcessed/TotalItems)
+- Display format needed improvement for better visibility
+
+**Solution:**
+```go
+// Show both item count and percentage
+if m.summarization.totalItems > 0 {
+    progressLine := fmt.Sprintf("%s %d/%d items (%.0f%%)", 
+        bar, m.summarization.itemsProcessed, m.summarization.totalItems, m.summarization.progressPercent)
+    content.WriteString(progressLine)
+} else {
+    progressLine := fmt.Sprintf("%s %.0f%%", bar, m.summarization.progressPercent)
+    content.WriteString(progressLine)
+}
+```
+
+**Notes:**
+- Progress calculation in `events.go` was already correct (cumulative)
+- Only the display format needed updating
+- Fallback to percentage-only when totalItems is unavailable
+
+---
+
+### 17. ✅ FIXED: Unused Style Definition
+**File:** `pkg/executor/tui/styles.go`  
+**Severity:** Low  
+**Impact:** Compilation error due to undefined color
+
+**Problem:**
+```go
+commandOutputStyle = lipgloss.NewStyle().
+    Foreground(softGray)  // softGray color constant doesn't exist
+```
+
+---
+
+### 18. ✅ FIXED: Bash Mode Exit Not Working
+**File:** `pkg/executor/tui/update.go`  
+**Severity:** High  
+**Impact:** Users trapped in bash mode - Escape and Ctrl+C didn't restore normal prompt
+
+**Problem:**
+When entering bash mode with `/bash`, pressing Escape or Ctrl+C would set `bashMode = false` but not restore the normal prompt. The `bash>` prompt remained, confusing users.
+
+```go
+// Missing updatePrompt() call
+func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
+    if m.bashMode {
+        m.bashMode = false
+        m.textarea.Reset()
+        m.recalculateLayout()  // Prompt not updated!
+        return m, nil
+    }
+    return m, tea.Quit
+}
+```
+
+Also, Escape key had no handler for exiting bash mode.
+
+**Solution:**
+```go
+// Added Escape key handler
+case tea.KeyEsc:
+    // Escape exits bash mode if active
+    if m.bashMode {
+        m.bashMode = false
+        m.textarea.Reset()
+        m.updatePrompt()  // Restore normal prompt
+        m.recalculateLayout()
+        return m, nil
+    }
+
+// Fixed Ctrl+C handler
+func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
+    if m.bashMode {
+        m.bashMode = false
+        m.textarea.Reset()
+        m.updatePrompt()  // Restore normal prompt
+        m.recalculateLayout()
+        return m, nil
+    }
+    return m, tea.Quit
+}
+```
+
+**Notes:**
+- Both Escape and Ctrl+C now properly exit bash mode
+- `updatePrompt()` restores the normal "> " prompt
+- Consistent with user expectations for modal interfaces
+
+
+During refactor, `commandOutputStyle` was defined but never used, and referenced a non-existent `softGray` color.
+
+**Solution:**
+Removed the unused style definition entirely. Command output formatting was already fixed in regression #15 to use direct string writing without styling.
+
 
 *Last Updated: 2025-11-18T03:55:00Z*

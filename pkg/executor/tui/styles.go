@@ -15,8 +15,7 @@ var (
 	darkBg      = lipgloss.Color("#111827") // Dark background - container backgrounds
 
 	// Semantic Colors - For specific UI states
-	black    = lipgloss.Color("#000000") // Black - high contrast text on colored backgrounds
-	softGray = lipgloss.Color("#9CA3AF") // Soft gray - for subtle text and descriptions
+	black = lipgloss.Color("#000000") // Black - high contrast text on colored backgrounds
 
 	// Diff Colors - For code diffs and syntax highlighting
 	diffAddColor      = lipgloss.Color("#90EE90") // Green for additions
@@ -55,9 +54,6 @@ var (
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(salmonPink)
-
-	commandOutputStyle = lipgloss.NewStyle().
-			Foreground(softGray)
 
 	bashPromptStyle = lipgloss.NewStyle().
 			Foreground(mintGreen).

@@ -45,7 +45,7 @@ func newResultListDelegate() resultListDelegate {
 		Foreground(salmonPink).
 		BorderForeground(salmonPink)
 	d.Styles.SelectedDesc = d.Styles.SelectedDesc.
-		Foreground(softGray).
+		Foreground(mutedGray).
 		BorderForeground(salmonPink)
 
 	return resultListDelegate{DefaultDelegate: d}

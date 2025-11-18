@@ -22,7 +22,7 @@ func getRandomLoadingMessage() string {
 		"Crunching data...",
 		"Running calculations...",
 	}
-	return messages[rand.Intn(len(messages))]
+	return messages[rand.Intn(len(messages))] //nolint:gosec
 }
 
 // formatTokenCount formats a token count with K/M suffixes for readability
@@ -62,6 +62,8 @@ func formatEntry(icon string, text string, style lipgloss.Style, width int, icon
 }
 
 // wordWrap wraps text to fit within the specified width while preserving paragraph breaks
+//
+//nolint:gocyclo
 func wordWrap(text string, width int) string {
 	if width <= 0 {
 		width = 80
@@ -199,4 +201,3 @@ func (m *model) updateTextAreaHeight() {
 		m.recalculateLayout()
 	}
 }
-

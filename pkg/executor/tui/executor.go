@@ -48,7 +48,7 @@ func (e *Executor) Run(ctx context.Context) error {
 	// Initialize debug logging first
 	initDebugLog()
 	debugLog.Printf("TUI Executor starting...")
-	
+
 	// Start the agent first
 	if err := e.agent.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start agent: %w", err)

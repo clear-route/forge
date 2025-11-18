@@ -12,9 +12,11 @@ import (
 
 // handleAgentEvent processes events from the agent event stream.
 // This is the main event handler that updates the UI based on agent activity.
+//
+//nolint:gocyclo
 func (m *model) handleAgentEvent(event *types.AgentEvent) {
 	debugLog.Printf("handleAgentEvent called with event type: %s", event.Type)
-	
+
 	switch event.Type {
 	case types.EventTypeThinkingStart:
 		debugLog.Printf("Processing EventTypeThinkingStart")
@@ -374,8 +376,9 @@ func (m *model) handleCommandExecutionStart(event *types.AgentEvent) {
 
 func (m *model) handleCommandExecutionOutput(event *types.AgentEvent) {
 	// Stream command output as it arrives
+	// Write output directly without styling to preserve formatting/indentation
 	if event.CommandExecution != nil && event.CommandExecution.Output != "" {
-		m.content.WriteString(commandOutputStyle.Render(event.CommandExecution.Output))
+		m.content.WriteString(event.CommandExecution.Output)
 	}
 }
 
