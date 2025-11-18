@@ -138,7 +138,7 @@ When all tasks complete:
 - [x] Switch back to base: `git checkout refactor/code-cleanup`
 - [x] Pull merged changes: `git pull origin refactor/code-cleanup`
 
-**Time Spent:** 0.5 hours
+**Time Spent:** ~12 hours (includes 4 hours recovery effort for 18 regressions)
 
 ---
 
@@ -147,7 +147,7 @@ When all tasks complete:
 **Branch:** `refactor/split-tui-executor`
 **Priority:** CRITICAL
 **PR to:** `refactor/code-cleanup`
-**Status:** COMPLETED WITH RECOVERY (14 regressions fixed)
+**Status:** READY FOR REVIEW (18 regressions fixed, all tests passing)
 
 #### Setup
 - [x] Checkout base: `git checkout refactor/code-cleanup`
@@ -171,7 +171,7 @@ When all tasks complete:
 
 #### Step 3: Fix Imports and Test (2 hours) - COMPLETED WITH RECOVERY
 
-**Initial refactor had 14 critical regressions that were discovered and fixed:**
+**Initial refactor had 18 critical regressions that were discovered and fixed:**
 
 1. ✅ Token count formatting - Missing million (M) suffix
 2. ✅ Command execution overlay - Missing interactive overlay
@@ -187,6 +187,10 @@ When all tasks complete:
 12. ✅ Slash commands displayed - Should execute silently
 13. ✅ Textarea auto-height - Missing updateTextAreaHeight()
 14. ✅ Mouse event handling - Missing tea.MouseMsg case
+15. ✅ Command output formatting - Indentation lost due to styling
+16. ✅ Summarization progress - Missing item counts display
+17. ✅ Unused style definition - Compilation error
+18. ✅ Bash mode exit - Escape/Ctrl+C not restoring prompt
 
 **Recovery Documentation:** See `TUI_REFACTOR_RECOVERY.md` for detailed analysis
 
@@ -195,28 +199,30 @@ When all tasks complete:
 - [x] Run: `go build ./pkg/executor/tui/...` ✓
 - [x] Systematic comparison against main branch completed
 
-#### Step 4: Clean Up and Document (2 hours) - IN PROGRESS
+#### Step 4: Clean Up and Document (2 hours) - COMPLETED
 
 - [x] Core functionality restored and documented
-- [ ] Run: `make fmt`
-- [ ] Run: `make lint`
-- [ ] Add remaining function comments where missing
+- [x] Run: `make fmt` ✓
+- [x] Run: `make lint` ✓
+- [x] All function comments verified
 
-#### Verification - IN PROGRESS
+#### Verification - COMPLETED
 - [x] Code compiles: `go build` ✓
-- [ ] All tests pass: `make test`
-- [ ] No linter errors: `make lint`
-- [ ] TUI functionality verified manually
+- [x] All tests pass: `make test` ✓ (all passing)
+- [x] No linter errors: `make lint` ✓
 - [x] File structure verified: 7 focused modules created
+- [ ] TUI functionality verified manually (pending manual testing)
 
-#### PR & Merge - PENDING
-- [ ] Final testing and cleanup
-- [ ] Push recovery commits
-- [ ] Create PR with recovery notes
-- [ ] Document all 14 fixes in PR description
-- [ ] Link to TUI_REFACTOR_RECOVERY.md
-- [ ] Manual testing verification
-- [ ] Merge PR
+#### PR & Merge - READY FOR REVIEW
+- [x] Final testing and cleanup completed
+- [x] All recovery commits pushed
+- [x] Branch pushed: `git push -u origin refactor/split-tui-executor` ✓
+- [ ] Create PR on GitHub
+- [ ] Document all 18 fixes in PR description (see TUI_REFACTOR_RECOVERY.md)
+- [ ] Link to TUI_REFACTOR_RECOVERY.md in PR
+- [ ] Request review from team
+- [ ] Manual testing verification by reviewer
+- [ ] Merge PR after approval
 
 ---
 
