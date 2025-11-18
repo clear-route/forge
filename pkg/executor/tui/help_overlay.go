@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/entrhq/forge/internal/utils"
 )
 
 // HelpOverlay displays help information in a modal dialog
@@ -43,7 +42,7 @@ func (h *HelpOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		// Adjust viewport height if screen is too small, but width is fixed.
-		h.viewport.Height = utils.Min(20, msg.Height-10)
+		h.viewport.Height = min(20, msg.Height-10)
 	}
 
 	return h, nil
