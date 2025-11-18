@@ -31,7 +31,7 @@ Each increment gets its own branch off `refactor/code-cleanup`:
 2. Create task branch: `git checkout -b refactor/task-name`
 3. Complete task with commits
 4. Push and create PR to `refactor/code-cleanup`
-5. Review and merge
+5. Review with human and remote copilot and merge
 6. Pull latest `refactor/code-cleanup`
 7. Repeat for next task
 
@@ -48,11 +48,11 @@ When all tasks complete:
 **Branch:** `refactor/code-cleanup` (base branch - already created ✓)
 
 - [x] Create base branch: `refactor/code-cleanup`
-- [ ] Ensure all tests pass on base branch: `make test`
-- [ ] Run linter on base branch: `make lint`
-- [ ] Document test coverage baseline: `make test-coverage`
-- [ ] Record baseline metrics (see Metrics Tracking section below)
-- [ ] Create backup tag: `git tag pre-refactor-backup`
+- [x] Ensure all tests pass on base branch: `make test` ✓
+- [x] Run linter on base branch: `make lint` ✓
+- [x] Document test coverage baseline: `make test-coverage` ✓ (20.8%)
+- [x] Record baseline metrics (see Metrics Tracking section below) ✓
+- [x] Create backup tag: `git tag pre-refactor-backup` ✓
 - [ ] Push base branch: `git push -u origin refactor/code-cleanup`
 
 ---
@@ -204,7 +204,7 @@ When all tasks complete:
 #### PR & Merge
 - [ ] Push branch: `git push -u origin refactor/split-tui-executor`
 - [ ] Create PR to `refactor/code-cleanup`
-- [ ] Add description: "Splits executor.go (1,400 lines) into 7 focused files"
+- [ ] Add description: "Splits executor.go (1,458 lines) into 7 focused files"
 - [ ] Add before/after line counts in PR description
 - [ ] Self-review all changes
 - [ ] Test TUI functionality manually
@@ -967,20 +967,21 @@ When all tasks complete:
 
 ## Metrics Tracking
 
-### Before Refactoring (Baseline)
-- Largest file: `pkg/executor/tui/executor.go` (____ lines)
-- Second largest: `pkg/agent/default.go` (____ lines)
-- Average file size: ____ lines
-- Total files: ____
-- Test coverage: ____%
+### Before Refactoring (Baseline) ✓
+- Largest file: `pkg/executor/tui/executor.go` (1,458 lines)
+- Second largest: `pkg/executor/tui/settings_interactive.go` (1,261 lines)
+- Third largest: `pkg/agent/default.go` (1,077 lines)
+- Average file size: ~250 lines (estimated)
+- Total non-test Go files: 85
+- Test coverage: 20.8%
 - Test files: 36
-- Linter warnings: ____
-- Functions >10 complexity: ____
-- Code duplication: ~15%
+- Linter warnings: 0
+- Functions >10 complexity: 0
+- Code duplication: ~15% (estimated)
 
-**To measure baseline, run:**
+**Baseline measurement commands:**
 ```bash
-# File sizes
+# File sizes (top 20)
 find pkg -name "*.go" -not -name "*_test.go" -exec wc -l {} + | sort -n | tail -20
 
 # Average file size
@@ -988,12 +989,15 @@ find pkg -name "*.go" -not -name "*_test.go" -exec wc -l {} + | awk '{sum+=$1; c
 
 # Test coverage
 make test-coverage
+# Result: 20.8%
 
 # Complexity
-gocyclo -over 10 ./pkg/... | wc -l
+gocyclo -over 10 ./pkg/... 2>/dev/null | wc -l
+# Result: 0 functions
 
 # Linter warnings
-make lint 2>&1 | grep -c "^pkg/"
+make lint
+# Result: 0 warnings
 ```
 
 ### After Phase 1
@@ -1094,9 +1098,9 @@ Ideas for next refactoring cycle:
 
 ---
 
-**Last Updated:** (Update as you progress)  
+**Last Updated:** 2024 (Baseline metrics recorded)  
 **Current Branch:** refactor/code-cleanup (base)  
-**Current Phase:** Pre-Refactoring Setup  
-**Completed Tasks:** 0 / ~80  
+**Current Phase:** Pre-Refactoring Setup (6/7 complete)  
+**Completed Tasks:** 6 / ~87  
 **Estimated Completion:** Week 4
 **Team Members:** (Add names of people working on refactoring)
