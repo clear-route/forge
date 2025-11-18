@@ -7,6 +7,43 @@
 
 > ⚠️ **Important:** Check off items as completed. Run tests after each major change.
 
+## Best Practices for Refactoring
+
+### Using Tools Efficiently
+
+**ALWAYS use `apply_diff` for targeted changes:**
+- ✅ **DO:** Use `apply_diff` to make surgical edits to existing files
+- ✅ **DO:** Make multiple small edits in a single `apply_diff` call when possible
+- ❌ **DON'T:** Use `write_file` to rewrite entire files - it's inefficient and error-prone
+- ❌ **DON'T:** Make changes without reading the current state first
+
+**Example - Correct approach:**
+```bash
+# 1. Read the file to see current state
+read_file path/to/file.go
+
+# 2. Use apply_diff to make targeted changes
+apply_diff path/to/file.go with multiple <edit> blocks
+```
+
+**Example - Incorrect approach:**
+```bash
+# ❌ DON'T do this - rewrites entire file
+write_file path/to/file.go <entire file contents>
+```
+
+### Git Workflow
+
+**ALWAYS commit before pushing:**
+```bash
+# 1. Stage and commit changes first
+git add .
+git commit -m "descriptive message"
+
+# 2. Then push
+git push -u origin branch-name
+```
+
 ---
 
 ## Branching Strategy
@@ -53,7 +90,7 @@ When all tasks complete:
 - [x] Document test coverage baseline: `make test-coverage` ✓ (20.8%)
 - [x] Record baseline metrics (see Metrics Tracking section below) ✓
 - [x] Create backup tag: `git tag pre-refactor-backup` ✓
-- [ ] Push base branch: `git push -u origin refactor/code-cleanup`
+- [x] Push base branch: `git push -u origin refactor/code-cleanup` ✓
 
 ---
 
