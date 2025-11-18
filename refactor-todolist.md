@@ -128,15 +128,17 @@ When all tasks complete:
 - [x] Push branch: `git push -u origin refactor/remove-empty-packages`
 - [x] Create PR to `refactor/code-cleanup`
 - [x] Add description: "Removes unused internal/core and internal/utils packages"
-- [ ] Self-review changes
-- [ ] Merge PR
+- [x] Self-review changes
+- [x] Merge PR
 
-**Status:** Ready for review
+**Status:** COMPLETED & MERGED
 **PR Link:** https://github.com/entrhq/forge/pull/new/refactor/remove-empty-packages
-**Commit:** e7ef80d
-- [ ] Delete branch locally: `git branch -d refactor/remove-empty-packages`
-- [ ] Switch back to base: `git checkout refactor/code-cleanup`
-- [ ] Pull merged changes: `git pull origin refactor/code-cleanup`
+**Commits:** e7ef80d, 9a68a2f, f3225e2
+- [x] Delete branch locally: `git branch -d refactor/remove-empty-packages`
+- [x] Switch back to base: `git checkout refactor/code-cleanup`
+- [x] Pull merged changes: `git pull origin refactor/code-cleanup`
+
+**Time Spent:** 0.5 hours
 
 ---
 

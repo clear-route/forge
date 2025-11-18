@@ -56,6 +56,13 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(salmonPink)
 
+	commandOutputStyle = lipgloss.NewStyle().
+			Foreground(softGray)
+
+	bashPromptStyle = lipgloss.NewStyle().
+			Foreground(mintGreen).
+			Bold(true)
+
 	// Container Styles
 	statusBarStyle = lipgloss.NewStyle().
 			Foreground(mutedGray).

@@ -76,7 +76,17 @@ func (o *overlayState) deactivate() {
 
 // isActive returns whether any overlay is currently active
 func (o *overlayState) isActive() bool {
-	return o.mode != OverlayModeNone && o.overlay != nil
+	// Check mode first, then verify overlay is not nil
+	if o.mode == OverlayModeNone {
+		return false
+	}
+	// If mode is set but overlay is nil, this is an inconsistent state
+	// We should deactivate to prevent panics
+	if o.overlay == nil {
+		o.mode = OverlayModeNone
+		return false
+	}
+	return true
 }
 
 // renderOverlay renders an overlay on top of the base content
