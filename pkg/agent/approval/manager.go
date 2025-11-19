@@ -112,7 +112,9 @@ func (m *Manager) cleanupPendingApproval(responseChannel chan *types.ApprovalRes
 
 // parseToolArguments safely parses tool call arguments into a map
 func parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
-	// Return empty map. The approval channel is still present and used for delivering
-	// responses from the UI/TUI to the agent. Tool arguments are now handled directly by tools.
-	return make(map[string]interface{})
+	var argsMap map[string]interface{}
+	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
+		argsMap = make(map[string]interface{})
+	}
+	return argsMap
 }

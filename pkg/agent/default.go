@@ -14,7 +14,6 @@ import (
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
-	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
 	"github.com/entrhq/forge/pkg/tools/coding"
@@ -898,59 +897,6 @@ func (a *DefaultAgent) handleCommandCancellation(req *types.CancellationRequest)
 //   - approved: true if user approved, false if rejected
 //   - timedOut: true if the request timed out waiting for response
 func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
-	// Parse tool input for event
-	argsMap := a.parseToolArguments(toolCall)
-
-	// Check for auto-approval first
-	if approved, autoApproved := a.checkAutoApproval(toolCall, argsMap); autoApproved {
-		return approved, false
-	}
-
-	// Delegate to approval manager for manual approval
+	// Delegate all approval logic to the approval manager
 	return a.approvalManager.RequestApproval(ctx, toolCall, preview)
-}
-
-// parseToolArguments parses the tool arguments for the approval event
-func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
-	var argsMap map[string]interface{}
-	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
-		argsMap = make(map[string]interface{})
-	}
-	return argsMap
-}
-
-// checkAutoApproval checks if the tool or command should be auto-approved
-// Returns (approved, autoApproved) where autoApproved indicates if a decision was made
-func (a *DefaultAgent) checkAutoApproval(toolCall tools.ToolCall, argsMap map[string]interface{}) (bool, bool) {
-	// Special handling for execute_command: always check command whitelist first
-	// The execute_command tool uses a per-command whitelist, not tool-level auto-approval
-	if toolCall.ToolName == "execute_command" {
-		if a.isCommandWhitelisted(argsMap) {
-			return true, true
-		}
-		// For execute_command, we only check the whitelist, not the tool-level auto-approval
-		return false, false
-	}
-
-	// For all other tools, check if tool is auto-approved
-	if config.IsToolAutoApproved(toolCall.ToolName) {
-		return true, true
-	}
-
-	return false, false
-}
-
-// isCommandWhitelisted checks if a command is whitelisted
-func (a *DefaultAgent) isCommandWhitelisted(argsMap map[string]interface{}) bool {
-	cmdInterface, ok := argsMap["command"]
-	if !ok {
-		return false
-	}
-
-	cmd, ok := cmdInterface.(string)
-	if !ok {
-		return false
-	}
-
-	return config.IsCommandWhitelisted(cmd)
 }
