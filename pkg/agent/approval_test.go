@@ -54,7 +54,7 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 			// Track events for verification - use mutex to prevent data race
 			var lastApprovalID string
 			var approvalIDMutex sync.Mutex
-			
+
 			emitEvent := func(event *types.AgentEvent) {
 				if event.Type == types.EventTypeToolApprovalRequest {
 					approvalIDMutex.Lock()
@@ -91,7 +91,7 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 					approvalIDMutex.Lock()
 					id := lastApprovalID
 					approvalIDMutex.Unlock()
-					
+
 					if id != "" {
 						response := types.NewApprovalResponse(id, tt.responseDecision)
 						agent.handleApprovalResponse(response)
