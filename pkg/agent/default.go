@@ -693,6 +693,36 @@ func (a *DefaultAgent) resetErrorTracking() {
 	a.errorIndex = 0
 }
 
+// parseToolCallXML parses tool call XML content and handles errors
+// Returns (toolCall, shouldContinue, errorContext)
+func (a *DefaultAgent) parseToolCallXML(toolCallContent string) (tools.ToolCall, bool, string) {
+	// Parse the tool call (supports both XML and JSON formats)
+	// Wrap content in <loot> tags since streaming parser strips them
+	wrappedContent := "<loot>" + toolCallContent + "</loot>"
+	parsedToolCall, _, err := tools.ParseToolCall(wrappedContent)
+	if err != nil {
+		// Log the actual content for debugging
+		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed to parse tool call:\n%s\n", toolCallContent)))
+
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type:    prompts.ErrorTypeInvalidXML,
+			Error:   err,
+			Content: toolCallContent,
+		})
+
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive parse errors")))
+			return tools.ToolCall{}, false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call: %w", err)))
+		return tools.ToolCall{}, true, errMsg
+	}
+
+	// Use the parsed tool call
+	return *parsedToolCall, true, ""
+}
+
 // validateToolCallContent checks if context was canceled and if tool call content exists
 // Returns (shouldContinue, errorContext) - if errorContext is non-empty, validation failed
 func (a *DefaultAgent) validateToolCallContent(ctx context.Context, toolCallContent string) (bool, string) {
@@ -735,31 +765,11 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 		return shouldContinue, errCtx
 	}
 
-	// Parse the tool call (supports both XML and JSON formats)
-	// Wrap content in <tool> tags since streaming parser strips them
-	wrappedContent := "<tool>" + toolCallContent + "</tool>"
-	parsedToolCall, _, err := tools.ParseToolCall(wrappedContent)
-	if err != nil {
-		// Log the actual content for debugging
-		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed to parse tool call:\n%s\n", toolCallContent)))
-
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:    prompts.ErrorTypeInvalidXML,
-			Error:   err,
-			Content: toolCallContent,
-		})
-
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive parse errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call: %w", err)))
-		return true, errMsg
+	// Parse the tool call XML
+	toolCall, shouldContinue, errCtx := a.parseToolCallXML(toolCallContent)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
-
-	// Use the parsed tool call
-	toolCall := *parsedToolCall
 
 	// Validate required fields
 	if toolCall.ToolName == "" {
