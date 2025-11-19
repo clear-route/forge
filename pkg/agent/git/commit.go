@@ -144,7 +144,7 @@ func GetModifiedFiles(workingDir string) ([]string, error) {
 				// Skip deleted files - they can't be staged with git add
 				continue
 			}
-			
+
 			// Split on whitespace and take the last part (handles renamed files too)
 			parts := strings.Fields(line)
 			if len(parts) > 0 {
