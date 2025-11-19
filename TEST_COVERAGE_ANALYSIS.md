@@ -30,41 +30,58 @@
 ❌ pkg/agent/slash            0.0%  - No tests
 ```
 
-### Function-Level Coverage: pkg/agent/default.go
+### Function-Level Coverage: Refactored Agent Files
+
+**Note:** As of Phase 2.1 refactoring, the agent loop has been extracted from `pkg/agent/default.go` into separate files:
+- `pkg/agent/assistant.go` - Core agent loop (`runAgentLoop`, `executeIteration`)
+- `pkg/agent/iteration.go` - Prompt and LLM interaction
+- `pkg/agent/tool_execution.go` - Tool execution and approval
+- `pkg/agent/tool_validation.go` - Tool call validation
+- `pkg/agent/error_tracking.go` - Circuit breaker error tracking
+- `pkg/agent/approval.go` - Approval handling
+- `pkg/agent/prompts.go` - System prompt building
+- `pkg/agent/tools.go` - Tool registry access
 
 #### CRITICAL REFACTORING TARGETS (0% Coverage)
 
-These are the exact functions we plan to refactor in Phase 2.1:
+These functions were extracted during Phase 2.1 and still require test coverage:
 
-| Function | Lines | Coverage | Risk Level |
-|----------|-------|----------|------------|
-| executeIteration() | ~107 | 0.0% | CRITICAL |
-| executeTool() | ~95 | 0.0% | CRITICAL |
-| processToolCall() | ~76 | 0.0% | CRITICAL |
+| Function | File | Lines | Coverage | Risk Level |
+|----------|------|-------|----------|------------|
+| executeIteration() | assistant.go | ~35 | 0.0% | CRITICAL |
+| executeTool() | tool_execution.go | ~25 | 0.0% | CRITICAL |
+| processToolCall() | tool_validation.go | ~25 | 0.0% | CRITICAL |
+| handleToolApproval() | tool_execution.go | ~35 | 0.0% | CRITICAL |
+| executeToolCall() | tool_execution.go | ~35 | 0.0% | CRITICAL |
+| processToolResult() | tool_execution.go | ~15 | 0.0% | CRITICAL |
+| lookupTool() | tool_execution.go | ~20 | 0.0% | CRITICAL |
+| validateToolCallContent() | tool_validation.go | ~30 | 0.0% | CRITICAL |
+| parseToolCallXML() | tool_validation.go | ~25 | 0.0% | CRITICAL |
+| validateToolCallFields() | tool_validation.go | ~20 | 0.0% | CRITICAL |
 
-**TOTAL:** 278 lines of untested code that we plan to heavily refactor.
+**TOTAL:** ~265 lines of untested code across extracted functions.
 
 #### SUPPORTING INFRASTRUCTURE (Mixed Coverage)
 
-| Function | Coverage | Notes |
-|----------|----------|-------|
-| trackError() | 88.9% | Well tested - circuit breaker logic verified |
-| resetErrorTracking() | 100% | Fully covered |
-| GetContextInfo() | 80.0% | Token counting tested |
-| getToolsList() | 100% | Fully covered |
-| handleApprovalResponse() | 100% | Fully covered |
-| requestApproval() | 100% | Fully covered |
+| Function | File | Coverage | Notes |
+|----------|------|----------|-------|
+| trackError() | error_tracking.go | 88.9% | Well tested - circuit breaker logic verified |
+| resetErrorTracking() | error_tracking.go | 100% | Fully covered |
+| GetContextInfo() | default.go | 80.0% | Token counting tested |
+| getToolsList() | tools.go | 100% | Fully covered |
+| handleApprovalResponse() | approval.go | 100% | Fully covered |
+| requestApproval() | approval.go | 100% | Fully covered |
 
 #### UNCOVERED INFRASTRUCTURE (0% Coverage)
 
-| Function | Coverage | Impact on Refactoring |
-|----------|----------|---------------------|
-| eventLoop() | 0.0% | High - orchestrates entire agent |
-| processInput() | 0.0% | High - entry point for user input |
-| processUserInput() | 0.0% | High - processes chat messages |
-| runAgentLoop() | 0.0% | High - main control loop |
-| buildSystemPrompt() | 0.0% | Medium - used in every iteration |
-| getTool() | 0.0% | Medium - used in tool execution |
+| Function | File | Coverage | Impact on Refactoring |
+|----------|------|----------|---------------------|
+| eventLoop() | default.go | 0.0% | High - orchestrates entire agent |
+| processInput() | default.go | 0.0% | High - entry point for user input |
+| processUserInput() | default.go | 0.0% | High - processes chat messages |
+| runAgentLoop() | assistant.go | 0.0% | High - main control loop |
+| buildSystemPrompt() | prompts.go | 0.0% | Medium - used in every iteration |
+| getTool() | tools.go | 0.0% | Medium - used in tool execution |
 
 ---
 

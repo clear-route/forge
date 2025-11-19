@@ -102,19 +102,19 @@ func (a *DefaultAgent) validateToolCallContent(ctx context.Context, toolCallCont
 func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
 	// Validate content exists and context not canceled
 	shouldContinue, errCtx := a.validateToolCallContent(ctx, toolCallContent)
-	if errCtx != "" || !shouldContinue {
+	if !shouldContinue || errCtx != "" {
 		return shouldContinue, errCtx
 	}
 
 	// Parse the tool call XML
 	toolCall, shouldContinue, errCtx := a.parseToolCallXML(toolCallContent)
-	if errCtx != "" || !shouldContinue {
+	if !shouldContinue || errCtx != "" {
 		return shouldContinue, errCtx
 	}
 
 	// Validate required fields
 	shouldContinue, errCtx = a.validateToolCallFields(&toolCall)
-	if errCtx != "" || !shouldContinue {
+	if !shouldContinue || errCtx != "" {
 		return shouldContinue, errCtx
 	}
 

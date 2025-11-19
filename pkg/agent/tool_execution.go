@@ -66,12 +66,13 @@ func (a *DefaultAgent) processToolResult(tool tools.Tool, toolCall tools.ToolCal
 }
 
 // handleToolApproval checks if tool requires approval and handles the approval flow
-func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) {
+// Returns shouldExecute - false if approval was rejected/timed out, true otherwise
+func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) bool {
 	// Check if tool requires approval
 	previewable, ok := tool.(tools.Previewable)
 	if !ok {
-		// No approval needed
-		return
+		// No approval needed - proceed with execution
+		return true
 	}
 
 	// Generate preview
@@ -80,27 +81,28 @@ func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, 
 		// If preview generation fails, log error but continue with execution
 		// (degraded mode - execute without approval)
 		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
-		return
+		return true
 	}
 
 	// Request approval from user
 	approved, timedOut := a.requestApproval(ctx, toolCall, preview)
 
 	if timedOut {
-		// Timeout - treat as rejection and continue loop
+		// Timeout - treat as rejection and continue loop without executing
 		errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
 		a.memory.Add(types.NewUserMessage(errMsg))
-		return
+		return false
 	}
 
 	if !approved {
 		// User rejected - continue loop without executing
 		errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
 		a.memory.Add(types.NewUserMessage(errMsg))
-		return
+		return false
 	}
 
 	// User approved - continue with execution
+	return true
 }
 
 // lookupTool retrieves a tool by name and handles lookup errors
@@ -132,16 +134,19 @@ func (a *DefaultAgent) lookupTool(toolName string) (tools.Tool, bool, string) {
 func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall) (bool, string) {
 	// Look up the tool
 	tool, shouldContinue, errCtx := a.lookupTool(toolCall.ToolName)
-	if errCtx != "" || !shouldContinue {
+	if !shouldContinue || errCtx != "" {
 		return shouldContinue, errCtx
 	}
 
 	// Handle tool approval if needed
-	a.handleToolApproval(ctx, tool, toolCall)
+	if !a.handleToolApproval(ctx, tool, toolCall) {
+		// Tool approval was rejected or timed out - continue loop without executing
+		return true, ""
+	}
 
 	// Execute the tool call
 	result, shouldContinue, errCtx := a.executeToolCall(ctx, tool, toolCall)
-	if errCtx != "" || !shouldContinue {
+	if !shouldContinue || errCtx != "" {
 		return shouldContinue, errCtx
 	}
 
