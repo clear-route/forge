@@ -56,7 +56,7 @@ func (a *DefaultAgent) attemptSummarization(ctx context.Context, promptTokens in
 }
 
 // preparePrompt builds the prompt, counts tokens, and handles context summarization
-func (a *DefaultAgent) preparePrompt(ctx context.Context, errorContext string) (*promptContext, error) {
+func (a *DefaultAgent) preparePrompt(ctx context.Context, errorContext string) *promptContext {
 	// Build system prompt with tools
 	systemPrompt := a.buildSystemPrompt()
 
@@ -90,7 +90,7 @@ func (a *DefaultAgent) preparePrompt(ctx context.Context, errorContext string) (
 		systemPrompt: systemPrompt,
 		messages:     messages,
 		promptTokens: promptTokens,
-	}, nil
+	}
 }
 
 // callLLM sends the request to the LLM and processes the streaming response

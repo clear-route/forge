@@ -41,10 +41,7 @@ func (a *DefaultAgent) runAgentLoop(ctx context.Context) {
 //   - errorContext: message to inject as user context for error recovery (empty if no error)
 func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string) (bool, string) {
 	// Step 1: Prepare prompt with summarization if needed
-	pctx, err := a.preparePrompt(ctx, errorContext)
-	if err != nil {
-		return false, ""
-	}
+	pctx := a.preparePrompt(ctx, errorContext)
 
 	// Step 2: Call LLM and get streaming response
 	resp, err := a.callLLM(ctx, pctx)

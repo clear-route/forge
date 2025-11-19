@@ -66,13 +66,12 @@ func (a *DefaultAgent) processToolResult(tool tools.Tool, toolCall tools.ToolCal
 }
 
 // handleToolApproval checks if tool requires approval and handles the approval flow
-// Returns (shouldContinue, errorContext) - empty errorContext means approved or no approval needed
-func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) (bool, string) {
+func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) {
 	// Check if tool requires approval
 	previewable, ok := tool.(tools.Previewable)
 	if !ok {
 		// No approval needed
-		return true, ""
+		return
 	}
 
 	// Generate preview
@@ -81,7 +80,7 @@ func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, 
 		// If preview generation fails, log error but continue with execution
 		// (degraded mode - execute without approval)
 		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
-		return true, ""
+		return
 	}
 
 	// Request approval from user
@@ -91,18 +90,17 @@ func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, 
 		// Timeout - treat as rejection and continue loop
 		errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
 		a.memory.Add(types.NewUserMessage(errMsg))
-		return true, ""
+		return
 	}
 
 	if !approved {
 		// User rejected - continue loop without executing
 		errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
 		a.memory.Add(types.NewUserMessage(errMsg))
-		return true, ""
+		return
 	}
 
 	// User approved - continue with execution
-	return true, ""
 }
 
 // lookupTool retrieves a tool by name and handles lookup errors
@@ -139,10 +137,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 	}
 
 	// Handle tool approval if needed
-	shouldContinue, errCtx = a.handleToolApproval(ctx, tool, toolCall)
-	if errCtx != "" || !shouldContinue {
-		return shouldContinue, errCtx
-	}
+	a.handleToolApproval(ctx, tool, toolCall)
 
 	// Execute the tool call
 	result, shouldContinue, errCtx := a.executeToolCall(ctx, tool, toolCall)
