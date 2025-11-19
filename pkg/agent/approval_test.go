@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,11 +51,15 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			channels := types.NewAgentChannels(10)
 
-			// Track events for verification
+			// Track events for verification - use mutex to prevent data race
 			var lastApprovalID string
+			var approvalIDMutex sync.Mutex
+			
 			emitEvent := func(event *types.AgentEvent) {
 				if event.Type == types.EventTypeToolApprovalRequest {
+					approvalIDMutex.Lock()
 					lastApprovalID = event.ApprovalID
+					approvalIDMutex.Unlock()
 				}
 				channels.Event <- event
 			}
@@ -83,8 +88,12 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 					// Wait for approval request event
 					time.Sleep(50 * time.Millisecond)
 
-					if lastApprovalID != "" {
-						response := types.NewApprovalResponse(lastApprovalID, tt.responseDecision)
+					approvalIDMutex.Lock()
+					id := lastApprovalID
+					approvalIDMutex.Unlock()
+					
+					if id != "" {
+						response := types.NewApprovalResponse(id, tt.responseDecision)
 						agent.handleApprovalResponse(response)
 					}
 				}()
