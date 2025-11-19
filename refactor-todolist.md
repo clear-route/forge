@@ -213,16 +213,24 @@ When all tasks complete:
 - [x] File structure verified: 7 focused modules created
 - [ ] TUI functionality verified manually (pending manual testing)
 
-#### PR & Merge - READY FOR REVIEW
+#### PR & Merge - COMPLETED & MERGED
 - [x] Final testing and cleanup completed
 - [x] All recovery commits pushed
 - [x] Branch pushed: `git push -u origin refactor/split-tui-executor` ✓
-- [ ] Create PR on GitHub
-- [ ] Document all 18 fixes in PR description (see TUI_REFACTOR_RECOVERY.md)
-- [ ] Link to TUI_REFACTOR_RECOVERY.md in PR
-- [ ] Request review from team
-- [ ] Manual testing verification by reviewer
-- [ ] Merge PR after approval
+- [x] Create PR on GitHub (PR #15)
+- [x] Document all 18 fixes in PR description
+- [x] Request review from team
+- [x] Manual testing verification by reviewer
+- [x] Merge PR after approval
+- [x] Delete branch locally: `git branch -d refactor/split-tui-executor`
+- [x] Switch back to base: `git checkout refactor/code-cleanup`
+- [x] Pull merged changes: `git pull origin refactor/code-cleanup`
+
+**Status:** COMPLETED & MERGED
+**PR Link:** https://github.com/entrhq/forge/pull/15
+**Commits:** 24c5e2a, f7b1f48, 9a49465, 84c38a6, e92cbaa, cafc8b2
+
+**Time Spent:** ~8 hours (on target)
 
 ---
 

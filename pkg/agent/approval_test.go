@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/entrhq/forge/pkg/agent/approval"
 	"github.com/entrhq/forge/pkg/agent/tools"
 	"github.com/entrhq/forge/pkg/types"
 )
@@ -47,9 +48,20 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			channels := types.NewAgentChannels(10)
+
+			// Track events for verification
+			var lastApprovalID string
+			emitEvent := func(event *types.AgentEvent) {
+				if event.Type == types.EventTypeToolApprovalRequest {
+					lastApprovalID = event.ApprovalID
+				}
+				channels.Event <- event
+			}
+
 			agent := &DefaultAgent{
-				approvalTimeout: tt.timeout,
-				channels:        types.NewAgentChannels(10),
+				channels:        channels,
+				approvalManager: approval.NewManager(tt.timeout, emitEvent),
 			}
 
 			toolCall := tools.ToolCall{
@@ -68,16 +80,11 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 
 			if tt.sendResponse {
 				go func() {
+					// Wait for approval request event
 					time.Sleep(50 * time.Millisecond)
-					agent.approvalMu.Lock()
-					var approvalID string
-					if agent.pendingApproval != nil {
-						approvalID = agent.pendingApproval.approvalID
-					}
-					agent.approvalMu.Unlock()
 
-					if approvalID != "" {
-						response := types.NewApprovalResponse(approvalID, tt.responseDecision)
+					if lastApprovalID != "" {
+						response := types.NewApprovalResponse(lastApprovalID, tt.responseDecision)
 						agent.handleApprovalResponse(response)
 					}
 				}()
@@ -92,12 +99,6 @@ func TestApprovalSystem_RequestApproval(t *testing.T) {
 			if timedOut != tt.expectTimedOut {
 				t.Errorf("timedOut = %v, want %v", timedOut, tt.expectTimedOut)
 			}
-
-			agent.approvalMu.Lock()
-			if agent.pendingApproval != nil {
-				t.Error("pending approval should be nil after request completes")
-			}
-			agent.approvalMu.Unlock()
 		})
 	}
 }

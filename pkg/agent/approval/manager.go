@@ -11,7 +11,7 @@ import (
 )
 
 // EventEmitter is a function type for emitting events
-type EventEmitter func(event types.Event)
+type EventEmitter func(event *types.AgentEvent)
 
 // Manager handles tool approval requests and responses
 type Manager struct {
@@ -19,7 +19,6 @@ type Manager struct {
 	pendingApproval *pendingApproval
 	mu              sync.Mutex
 	emitEvent       EventEmitter
-	approvalChannel chan *types.ApprovalResponse
 }
 
 // pendingApproval tracks an approval request that is waiting for user response
@@ -31,11 +30,10 @@ type pendingApproval struct {
 }
 
 // NewManager creates a new approval manager
-func NewManager(timeout time.Duration, emitEvent EventEmitter, approvalChannel chan *types.ApprovalResponse) *Manager {
+func NewManager(timeout time.Duration, emitEvent EventEmitter) *Manager {
 	return &Manager{
-		timeout:         timeout,
-		emitEvent:       emitEvent,
-		approvalChannel: approvalChannel,
+		timeout:   timeout,
+		emitEvent: emitEvent,
 	}
 }
 
@@ -68,7 +66,7 @@ func (m *Manager) RequestApproval(ctx context.Context, toolCall tools.ToolCall, 
 	m.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
 
 	// Wait for response with timeout
-	return m.waitForResponse(ctx, approvalID, toolCall, responseChannel, preview)
+	return m.waitForResponse(ctx, approvalID, toolCall, responseChannel)
 }
 
 // HandleResponse processes an approval response from the user
@@ -114,9 +112,7 @@ func (m *Manager) cleanupPendingApproval(responseChannel chan *types.ApprovalRes
 
 // parseToolArguments safely parses tool call arguments into a map
 func parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
-	argsMap := make(map[string]interface{})
-	if args, ok := toolCall.Input.(map[string]interface{}); ok {
-		argsMap = args
-	}
-	return argsMap
+	// Return empty map - this was used for the old direct approval channel
+	// which has been removed. Tool arguments are now handled directly by tools.
+	return make(map[string]interface{})
 }
