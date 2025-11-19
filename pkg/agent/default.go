@@ -110,11 +110,7 @@ func WithMetadata(metadata map[string]interface{}) AgentOption {
 // WithApprovalTimeout sets the timeout for approval requests
 func WithApprovalTimeout(timeout time.Duration) AgentOption {
 	return func(a *DefaultAgent) {
-		// Store timeout for later use when creating approval manager
-		if a.approvalManager != nil {
-			// Manager already exists, we need to recreate it
-			a.approvalManager = approval.NewManager(timeout, a.emitEvent)
-		}
+		a.approvalTimeout = timeout
 	}
 }
 
