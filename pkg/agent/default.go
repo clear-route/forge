@@ -806,6 +806,61 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	return a.executeTool(ctx, toolCall)
 }
 
+// executeToolCall emits events, executes the tool, and handles execution errors
+// Returns (result, shouldContinue, errorContext)
+func (a *DefaultAgent) executeToolCall(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) (string, bool, string) {
+	// Emit tool call event
+	var argsMap map[string]interface{}
+	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
+		argsMap = make(map[string]interface{})
+	}
+	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
+
+	// Inject event emitter and command registry into context for tools that support streaming events
+	ctxWithEmitter := context.WithValue(ctx, coding.EventEmitterKey, coding.EventEmitter(a.emitEvent))
+	ctxWithRegistry := context.WithValue(ctxWithEmitter, coding.CommandRegistryKey, &a.activeCommands)
+
+	// Execute the tool
+	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.GetArgumentsXML())
+	if toolErr != nil {
+		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type:     prompts.ErrorTypeToolExecution,
+			ToolName: toolCall.ToolName,
+			Error:    toolErr,
+		})
+
+		// Track error and check circuit breaker
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive tool execution errors")))
+			return "", false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool execution failed: %w", toolErr)))
+		return "", true, errMsg
+	}
+
+	return result, true, ""
+}
+
+// processToolResult handles successful tool execution results
+// Returns (shouldContinue, errorContext)
+func (a *DefaultAgent) processToolResult(tool tools.Tool, toolCall tools.ToolCall, result string) (bool, string) {
+	a.emitEvent(types.NewToolResultEvent(toolCall.ToolName, result))
+
+	// Success! Reset error tracking
+	a.resetErrorTracking()
+
+	// Check if this is a loop-breaking tool
+	if tool.IsLoopBreaking() {
+		return false, ""
+	}
+
+	// For non-breaking tools, add result to memory and continue loop
+	a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
+	return true, ""
+}
+
 // handleToolApproval checks if tool requires approval and handles the approval flow
 // Returns (shouldContinue, errorContext) - empty errorContext means approved or no approval needed
 func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) (bool, string) {
@@ -885,50 +940,14 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 		return shouldContinue, errCtx
 	}
 
-	// Emit tool call event
-	var argsMap map[string]interface{}
-	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
-		argsMap = make(map[string]interface{})
-	}
-	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
-
-	// Inject event emitter and command registry into context for tools that support streaming events
-	ctxWithEmitter := context.WithValue(ctx, coding.EventEmitterKey, coding.EventEmitter(a.emitEvent))
-	ctxWithRegistry := context.WithValue(ctxWithEmitter, coding.CommandRegistryKey, &a.activeCommands)
-
-	// Execute the tool
-	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.GetArgumentsXML())
-	if toolErr != nil {
-		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:     prompts.ErrorTypeToolExecution,
-			ToolName: toolCall.ToolName,
-			Error:    toolErr,
-		})
-
-		// Track error and check circuit breaker
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive tool execution errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool execution failed: %w", toolErr)))
-		return true, errMsg // Continue with error context
+	// Execute the tool call
+	result, shouldContinue, errCtx := a.executeToolCall(ctx, tool, toolCall)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
 
-	a.emitEvent(types.NewToolResultEvent(toolCall.ToolName, result))
-
-	// Success! Reset error tracking
-	a.resetErrorTracking()
-
-	// Check if this is a loop-breaking tool
-	if tool.IsLoopBreaking() {
-		return false, "" // Stop loop
-	}
-
-	// For non-breaking tools, add result to memory and continue loop
-	a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
-	return true, "" // Continue with no error
+	// Process the successful result
+	return a.processToolResult(tool, toolCall, result)
 }
 
 // handleApprovalResponse processes an approval response from the user
