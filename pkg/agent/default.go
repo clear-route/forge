@@ -693,9 +693,9 @@ func (a *DefaultAgent) resetErrorTracking() {
 	a.errorIndex = 0
 }
 
-// processToolCall handles parsing, validation, and execution of tool calls
-// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
-func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
+// validateToolCallContent checks if context was canceled and if tool call content exists
+// Returns (shouldContinue, errorContext) - if errorContext is non-empty, validation failed
+func (a *DefaultAgent) validateToolCallContent(ctx context.Context, toolCallContent string) (bool, string) {
 	// Check if context was canceled before processing
 	if ctx.Err() != nil {
 		return false, "" // Stop silently - user requested cancellation
@@ -720,6 +720,19 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 
 		a.emitEvent(types.NewErrorEvent(fmt.Errorf("no tool call found in response")))
 		return true, errMsg
+	}
+
+	// Validation passed
+	return true, ""
+}
+
+// processToolCall handles parsing, validation, and execution of tool calls
+// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
+func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
+	// Validate content exists and context not canceled
+	shouldContinue, errCtx := a.validateToolCallContent(ctx, toolCallContent)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
 
 	// Parse the tool call (supports both XML and JSON formats)
