@@ -806,6 +806,46 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	return a.executeTool(ctx, toolCall)
 }
 
+// handleToolApproval checks if tool requires approval and handles the approval flow
+// Returns (shouldContinue, errorContext) - empty errorContext means approved or no approval needed
+func (a *DefaultAgent) handleToolApproval(ctx context.Context, tool tools.Tool, toolCall tools.ToolCall) (bool, string) {
+	// Check if tool requires approval
+	previewable, ok := tool.(tools.Previewable)
+	if !ok {
+		// No approval needed
+		return true, ""
+	}
+
+	// Generate preview
+	preview, err := previewable.GeneratePreview(ctx, toolCall.GetArgumentsXML())
+	if err != nil {
+		// If preview generation fails, log error but continue with execution
+		// (degraded mode - execute without approval)
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
+		return true, ""
+	}
+
+	// Request approval from user
+	approved, timedOut := a.requestApproval(ctx, toolCall, preview)
+
+	if timedOut {
+		// Timeout - treat as rejection and continue loop
+		errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
+		a.memory.Add(types.NewUserMessage(errMsg))
+		return true, ""
+	}
+
+	if !approved {
+		// User rejected - continue loop without executing
+		errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
+		a.memory.Add(types.NewUserMessage(errMsg))
+		return true, ""
+	}
+
+	// User approved - continue with execution
+	return true, ""
+}
+
 // lookupTool retrieves a tool by name and handles lookup errors
 // Returns (tool, shouldContinue, errorContext)
 func (a *DefaultAgent) lookupTool(toolName string) (tools.Tool, bool, string) {
@@ -839,34 +879,10 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 		return shouldContinue, errCtx
 	}
 
-	// Check if tool requires approval
-	if previewable, ok := tool.(tools.Previewable); ok {
-		// Generate preview
-		preview, err := previewable.GeneratePreview(ctx, toolCall.GetArgumentsXML())
-		if err != nil {
-			// If preview generation fails, log error but continue with execution
-			// (degraded mode - execute without approval)
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
-		} else {
-			// Request approval from user
-			approved, timedOut := a.requestApproval(ctx, toolCall, preview)
-
-			if timedOut {
-				// Timeout - treat as rejection and continue loop
-				errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
-				a.memory.Add(types.NewUserMessage(errMsg))
-				return true, ""
-			}
-
-			if !approved {
-				// User rejected - continue loop without executing
-				errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
-				a.memory.Add(types.NewUserMessage(errMsg))
-				return true, ""
-			}
-
-			// User approved - continue with execution
-		}
+	// Handle tool approval if needed
+	shouldContinue, errCtx = a.handleToolApproval(ctx, tool, toolCall)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
 
 	// Emit tool call event
