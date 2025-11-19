@@ -693,12 +693,37 @@ func (a *DefaultAgent) resetErrorTracking() {
 	a.errorIndex = 0
 }
 
+// validateToolCallFields validates required fields in the tool call
+// Returns (shouldContinue, errorContext)
+func (a *DefaultAgent) validateToolCallFields(toolCall *tools.ToolCall) (bool, string) {
+	if toolCall.ToolName == "" {
+		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
+			Type: prompts.ErrorTypeMissingToolName,
+		})
+
+		if a.trackError(errMsg) {
+			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive missing tool name errors")))
+			return false, ""
+		}
+
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool_name is required in tool call")))
+		return true, errMsg
+	}
+
+	// Server name defaults to "local" if not specified
+	if toolCall.ServerName == "" {
+		toolCall.ServerName = "local"
+	}
+
+	return true, ""
+}
+
 // parseToolCallXML parses tool call XML content and handles errors
 // Returns (toolCall, shouldContinue, errorContext)
 func (a *DefaultAgent) parseToolCallXML(toolCallContent string) (tools.ToolCall, bool, string) {
 	// Parse the tool call (supports both XML and JSON formats)
-	// Wrap content in <loot> tags since streaming parser strips them
-	wrappedContent := "<loot>" + toolCallContent + "</loot>"
+	// Wrap content in <tool> tags since streaming parser strips them
+	wrappedContent := "<tool>" + toolCallContent + "</tool>"
 	parsedToolCall, _, err := tools.ParseToolCall(wrappedContent)
 	if err != nil {
 		// Log the actual content for debugging
@@ -772,23 +797,9 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	}
 
 	// Validate required fields
-	if toolCall.ToolName == "" {
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type: prompts.ErrorTypeMissingToolName,
-		})
-
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive missing tool name errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool_name is required in tool call")))
-		return true, errMsg
-	}
-
-	// Server name defaults to "local" if not specified
-	if toolCall.ServerName == "" {
-		toolCall.ServerName = "local"
+	shouldContinue, errCtx = a.validateToolCallFields(&toolCall)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
 
 	// Execute the tool
