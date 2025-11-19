@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/syntax"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // SlashCommandPreview displays a preview of slash command changes before execution
@@ -75,7 +77,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show branch info
 		if len(files) > 0 {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Branch:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Branch:"))
 			b.WriteString("\n")
 			for _, file := range files {
 				b.WriteString("  " + file + "\n")
@@ -85,7 +87,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show PR title
 		if prTitle != "" {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Title:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("PR Title:"))
 			b.WriteString("\n")
 			b.WriteString(prTitle)
 			b.WriteString("\n\n")
@@ -93,7 +95,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show PR description
 		if prDesc != "" {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("PR Description:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("PR Description:"))
 			b.WriteString("\n")
 			b.WriteString(prDesc)
 			b.WriteString("\n\n")
@@ -101,7 +103,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show commits and changes
 		if diff != "" {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commits & Changes:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Commits & Changes:"))
 			b.WriteString("\n")
 			b.WriteString(diff)
 		}
@@ -110,7 +112,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show files to commit
 		if len(files) > 0 {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Files to commit:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Files to commit:"))
 			b.WriteString("\n")
 			for _, file := range files {
 				b.WriteString("  • " + file + "\n")
@@ -120,7 +122,7 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show commit message
 		if message != "" {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commit Message:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Commit Message:"))
 			b.WriteString("\n")
 			b.WriteString(message)
 			b.WriteString("\n\n")
@@ -128,10 +130,10 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 
 		// Show diff with syntax highlighting
 		if diff != "" {
-			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Changes:"))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Changes:"))
 			b.WriteString("\n")
 
-			highlightedDiff, err := HighlightDiff(diff, "")
+			highlightedDiff, err := syntax.HighlightDiff(diff, "")
 			if err != nil {
 				b.WriteString(diff)
 			} else {
@@ -143,26 +145,26 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 	return b.String()
 }
 
-func (s *SlashCommandPreview) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return s.handleKeyMsg(msg)
+		return s.handleKeyMsg(msg, actions)
 	case tea.WindowSizeMsg:
 		return s.handleWindowResize(msg)
 	}
 	return s, nil
 }
 
-func (s *SlashCommandPreview) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleKeyMsg(msg tea.KeyMsg, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc", "ctrl+r":
-		return s.handleReject()
+		return s.handleReject(actions)
 	case "ctrl+a":
-		return s.handleApprove()
+		return s.handleApprove(actions)
 	case "tab":
 		return s.handleToggleSelection()
 	case "enter":
-		return s.handleSubmit()
+		return s.handleSubmit(actions)
 	case "left", "h":
 		return s.handleSelectAccept()
 	case "right", "l":
@@ -172,17 +174,23 @@ func (s *SlashCommandPreview) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
 	}
 }
 
-func (s *SlashCommandPreview) handleReject() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleReject(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	// Close overlay and execute rejection command
+	if actions != nil {
+		actions.ClearOverlay()
+	}
 	return nil, s.onReject
 }
 
-func (s *SlashCommandPreview) handleApprove() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleApprove(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	// Close overlay and execute approval command
+	if actions != nil {
+		actions.ClearOverlay()
+	}
 	return nil, s.onApprove
 }
 
-func (s *SlashCommandPreview) handleToggleSelection() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleToggleSelection() (types.Overlay, tea.Cmd) {
 	if s.selected == ApprovalChoiceAccept {
 		s.selected = ApprovalChoiceReject
 	} else {
@@ -191,30 +199,30 @@ func (s *SlashCommandPreview) handleToggleSelection() (Overlay, tea.Cmd) {
 	return s, nil
 }
 
-func (s *SlashCommandPreview) handleSubmit() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleSubmit(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if s.selected == ApprovalChoiceAccept {
-		return s.handleApprove()
+		return s.handleApprove(actions)
 	}
-	return s.handleReject()
+	return s.handleReject(actions)
 }
 
-func (s *SlashCommandPreview) handleSelectAccept() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleSelectAccept() (types.Overlay, tea.Cmd) {
 	s.selected = ApprovalChoiceAccept
 	return s, nil
 }
 
-func (s *SlashCommandPreview) handleSelectReject() (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleSelectReject() (types.Overlay, tea.Cmd) {
 	s.selected = ApprovalChoiceReject
 	return s, nil
 }
 
-func (s *SlashCommandPreview) handleViewportScroll(msg tea.KeyMsg) (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleViewportScroll(msg tea.KeyMsg) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 	s.viewport, cmd = s.viewport.Update(msg)
 	return s, cmd
 }
 
-func (s *SlashCommandPreview) handleWindowResize(msg tea.WindowSizeMsg) (Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleWindowResize(msg tea.WindowSizeMsg) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 	s.width = msg.Width
 	s.height = msg.Height
@@ -234,18 +242,18 @@ func (s *SlashCommandPreview) View() string {
 	// Manually center by calculating padding
 	titleLen := len(title)
 	subtitleLen := len(subtitle)
-	titlePadding := (contentWidth - titleLen) / 2
-	subtitlePadding := (contentWidth - subtitleLen) / 2
+	titlePadding := max(0, (contentWidth-titleLen)/2)
+	subtitlePadding := max(0, (contentWidth-subtitleLen)/2)
 
-	b.WriteString(strings.Repeat(" ", titlePadding) + OverlayTitleStyle.Render(title))
+	b.WriteString(strings.Repeat(" ", titlePadding) + types.OverlayTitleStyle.Render(title))
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat(" ", subtitlePadding) + OverlaySubtitleStyle.Render(subtitle))
+	b.WriteString(strings.Repeat(" ", subtitlePadding) + types.OverlaySubtitleStyle.Render(subtitle))
 	b.WriteString("\n\n")
 
 	// Content box has its own border (2) + padding (2), so reduce width further
 	contentStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
+		BorderForeground(types.SalmonPink).
 		Padding(0, 1).
 		Width(contentWidth - 4)
 
@@ -253,33 +261,33 @@ func (s *SlashCommandPreview) View() string {
 	b.WriteString("\n\n")
 
 	// Use shared button styles for consistency
-	acceptStyle := GetAcceptButtonStyle(s.selected == ApprovalChoiceAccept)
-	rejectStyle := GetRejectButtonStyle(s.selected == ApprovalChoiceReject)
+	acceptStyle := types.GetAcceptButtonStyle(s.selected == ApprovalChoiceAccept)
+	rejectStyle := types.GetRejectButtonStyle(s.selected == ApprovalChoiceReject)
 
 	acceptBtn := acceptStyle.Render("✓ Execute (Enter / Ctrl+A)")
 	rejectBtn := rejectStyle.Render("✗ Cancel (Esc / Ctrl+R)")
 
 	// Use shared spacer utility for consistency
-	spacer := CreateStyledSpacer(2)
+	spacer := types.CreateStyledSpacer(2)
 
 	// Join buttons with styled spacer
 	buttonsRow := acceptBtn + spacer + rejectBtn
 
 	// Manually center buttons
 	buttonsLen := lipgloss.Width(buttonsRow)
-	buttonsPadding := (contentWidth - buttonsLen) / 2
+	buttonsPadding := max(0, (contentWidth-buttonsLen)/2)
 
 	b.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
 	b.WriteString("\n")
 
 	hints := "↑↓ to scroll • ← → Tab to choose • Enter to submit"
 	hintsLen := len(hints)
-	hintsPadding := (contentWidth - hintsLen) / 2
+	hintsPadding := max(0, (contentWidth-hintsLen)/2)
 
-	b.WriteString(strings.Repeat(" ", hintsPadding) + OverlayHelpStyle.Render(hints))
+	b.WriteString(strings.Repeat(" ", hintsPadding) + types.OverlayHelpStyle.Render(hints))
 
 	// Use shared overlay container style for consistency (width only, height determined by content)
-	return CreateOverlayContainerStyle(s.width).Render(b.String())
+	return types.CreateOverlayContainerStyle(s.width).Render(b.String())
 }
 
 func (s *SlashCommandPreview) Focused() bool {

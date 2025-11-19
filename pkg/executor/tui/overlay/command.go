@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -7,13 +7,14 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/entrhq/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
+	pkgtypes "github.com/entrhq/forge/pkg/types"
 )
 
 // Command overlay-specific styles that extend the shared overlay styles
 var (
 	commandStatusStyle = lipgloss.NewStyle().
-		Foreground(mutedGray).
+		Foreground(types.MutedGray).
 		Italic(true)
 )
 
@@ -29,11 +30,11 @@ type CommandExecutionOverlay struct {
 	isRunning     bool
 	width         int
 	height        int
-	cancelChannel chan<- *types.CancellationRequest
+	cancelChannel chan<- *pkgtypes.CancellationRequest
 }
 
 // NewCommandExecutionOverlay creates a new command execution overlay
-func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelChan chan<- *types.CancellationRequest) *CommandExecutionOverlay {
+func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelChan chan<- *pkgtypes.CancellationRequest) *CommandExecutionOverlay {
 	vp := viewport.New(76, 20) // Slightly smaller than overlay for padding
 	vp.Style = lipgloss.NewStyle()
 
@@ -54,7 +55,7 @@ func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelC
 // Update handles messages for the command overlay
 //
 //nolint:gocyclo // Complex key handling logic is intentional for overlay UX
-func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (c *CommandExecutionOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -64,7 +65,7 @@ func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			// Send cancellation request if running
 			if c.isRunning && c.cancelChannel != nil {
-				c.cancelChannel <- &types.CancellationRequest{
+				c.cancelChannel <- &pkgtypes.CancellationRequest{
 					ExecutionID: c.executionID,
 				}
 				c.status = "Canceling..."
@@ -123,7 +124,7 @@ func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		c.viewport, cmd = c.viewport.Update(msg)
 		return c, cmd
 
-	case *types.AgentEvent:
+	case *pkgtypes.AgentEvent:
 		// Handle command execution events
 		if msg.IsCommandExecutionEvent() {
 			return c.handleCommandEvent(msg)
@@ -145,7 +146,7 @@ func (c *CommandExecutionOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 }
 
 // handleCommandEvent processes command execution events
-func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (Overlay, tea.Cmd) {
+func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent) (types.Overlay, tea.Cmd) {
 	if event.CommandExecution == nil {
 		return c, nil
 	}
@@ -158,7 +159,7 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (O
 	}
 
 	switch event.Type {
-	case types.EventTypeCommandOutput:
+	case pkgtypes.EventTypeCommandOutput:
 		// Append new output
 		c.output.WriteString(data.Output)
 		c.viewport.SetContent(c.output.String())
@@ -168,17 +169,17 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (O
 			c.viewport.GotoBottom()
 		}
 
-	case types.EventTypeCommandExecutionComplete:
+	case pkgtypes.EventTypeCommandExecutionComplete:
 		c.isRunning = false
 		c.exitCode = data.ExitCode
 		c.status = fmt.Sprintf("Completed in %s (exit code: %d)", data.Duration, data.ExitCode)
 
-	case types.EventTypeCommandExecutionFailed:
+	case pkgtypes.EventTypeCommandExecutionFailed:
 		c.isRunning = false
 		c.exitCode = data.ExitCode
 		c.status = fmt.Sprintf("Failed in %s (exit code: %d)", data.Duration, data.ExitCode)
 
-	case types.EventTypeCommandExecutionCanceled:
+	case pkgtypes.EventTypeCommandExecutionCanceled:
 		c.isRunning = false
 		c.status = "Canceled by user"
 		// Auto-close overlay on cancellation
@@ -191,7 +192,7 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *types.AgentEvent) (O
 // View renders the command overlay
 func (c *CommandExecutionOverlay) View() string {
 	// Build header using shared overlay title style with margin
-	headerStyle := OverlayTitleStyle.MarginBottom(1)
+	headerStyle := types.OverlayTitleStyle.MarginBottom(1)
 	header := headerStyle.Render("Command Execution")
 
 	// Build command info
@@ -207,7 +208,7 @@ func (c *CommandExecutionOverlay) View() string {
 	outputView := c.viewport.View()
 
 	// Build help text using shared overlay help style with margin
-	helpStyle := OverlayHelpStyle.MarginTop(1)
+	helpStyle := types.OverlayHelpStyle.MarginTop(1)
 	var helpText string
 	if c.isRunning {
 		helpText = helpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page")
@@ -227,7 +228,7 @@ func (c *CommandExecutionOverlay) View() string {
 	)
 
 	// Use shared overlay container style for consistency (width only, height determined by content)
-	return CreateOverlayContainerStyle(c.width).Render(content)
+	return types.CreateOverlayContainerStyle(c.width).Render(content)
 }
 
 // Focused returns whether this overlay should handle input

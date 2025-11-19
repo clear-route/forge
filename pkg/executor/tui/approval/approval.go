@@ -1,4 +1,4 @@
-package tui
+package approval
 
 import tea "github.com/charmbracelet/bubbletea"
 
@@ -18,7 +18,8 @@ type ApprovalRequest interface {
 	OnReject() tea.Cmd
 }
 
-// approvalRequestMsg is sent when a command returns an approval request
-type approvalRequestMsg struct {
-	request ApprovalRequest
+// RequestMsg is sent when a command returns an approval request
+// Note: Renamed from approvalRequestMsg and exported
+type RequestMsg struct {
+	Request ApprovalRequest
 }

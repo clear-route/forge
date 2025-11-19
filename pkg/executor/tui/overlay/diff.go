@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -8,7 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent/tools"
-	"github.com/entrhq/forge/pkg/types"
+	"github.com/entrhq/forge/pkg/executor/tui/syntax"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
+	pkgtypes "github.com/entrhq/forge/pkg/types"
 )
 
 type ApprovalChoice int
@@ -27,10 +29,10 @@ type DiffViewer struct {
 	width        int
 	height       int
 	focused      bool
-	responseFunc func(*types.ApprovalResponse)
+	responseFunc func(*pkgtypes.ApprovalResponse)
 }
 
-func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, width, height int, responseFunc func(*types.ApprovalResponse)) *DiffViewer {
+func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, width, height int, responseFunc func(*pkgtypes.ApprovalResponse)) *DiffViewer {
 	// Make overlay wide - 90% of screen width
 	overlayWidth := max(int(float64(width)*0.9), 80)
 
@@ -58,7 +60,7 @@ func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, widt
 		}
 
 		// Apply syntax highlighting
-		highlightedContent, err := HighlightDiff(preview.Content, language)
+		highlightedContent, err := syntax.HighlightDiff(preview.Content, language)
 		if err != nil {
 			// Fall back to original content if highlighting fails
 			content = preview.Content
@@ -81,10 +83,10 @@ func NewDiffViewer(approvalID, toolName string, preview *tools.ToolPreview, widt
 	}
 }
 
-func (d *DiffViewer) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (d *DiffViewer) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return d.handleKeyMsg(msg)
+		return d.handleKeyMsg(msg, actions)
 	case tea.WindowSizeMsg:
 		return d.handleWindowResize(msg)
 	}
@@ -92,16 +94,16 @@ func (d *DiffViewer) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 }
 
 // handleKeyMsg processes keyboard input for the diff viewer
-func (d *DiffViewer) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleKeyMsg(msg tea.KeyMsg, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", keyEsc, "ctrl+r":
-		return d.handleReject()
-	case "ctrl+a":
-		return d.handleApprove()
+	case keyCtrlC, keyEsc, keyCtrlR:
+		return d.handleReject(actions)
+	case keyCtrlA:
+		return d.handleApprove(actions)
 	case keyTab:
 		return d.handleToggleSelection()
 	case keyEnter:
-		return d.handleSubmit()
+		return d.handleSubmit(actions)
 	case keyLeft, "h":
 		return d.handleSelectAccept()
 	case keyRight, "l":
@@ -112,23 +114,29 @@ func (d *DiffViewer) handleKeyMsg(msg tea.KeyMsg) (Overlay, tea.Cmd) {
 }
 
 // handleReject sends a rejection response
-func (d *DiffViewer) handleReject() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleReject(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if d.responseFunc != nil {
-		d.responseFunc(types.NewApprovalResponse(d.approvalID, types.ApprovalRejected))
+		d.responseFunc(pkgtypes.NewApprovalResponse(d.approvalID, pkgtypes.ApprovalRejected))
 	}
-	return d, nil
+	if actions != nil {
+		actions.ClearOverlay()
+	}
+	return nil, nil
 }
 
 // handleApprove sends an approval response
-func (d *DiffViewer) handleApprove() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleApprove(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if d.responseFunc != nil {
-		d.responseFunc(types.NewApprovalResponse(d.approvalID, types.ApprovalGranted))
+		d.responseFunc(pkgtypes.NewApprovalResponse(d.approvalID, pkgtypes.ApprovalGranted))
 	}
-	return d, nil
+	if actions != nil {
+		actions.ClearOverlay()
+	}
+	return nil, nil
 }
 
 // handleToggleSelection toggles between Accept and Reject
-func (d *DiffViewer) handleToggleSelection() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleToggleSelection() (types.Overlay, tea.Cmd) {
 	if d.selected == ApprovalChoiceAccept {
 		d.selected = ApprovalChoiceReject
 	} else {
@@ -138,38 +146,41 @@ func (d *DiffViewer) handleToggleSelection() (Overlay, tea.Cmd) {
 }
 
 // handleSubmit submits the currently selected choice
-func (d *DiffViewer) handleSubmit() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleSubmit(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if d.responseFunc != nil {
-		decision := types.ApprovalRejected
+		decision := pkgtypes.ApprovalRejected
 		if d.selected == ApprovalChoiceAccept {
-			decision = types.ApprovalGranted
+			decision = pkgtypes.ApprovalGranted
 		}
-		d.responseFunc(types.NewApprovalResponse(d.approvalID, decision))
+		d.responseFunc(pkgtypes.NewApprovalResponse(d.approvalID, decision))
 	}
-	return d, nil
+	if actions != nil {
+		actions.ClearOverlay()
+	}
+	return nil, nil
 }
 
 // handleSelectAccept selects the Accept option
-func (d *DiffViewer) handleSelectAccept() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleSelectAccept() (types.Overlay, tea.Cmd) {
 	d.selected = ApprovalChoiceAccept
 	return d, nil
 }
 
 // handleSelectReject selects the Reject option
-func (d *DiffViewer) handleSelectReject() (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleSelectReject() (types.Overlay, tea.Cmd) {
 	d.selected = ApprovalChoiceReject
 	return d, nil
 }
 
 // handleViewportScroll forwards scroll commands to the viewport
-func (d *DiffViewer) handleViewportScroll(msg tea.KeyMsg) (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleViewportScroll(msg tea.KeyMsg) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 	d.viewport, cmd = d.viewport.Update(msg)
 	return d, cmd
 }
 
 // handleWindowResize updates dimensions when window is resized
-func (d *DiffViewer) handleWindowResize(msg tea.WindowSizeMsg) (Overlay, tea.Cmd) {
+func (d *DiffViewer) handleWindowResize(msg tea.WindowSizeMsg) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 	d.width = msg.Width
 	d.height = msg.Height
@@ -189,18 +200,18 @@ func (d *DiffViewer) View() string {
 	// Manually center by calculating padding
 	titleLen := len(title)
 	subtitleLen := len(subtitle)
-	titlePadding := (contentWidth - titleLen) / 2
-	subtitlePadding := (contentWidth - subtitleLen) / 2
+	titlePadding := max(0, (contentWidth-titleLen)/2)
+	subtitlePadding := max(0, (contentWidth-subtitleLen)/2)
 
-	s.WriteString(strings.Repeat(" ", titlePadding) + OverlayTitleStyle.Render(title))
+	s.WriteString(strings.Repeat(" ", titlePadding) + types.OverlayTitleStyle.Render(title))
 	s.WriteString("\n")
-	s.WriteString(strings.Repeat(" ", subtitlePadding) + OverlaySubtitleStyle.Render(subtitle))
+	s.WriteString(strings.Repeat(" ", subtitlePadding) + types.OverlaySubtitleStyle.Render(subtitle))
 	s.WriteString("\n\n")
 
 	// Diff box has its own border (2) + padding (2), so reduce width further
 	diffStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
+		BorderForeground(types.SalmonPink).
 		Padding(0, 1).
 		Width(contentWidth - 4)
 
@@ -208,33 +219,33 @@ func (d *DiffViewer) View() string {
 	s.WriteString("\n\n")
 
 	// Use shared button styles for consistency
-	acceptStyle := GetAcceptButtonStyle(d.selected == ApprovalChoiceAccept)
-	rejectStyle := GetRejectButtonStyle(d.selected == ApprovalChoiceReject)
+	acceptStyle := types.GetAcceptButtonStyle(d.selected == ApprovalChoiceAccept)
+	rejectStyle := types.GetRejectButtonStyle(d.selected == ApprovalChoiceReject)
 
 	acceptBtn := acceptStyle.Render("✓ Accept (Enter / Ctrl+A)")
 	rejectBtn := rejectStyle.Render("✗ Reject (Esc / Ctrl+R)")
 
 	// Use shared spacer utility for consistency
-	spacer := CreateStyledSpacer(2)
+	spacer := types.CreateStyledSpacer(2)
 
 	// Join buttons with styled spacer
 	buttonsRow := acceptBtn + spacer + rejectBtn
 
 	// Manually center buttons
 	buttonsLen := lipgloss.Width(buttonsRow)
-	buttonsPadding := (contentWidth - buttonsLen) / 2
+	buttonsPadding := max(0, (contentWidth-buttonsLen)/2)
 
 	s.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
 	s.WriteString("\n")
 
 	hints := "↑↓ to scroll • ← → Tab to choose • Enter to submit"
 	hintsLen := len(hints)
-	hintsPadding := (contentWidth - hintsLen) / 2
+	hintsPadding := max(0, (contentWidth-hintsLen)/2)
 
-	s.WriteString(strings.Repeat(" ", hintsPadding) + OverlayHelpStyle.Render(hints))
+	s.WriteString(strings.Repeat(" ", hintsPadding) + types.OverlayHelpStyle.Render(hints))
 
 	// Use shared overlay container style for consistency (width only, height determined by content)
-	return CreateOverlayContainerStyle(d.width).Render(s.String())
+	return types.CreateOverlayContainerStyle(d.width).Render(s.String())
 }
 
 func (d *DiffViewer) Focused() bool {
@@ -247,4 +258,11 @@ func (d *DiffViewer) Width() int {
 
 func (d *DiffViewer) Height() int {
 	return d.height
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

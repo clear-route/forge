@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // ContextOverlay displays detailed context information in a modal dialog
@@ -14,6 +15,8 @@ type ContextOverlay struct {
 	viewport viewport.Model
 	title    string
 	content  string
+	width    int
+	height   int
 }
 
 // ContextInfo contains all context statistics to display
@@ -47,9 +50,10 @@ type ContextInfo struct {
 }
 
 // NewContextOverlay creates a new context information overlay
-func NewContextOverlay(info *ContextInfo) *ContextOverlay {
+func NewContextOverlay(info *ContextInfo, width, height int) *ContextOverlay {
 	content := buildContextContent(info)
 
+	// Use fixed width like help overlay for consistent centered appearance
 	vp := viewport.New(76, 20)
 	vp.Style = lipgloss.NewStyle()
 	vp.SetContent(content)
@@ -58,7 +62,20 @@ func NewContextOverlay(info *ContextInfo) *ContextOverlay {
 		viewport: vp,
 		title:    "Context Information",
 		content:  content,
+		width:    width,
+		height:   height,
 	}
+}
+
+// formatTokenCount formats a token count with K/M suffixes for readability
+func formatTokenCount(count int) string {
+	if count >= 1000000 {
+		return fmt.Sprintf("%.1fM", float64(count)/1000000)
+	}
+	if count >= 1000 {
+		return fmt.Sprintf("%.1fK", float64(count)/1000)
+	}
+	return fmt.Sprintf("%d", count)
 }
 
 // buildContextContent formats the context information for display
@@ -66,7 +83,7 @@ func buildContextContent(info *ContextInfo) string {
 	var b strings.Builder
 
 	// System section
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("System"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("System"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  System Prompt:      %s tokens\n", formatTokenCount(info.SystemPromptTokens)))
 	if info.CustomInstructions {
@@ -77,7 +94,7 @@ func buildContextContent(info *ContextInfo) string {
 	b.WriteString("\n")
 
 	// Tool System section
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Tool System"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Tool System"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  Available Tools:    %d (%s tokens)\n", info.ToolCount, formatTokenCount(info.ToolTokens)))
 	if info.HasPendingToolCall {
@@ -86,7 +103,7 @@ func buildContextContent(info *ContextInfo) string {
 	b.WriteString("\n")
 
 	// History section
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Message History"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Message History"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  Messages:           %d\n", info.MessageCount))
 	b.WriteString(fmt.Sprintf("  Conversation Turns: %d\n", info.ConversationTurns))
@@ -94,7 +111,7 @@ func buildContextContent(info *ContextInfo) string {
 	b.WriteString("\n")
 
 	// Current Context section
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Current Context"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Current Context"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  Used:               %s / %s tokens (%.1f%%)\n",
 		formatTokenCount(info.CurrentContextTokens),
@@ -110,20 +127,20 @@ func buildContextContent(info *ContextInfo) string {
 	var barColor lipgloss.Color
 	switch {
 	case info.UsagePercent < 70:
-		barColor = lipgloss.Color("#98C379") // Green
+		barColor = types.ProgressGreen // Green
 	case info.UsagePercent < 90:
-		barColor = lipgloss.Color("#E5C07B") // Yellow
+		barColor = types.ProgressYellow // Yellow
 	default:
-		barColor = lipgloss.Color("#E06C75") // Red
+		barColor = types.ProgressRed // Red
 	}
 
 	filled := lipgloss.NewStyle().Foreground(barColor).Render(strings.Repeat("█", filledWidth))
-	empty := lipgloss.NewStyle().Foreground(lipgloss.Color("#3E4451")).Render(strings.Repeat("░", emptyWidth))
+	empty := lipgloss.NewStyle().Foreground(types.ProgressEmpty).Render(strings.Repeat("░", emptyWidth))
 	b.WriteString(fmt.Sprintf("  [%s%s]\n", filled, empty))
 	b.WriteString("\n")
 
 	// Cumulative Token Usage section
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Cumulative Usage (All API Calls)"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Cumulative Usage (All API Calls)"))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  Input Tokens:       %s\n", formatTokenCount(info.TotalPromptTokens)))
 	b.WriteString(fmt.Sprintf("  Output Tokens:      %s\n", formatTokenCount(info.TotalCompletionTokens)))
@@ -133,13 +150,16 @@ func buildContextContent(info *ContextInfo) string {
 }
 
 // Update handles messages for the context overlay
-func (c *ContextOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (c *ContextOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEsc, tea.KeyCtrlC, tea.KeyEnter:
+			if actions != nil {
+				actions.ClearOverlay()
+			}
 			return nil, nil
 		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
 			c.viewport, cmd = c.viewport.Update(msg)
@@ -147,7 +167,9 @@ func (c *ContextOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		// Adjust viewport height if screen is too small
+		c.width = msg.Width
+		c.height = msg.Height
+		// Adjust viewport height if screen is too small, but keep width fixed
 		c.viewport.Height = min(20, msg.Height-10)
 	}
 
@@ -156,9 +178,9 @@ func (c *ContextOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 
 // View renders the context overlay
 func (c *ContextOverlay) View() string {
-	header := OverlayTitleStyle.Render(c.title)
+	header := types.OverlayTitleStyle.Render(c.title)
 	viewportContent := c.viewport.View()
-	footer := OverlayHelpStyle.Render("Press ESC or Enter to close • ↑/↓ to scroll")
+	footer := types.OverlayHelpStyle.Render("Press ESC or Enter to close • ↑/↓ to scroll")
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -167,7 +189,7 @@ func (c *ContextOverlay) View() string {
 		footer,
 	)
 
-	return CreateOverlayContainerStyle(c.viewport.Width).Render(content)
+	return types.CreateOverlayContainerStyle(c.viewport.Width).Render(content)
 }
 
 // Focused returns whether this overlay should handle input

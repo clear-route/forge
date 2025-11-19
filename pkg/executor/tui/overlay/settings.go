@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -8,10 +8,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/config"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
-// InteractiveSettingsOverlay provides a full interactive settings editor
-type InteractiveSettingsOverlay struct {
+// SettingsOverlay provides a full interactive settings editor
+type SettingsOverlay struct {
 	width   int
 	height  int
 	focused bool
@@ -88,6 +89,11 @@ const (
 	fieldTypeRadio
 )
 
+// Section ID constants
+const (
+	sectionCommandWhitelist = "command_whitelist"
+)
+
 // confirmDialog represents a confirmation dialog
 type confirmDialog struct {
 	title   string
@@ -97,9 +103,9 @@ type confirmDialog struct {
 	onNo    func()
 }
 
-// NewInteractiveSettingsOverlay creates a new interactive settings overlay
-func NewInteractiveSettingsOverlay(width, height int) *InteractiveSettingsOverlay {
-	overlay := &InteractiveSettingsOverlay{
+// NewSettingsOverlay creates a new interactive settings overlay
+func NewSettingsOverlay(width, height int) *SettingsOverlay {
+	overlay := &SettingsOverlay{
 		width:           width,
 		height:          height,
 		focused:         true,
@@ -115,7 +121,7 @@ func NewInteractiveSettingsOverlay(width, height int) *InteractiveSettingsOverla
 }
 
 // loadSettings loads settings from config into editable sections
-func (s *InteractiveSettingsOverlay) loadSettings() {
+func (s *SettingsOverlay) loadSettings() {
 	if !config.IsInitialized() {
 		return
 	}
@@ -156,7 +162,7 @@ func (s *InteractiveSettingsOverlay) loadSettings() {
 				section.items = append(section.items, item)
 			}
 
-		case sectionIDCommandWhitelist:
+		case sectionCommandWhitelist:
 			// Show patterns as list items
 			if patterns, ok := data["patterns"].([]interface{}); ok {
 				for i, p := range patterns {
@@ -186,7 +192,7 @@ func (s *InteractiveSettingsOverlay) loadSettings() {
 }
 
 // Update handles messages for the interactive settings overlay
-func (s *InteractiveSettingsOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	// Handle active dialog input first
 	if s.activeDialog != nil {
 		return s.handleDialogInput(msg)
@@ -202,14 +208,14 @@ func (s *InteractiveSettingsOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 		return s, nil
 	}
 
-	return s.handleKeyPress(keyMsg)
+	return s.handleKeyPress(keyMsg, actions)
 }
 
 // handleKeyPress processes keyboard input for the settings overlay
-func (s *InteractiveSettingsOverlay) handleKeyPress(keyMsg tea.KeyMsg) (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleKeyPress(keyMsg tea.KeyMsg, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	switch keyMsg.String() {
 	case keyEsc, "q":
-		return s.handleEscape()
+		return s.handleEscape(actions)
 	case "ctrl+s":
 		return s.handleSave()
 	case "up", "k":
@@ -237,16 +243,20 @@ func (s *InteractiveSettingsOverlay) handleKeyPress(keyMsg tea.KeyMsg) (Overlay,
 }
 
 // handleEscape handles the escape key press
-func (s *InteractiveSettingsOverlay) handleEscape() (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleEscape(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if s.hasChanges {
-		s.showUnsavedChangesDialog()
+		s.showUnsavedChangesDialog(actions)
 		return s, nil
+	}
+	if actions != nil {
+		actions.ClearOverlay()
+		return nil, nil
 	}
 	return nil, nil
 }
 
 // handleSave handles the save command
-func (s *InteractiveSettingsOverlay) handleSave() (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleSave() (types.Overlay, tea.Cmd) {
 	if s.hasChanges {
 		if err := s.saveSettings(); err == nil {
 			s.hasChanges = false
@@ -256,28 +266,28 @@ func (s *InteractiveSettingsOverlay) handleSave() (Overlay, tea.Cmd) {
 }
 
 // handleAddPattern handles adding a new pattern
-func (s *InteractiveSettingsOverlay) handleAddPattern() {
+func (s *SettingsOverlay) handleAddPattern() {
 	if s.isInWhitelistSection() {
 		s.showAddPatternDialog()
 	}
 }
 
 // handleEditPattern handles editing a selected pattern
-func (s *InteractiveSettingsOverlay) handleEditPattern() {
+func (s *SettingsOverlay) handleEditPattern() {
 	if s.isInWhitelistSection() && s.isPatternSelected() {
 		s.showEditPatternDialog()
 	}
 }
 
 // handleDeletePattern handles deleting a selected pattern
-func (s *InteractiveSettingsOverlay) handleDeletePattern() {
+func (s *SettingsOverlay) handleDeletePattern() {
 	if s.isInWhitelistSection() && s.isPatternSelected() {
 		s.showDeleteConfirmation()
 	}
 }
 
 // navigateUp moves selection up
-func (s *InteractiveSettingsOverlay) navigateUp() {
+func (s *SettingsOverlay) navigateUp() {
 	if len(s.sections) == 0 {
 		return
 	}
@@ -293,7 +303,7 @@ func (s *InteractiveSettingsOverlay) navigateUp() {
 }
 
 // navigateDown moves selection down
-func (s *InteractiveSettingsOverlay) navigateDown() {
+func (s *SettingsOverlay) navigateDown() {
 	if len(s.sections) == 0 {
 		return
 	}
@@ -308,17 +318,17 @@ func (s *InteractiveSettingsOverlay) navigateDown() {
 }
 
 // navigateLeft moves to previous section
-func (s *InteractiveSettingsOverlay) navigateLeft() {
+func (s *SettingsOverlay) navigateLeft() {
 	s.prevSection()
 }
 
 // navigateRight moves to next section
-func (s *InteractiveSettingsOverlay) navigateRight() {
+func (s *SettingsOverlay) navigateRight() {
 	s.nextSection()
 }
 
 // nextSection moves to the next section
-func (s *InteractiveSettingsOverlay) nextSection() {
+func (s *SettingsOverlay) nextSection() {
 	if s.selectedSection < len(s.sections)-1 {
 		s.selectedSection++
 		s.selectedItem = 0
@@ -326,7 +336,7 @@ func (s *InteractiveSettingsOverlay) nextSection() {
 }
 
 // prevSection moves to the previous section
-func (s *InteractiveSettingsOverlay) prevSection() {
+func (s *SettingsOverlay) prevSection() {
 	if s.selectedSection > 0 {
 		s.selectedSection--
 		s.selectedItem = 0
@@ -334,7 +344,7 @@ func (s *InteractiveSettingsOverlay) prevSection() {
 }
 
 // toggleCurrent toggles the current item
-func (s *InteractiveSettingsOverlay) toggleCurrent() {
+func (s *SettingsOverlay) toggleCurrent() {
 	if len(s.sections) == 0 {
 		return
 	}
@@ -355,7 +365,7 @@ func (s *InteractiveSettingsOverlay) toggleCurrent() {
 }
 
 // saveSettings saves changes back to config
-func (s *InteractiveSettingsOverlay) saveSettings() error {
+func (s *SettingsOverlay) saveSettings() error {
 	if !config.IsInitialized() {
 		return fmt.Errorf("config not initialized")
 	}
@@ -377,7 +387,7 @@ func (s *InteractiveSettingsOverlay) saveSettings() error {
 				data[item.key] = item.value
 			}
 
-		case "command_whitelist":
+		case sectionCommandWhitelist:
 			// Reconstruct patterns array
 			patterns := make([]interface{}, 0)
 			for _, item := range section.items {
@@ -399,7 +409,7 @@ func (s *InteractiveSettingsOverlay) saveSettings() error {
 }
 
 // View renders the interactive settings overlay
-func (s *InteractiveSettingsOverlay) View() string {
+func (s *SettingsOverlay) View() string {
 	if !config.IsInitialized() {
 		return s.renderError("Configuration not initialized")
 	}
@@ -417,13 +427,13 @@ func (s *InteractiveSettingsOverlay) View() string {
 	var content strings.Builder
 
 	// Title
-	title := OverlayTitleStyle.Render("⚙️  Settings")
+	title := types.OverlayTitleStyle.Render("⚙️  Settings")
 	content.WriteString(title)
 	content.WriteString("\n\n")
 
 	// Help text
 	helpText := s.buildHelpText()
-	content.WriteString(OverlaySubtitleStyle.Render(helpText))
+	content.WriteString(types.OverlaySubtitleStyle.Render(helpText))
 	content.WriteString("\n\n")
 
 	// Render sections
@@ -438,14 +448,14 @@ func (s *InteractiveSettingsOverlay) View() string {
 	if s.hasChanges {
 		content.WriteString("\n\n")
 		saveHint := lipgloss.NewStyle().
-			Foreground(salmonPink).
+			Foreground(types.SalmonPink).
 			Bold(true).
 			Render("● Unsaved changes - Press Ctrl+S to save")
 		content.WriteString(saveHint)
 	}
 
 	// Create bordered box
-	boxStyle := CreateOverlayContainerStyle(s.width - 4).Height(s.height - 4)
+	boxStyle := types.CreateOverlayContainerStyle(s.width - 4).Height(s.height - 4)
 
 	return lipgloss.Place(
 		s.width,
@@ -457,7 +467,7 @@ func (s *InteractiveSettingsOverlay) View() string {
 }
 
 // buildHelpText creates the help text based on current state
-func (s *InteractiveSettingsOverlay) buildHelpText() string {
+func (s *SettingsOverlay) buildHelpText() string {
 	shortcuts := []string{
 		"↑↓/jk: Navigate",
 		"Tab/←→/hl: Switch section",
@@ -474,16 +484,16 @@ func (s *InteractiveSettingsOverlay) buildHelpText() string {
 }
 
 // renderSection renders a settings section
-func (s *InteractiveSettingsOverlay) renderSection(section settingsSection, isSelected bool) string {
+func (s *SettingsOverlay) renderSection(section settingsSection, isSelected bool) string {
 	var out strings.Builder
 
 	// Section title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(mintGreen)
+		Foreground(types.MintGreen)
 
 	if isSelected {
-		titleStyle = titleStyle.Foreground(salmonPink)
+		titleStyle = titleStyle.Foreground(types.SalmonPink)
 	}
 
 	out.WriteString(titleStyle.Render("▸ " + section.title))
@@ -492,7 +502,7 @@ func (s *InteractiveSettingsOverlay) renderSection(section settingsSection, isSe
 	// Section description
 	if section.description != "" {
 		descStyle := lipgloss.NewStyle().
-			Foreground(mutedGray).
+			Foreground(types.MutedGray).
 			Italic(true)
 		out.WriteString("  ")
 		out.WriteString(descStyle.Render(section.description))
@@ -500,85 +510,89 @@ func (s *InteractiveSettingsOverlay) renderSection(section settingsSection, isSe
 	}
 
 	// Render items
-	if len(section.items) == 0 {
-		out.WriteString("  ")
-		out.WriteString(lipgloss.NewStyle().Foreground(mutedGray).Render("(no settings)"))
-		out.WriteString("\n")
-	} else {
-		for i, item := range section.items {
-			isItemSelected := isSelected && i == s.selectedItem
-			out.WriteString(s.renderItem(item, isItemSelected))
-		}
+	for i, item := range section.items {
+		isItemFocused := isSelected && i == s.selectedItem
+		out.WriteString(s.renderItem(item, isItemFocused))
 	}
 
 	return out.String()
 }
 
-// renderItem renders a single settings item
-func (s *InteractiveSettingsOverlay) renderItem(item settingsItem, isSelected bool) string {
+// renderItem renders a single setting item
+func (s *SettingsOverlay) renderItem(item settingsItem, isFocused bool) string {
 	var out strings.Builder
-	out.WriteString("  ")
 
-	// Selection indicator
-	if isSelected {
-		out.WriteString(lipgloss.NewStyle().Foreground(salmonPink).Render("▸ "))
-	} else {
-		out.WriteString("  ")
+	prefix := "  "
+	if isFocused {
+		prefix = "➜ "
 	}
 
-	// Render based on type
+	labelStyle := lipgloss.NewStyle().
+		Foreground(types.MutedGray)
+
+	if isFocused {
+		labelStyle = labelStyle.Foreground(types.BrightWhite).Bold(true)
+	} else if item.itemType == itemTypeToggle {
+		if enabled, ok := item.value.(bool); ok && enabled {
+			// Enabled toggles are brighter even when not focused
+			labelStyle = labelStyle.Foreground(types.BrightWhite)
+		}
+	}
+
+	out.WriteString(prefix)
+
+	// Type-specific rendering
 	switch item.itemType {
 	case itemTypeToggle:
-		out.WriteString(s.renderToggle(item, isSelected))
+		enabled, ok := item.value.(bool)
+		if !ok {
+			enabled = false
+		}
+		check := "[ ]"
+		if enabled {
+			check = "[x]"
+			check = lipgloss.NewStyle().Foreground(types.MintGreen).Render(check)
+		}
+		out.WriteString(fmt.Sprintf("%s %s", check, labelStyle.Render(item.displayName)))
 	case itemTypeList:
-		out.WriteString(s.renderListItem(item, isSelected))
-	default:
-		out.WriteString(item.displayName)
+		out.WriteString(fmt.Sprintf("• %s", labelStyle.Render(item.displayName)))
+	case itemTypeText:
+		out.WriteString(fmt.Sprintf("%s: %v", labelStyle.Render(item.displayName), item.value))
 	}
 
-	// Modified indicator
 	if item.modified {
-		out.WriteString(" ")
-		out.WriteString(lipgloss.NewStyle().Foreground(salmonPink).Render("*"))
+		out.WriteString(lipgloss.NewStyle().Foreground(types.SalmonPink).Render(" *"))
 	}
 
 	out.WriteString("\n")
 	return out.String()
 }
 
-// Helper methods for dialog and pattern management
+// Helper methods for dialogs and state management
 
-// isInWhitelistSection returns true if currently in command whitelist section
-func (s *InteractiveSettingsOverlay) isInWhitelistSection() bool {
-	if len(s.sections) == 0 || s.selectedSection >= len(s.sections) {
+func (s *SettingsOverlay) isInWhitelistSection() bool {
+	if s.selectedSection >= len(s.sections) {
 		return false
 	}
-	return s.sections[s.selectedSection].id == "command_whitelist"
+	return s.sections[s.selectedSection].id == sectionCommandWhitelist
 }
 
-// isPatternSelected returns true if a pattern item is currently selected
-func (s *InteractiveSettingsOverlay) isPatternSelected() bool {
-	if len(s.sections) == 0 || s.selectedSection >= len(s.sections) {
+func (s *SettingsOverlay) isPatternSelected() bool {
+	if !s.isInWhitelistSection() {
 		return false
 	}
 	section := s.sections[s.selectedSection]
-	if s.selectedItem >= len(section.items) {
-		return false
-	}
-	return section.items[s.selectedItem].itemType == itemTypeList
+	return len(section.items) > 0 && s.selectedItem < len(section.items)
 }
 
-// showAddPatternDialog displays the dialog for adding a new command pattern
-func (s *InteractiveSettingsOverlay) showAddPatternDialog() {
+func (s *SettingsOverlay) showAddPatternDialog() {
 	s.activeDialog = &inputDialog{
-		title: "Add New Command Pattern",
+		title: "Add Whitelist Pattern",
 		fields: []inputField{
 			{
-				label:     "Pattern (command or prefix):",
+				label:     "Pattern",
 				key:       "pattern",
-				value:     "",
 				fieldType: fieldTypeText,
-				maxLength: 100,
 				validator: func(v string) error {
 					if strings.TrimSpace(v) == "" {
 						return fmt.Errorf("pattern cannot be empty")
@@ -587,23 +601,15 @@ func (s *InteractiveSettingsOverlay) showAddPatternDialog() {
 				},
 			},
 			{
-				label:     "Description:",
+				label:     "Description",
 				key:       "description",
-				value:     "",
 				fieldType: fieldTypeText,
-				maxLength: 100,
-			},
-			{
-				label:     "Pattern type:",
-				key:       "type",
-				value:     "prefix",
-				fieldType: fieldTypeRadio,
-				options:   []string{"prefix", "exact"},
 			},
 		},
 		selectedField: 0,
 		onConfirm: func(values map[string]string) error {
-			return s.addPattern(values)
+			s.addPattern(values["pattern"], values["description"])
+			return nil
 		},
 		onCancel: func() {
 			s.activeDialog = nil
@@ -611,36 +617,22 @@ func (s *InteractiveSettingsOverlay) showAddPatternDialog() {
 	}
 }
 
-// showEditPatternDialog displays the dialog for editing an existing pattern
-func (s *InteractiveSettingsOverlay) showEditPatternDialog() {
-	if !s.isPatternSelected() {
-		return
-	}
-
-	section := &s.sections[s.selectedSection]
+func (s *SettingsOverlay) showEditPatternDialog() {
+	section := s.sections[s.selectedSection]
 	item := section.items[s.selectedItem]
-
-	patternMap, ok := item.value.(map[string]interface{})
+	data, ok := item.value.(map[string]interface{})
 	if !ok {
 		return
 	}
 
-	pattern := fmt.Sprintf("%v", patternMap["pattern"])
-	description := fmt.Sprintf("%v", patternMap["description"])
-	patternType := "prefix"
-	if t, ok := patternMap["type"].(string); ok && t == "exact" {
-		patternType = "exact"
-	}
-
 	s.activeDialog = &inputDialog{
-		title: "Edit Command Pattern",
+		title: "Edit Whitelist Pattern",
 		fields: []inputField{
 			{
-				label:     "Pattern (command or prefix):",
+				label:     "Pattern",
 				key:       "pattern",
-				value:     pattern,
+				value:     fmt.Sprintf("%v", data["pattern"]),
 				fieldType: fieldTypeText,
-				maxLength: 100,
 				validator: func(v string) error {
 					if strings.TrimSpace(v) == "" {
 						return fmt.Errorf("pattern cannot be empty")
@@ -649,23 +641,16 @@ func (s *InteractiveSettingsOverlay) showEditPatternDialog() {
 				},
 			},
 			{
-				label:     "Description:",
+				label:     "Description",
 				key:       "description",
-				value:     description,
+				value:     fmt.Sprintf("%v", data["description"]),
 				fieldType: fieldTypeText,
-				maxLength: 100,
-			},
-			{
-				label:     "Pattern type:",
-				key:       "type",
-				value:     patternType,
-				fieldType: fieldTypeRadio,
-				options:   []string{"prefix", "exact"},
 			},
 		},
 		selectedField: 0,
 		onConfirm: func(values map[string]string) error {
-			return s.updatePattern(s.selectedItem, values)
+			s.updatePattern(s.selectedItem, values["pattern"], values["description"])
+			return nil
 		},
 		onCancel: func() {
 			s.activeDialog = nil
@@ -673,32 +658,10 @@ func (s *InteractiveSettingsOverlay) showEditPatternDialog() {
 	}
 }
 
-// showDeleteConfirmation displays confirmation dialog for deleting a pattern
-func (s *InteractiveSettingsOverlay) showDeleteConfirmation() {
-	if !s.isPatternSelected() {
-		return
-	}
-
-	section := &s.sections[s.selectedSection]
-	item := section.items[s.selectedItem]
-
-	patternMap, ok := item.value.(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	pattern := fmt.Sprintf("%v", patternMap["pattern"])
-	description := fmt.Sprintf("%v", patternMap["description"])
-
+func (s *SettingsOverlay) showDeleteConfirmation() {
 	s.confirmDialog = &confirmDialog{
-		title:   "Confirm Delete",
-		message: "⚠️  Are you sure you want to delete this pattern?",
-		details: []string{
-			fmt.Sprintf("Pattern: %s", pattern),
-			fmt.Sprintf("Description: %s", description),
-			"",
-			"This command will require manual approval after deletion.",
-		},
+		title:   "Delete Pattern",
+		message: "Are you sure you want to delete this pattern?",
 		onYes: func() {
 			s.deletePattern(s.selectedItem)
 			s.confirmDialog = nil
@@ -709,127 +672,89 @@ func (s *InteractiveSettingsOverlay) showDeleteConfirmation() {
 	}
 }
 
-// showUnsavedChangesDialog displays confirmation for closing with unsaved changes
-func (s *InteractiveSettingsOverlay) showUnsavedChangesDialog() {
+func (s *SettingsOverlay) showUnsavedChangesDialog(actions types.ActionHandler) {
 	s.confirmDialog = &confirmDialog{
 		title:   "Unsaved Changes",
-		message: "⚠️  You have unsaved changes.",
-		details: []string{
-			"",
-			"Y - Save and close",
-			"N - Discard and close",
-			"Esc - Cancel (return to editing)",
-		},
+		message: "You have unsaved changes. Save before closing?",
 		onYes: func() {
-			if err := s.saveSettings(); err == nil {
-				s.hasChanges = false
-			}
-			s.confirmDialog = nil
-		},
-		onNo: func() {
-			// Discard changes and close
+			// Ignore error from saveSettings - we're closing anyway
+			_ = s.saveSettings() //nolint:errcheck
 			s.hasChanges = false
 			s.confirmDialog = nil
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+		},
+		onNo: func() {
+			s.hasChanges = false
+			s.confirmDialog = nil
+			if actions != nil {
+				actions.ClearOverlay()
+			}
 		},
 	}
 }
 
-// addPattern adds a new command pattern
-func (s *InteractiveSettingsOverlay) addPattern(values map[string]string) error {
-	pattern := strings.TrimSpace(values["pattern"])
-	description := strings.TrimSpace(values["description"])
-	patternType := values["type"]
-
-	if pattern == "" {
-		return fmt.Errorf("pattern cannot be empty")
+func (s *SettingsOverlay) addPattern(pattern, description string) {
+	// Implementation of adding pattern to the local state
+	// This updates s.sections directly
+	for i, section := range s.sections {
+		if section.id == sectionCommandWhitelist {
+			newItem := settingsItem{
+				key:         fmt.Sprintf("pattern_new_%d", len(section.items)),
+				displayName: fmt.Sprintf("%s - %s", pattern, description),
+				value: map[string]interface{}{
+					"pattern":     pattern,
+					"description": description,
+				},
+				itemType: itemTypeList,
+				modified: true,
+			}
+			s.sections[i].items = append(s.sections[i].items, newItem)
+			s.hasChanges = true
+			break
+		}
 	}
-
-	// Create new pattern map
-	newPattern := map[string]interface{}{
-		"pattern":     pattern,
-		"description": description,
-		"type":        patternType,
-	}
-
-	// Add to whitelist section
-	section := &s.sections[s.selectedSection]
-	displayName := pattern
-	if description != "" {
-		displayName = fmt.Sprintf("%s - %s", pattern, description)
-	}
-
-	newItem := settingsItem{
-		key:         fmt.Sprintf("pattern_%d", len(section.items)),
-		displayName: displayName,
-		value:       newPattern,
-		itemType:    itemTypeList,
-		modified:    true,
-	}
-
-	section.items = append(section.items, newItem)
-	s.hasChanges = true
-	s.activeDialog = nil
-
-	return nil
 }
 
-// updatePattern updates an existing command pattern
-func (s *InteractiveSettingsOverlay) updatePattern(index int, values map[string]string) error {
-	pattern := strings.TrimSpace(values["pattern"])
-	description := strings.TrimSpace(values["description"])
-	patternType := values["type"]
-
-	if pattern == "" {
-		return fmt.Errorf("pattern cannot be empty")
+func (s *SettingsOverlay) updatePattern(index int, pattern, description string) {
+	for i, section := range s.sections {
+		if section.id == sectionCommandWhitelist {
+			if index < len(section.items) {
+				s.sections[i].items[index].value = map[string]interface{}{
+					"pattern":     pattern,
+					"description": description,
+				}
+				s.sections[i].items[index].displayName = fmt.Sprintf("%s - %s", pattern, description)
+				s.sections[i].items[index].modified = true
+				s.hasChanges = true
+			}
+			break
+		}
 	}
-
-	section := &s.sections[s.selectedSection]
-	if index >= len(section.items) {
-		return fmt.Errorf("invalid pattern index")
-	}
-
-	// Update pattern map
-	updatedPattern := map[string]interface{}{
-		"pattern":     pattern,
-		"description": description,
-		"type":        patternType,
-	}
-
-	displayName := pattern
-	if description != "" {
-		displayName = fmt.Sprintf("%s - %s", pattern, description)
-	}
-
-	section.items[index].value = updatedPattern
-	section.items[index].displayName = displayName
-	section.items[index].modified = true
-
-	s.hasChanges = true
-	s.activeDialog = nil
-
-	return nil
 }
 
-// deletePattern removes a command pattern
-func (s *InteractiveSettingsOverlay) deletePattern(index int) {
-	section := &s.sections[s.selectedSection]
-	if index >= len(section.items) {
-		return
+func (s *SettingsOverlay) deletePattern(index int) {
+	for i, section := range s.sections {
+		if section.id == sectionCommandWhitelist {
+			if index < len(section.items) {
+				// Remove item at index
+				section.items = append(section.items[:index], section.items[index+1:]...)
+				s.sections[i].items = section.items
+				s.hasChanges = true
+
+				// Adjust selection if needed
+				if s.selectedItem >= len(section.items) && s.selectedItem > 0 {
+					s.selectedItem--
+				}
+			}
+			break
+		}
 	}
-
-	// Remove the item
-	section.items = append(section.items[:index], section.items[index+1:]...)
-
-	// Adjust selected item if needed
-	if s.selectedItem >= len(section.items) && s.selectedItem > 0 {
-		s.selectedItem = len(section.items) - 1
-	}
-
-	s.hasChanges = true
 }
 
 // handleDialogInput handles keyboard input for the active dialog
-func (s *InteractiveSettingsOverlay) handleDialogInput(msg tea.Msg) (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleDialogInput(msg tea.Msg) (types.Overlay, tea.Cmd) {
 	if s.activeDialog == nil {
 		return s, nil
 	}
@@ -842,7 +767,7 @@ func (s *InteractiveSettingsOverlay) handleDialogInput(msg tea.Msg) (Overlay, te
 	switch keyMsg.String() {
 	case keyEsc:
 		return s.handleDialogCancel()
-	case "enter":
+	case keyEnter:
 		return s.handleDialogConfirm()
 	case "tab", "down":
 		s.moveToNextDialogField()
@@ -860,7 +785,7 @@ func (s *InteractiveSettingsOverlay) handleDialogInput(msg tea.Msg) (Overlay, te
 }
 
 // handleDialogCancel handles canceling the dialog
-func (s *InteractiveSettingsOverlay) handleDialogCancel() (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleDialogCancel() (types.Overlay, tea.Cmd) {
 	if s.activeDialog.onCancel != nil {
 		s.activeDialog.onCancel()
 	}
@@ -868,7 +793,7 @@ func (s *InteractiveSettingsOverlay) handleDialogCancel() (Overlay, tea.Cmd) {
 }
 
 // handleDialogConfirm validates and confirms the dialog input
-func (s *InteractiveSettingsOverlay) handleDialogConfirm() (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleDialogConfirm() (types.Overlay, tea.Cmd) {
 	values := make(map[string]string)
 
 	// Validate all fields
@@ -895,7 +820,7 @@ func (s *InteractiveSettingsOverlay) handleDialogConfirm() (Overlay, tea.Cmd) {
 }
 
 // moveToNextDialogField moves to the next field in the dialog
-func (s *InteractiveSettingsOverlay) moveToNextDialogField() {
+func (s *SettingsOverlay) moveToNextDialogField() {
 	s.activeDialog.selectedField++
 	if s.activeDialog.selectedField >= len(s.activeDialog.fields) {
 		s.activeDialog.selectedField = 0
@@ -903,7 +828,7 @@ func (s *InteractiveSettingsOverlay) moveToNextDialogField() {
 }
 
 // moveToPrevDialogField moves to the previous field in the dialog
-func (s *InteractiveSettingsOverlay) moveToPrevDialogField() {
+func (s *SettingsOverlay) moveToPrevDialogField() {
 	s.activeDialog.selectedField--
 	if s.activeDialog.selectedField < 0 {
 		s.activeDialog.selectedField = len(s.activeDialog.fields) - 1
@@ -911,7 +836,7 @@ func (s *InteractiveSettingsOverlay) moveToPrevDialogField() {
 }
 
 // handleDialogSpace handles space key in dialog (toggle radio or add space to text)
-func (s *InteractiveSettingsOverlay) handleDialogSpace() {
+func (s *SettingsOverlay) handleDialogSpace() {
 	field := &s.activeDialog.fields[s.activeDialog.selectedField]
 
 	if field.fieldType == fieldTypeRadio && len(field.options) > 0 {
@@ -922,7 +847,7 @@ func (s *InteractiveSettingsOverlay) handleDialogSpace() {
 }
 
 // toggleRadioButton toggles the radio button to next option
-func (s *InteractiveSettingsOverlay) toggleRadioButton(field *inputField) {
+func (s *SettingsOverlay) toggleRadioButton(field *inputField) {
 	currentIdx := 0
 	for i, opt := range field.options {
 		if opt == field.value {
@@ -935,7 +860,7 @@ func (s *InteractiveSettingsOverlay) toggleRadioButton(field *inputField) {
 }
 
 // addSpaceToTextField adds a space character to the text field
-func (s *InteractiveSettingsOverlay) addSpaceToTextField(field *inputField) {
+func (s *SettingsOverlay) addSpaceToTextField(field *inputField) {
 	if field.maxLength == 0 || len(field.value) < field.maxLength {
 		field.value += " "
 		field.errorMsg = ""
@@ -943,7 +868,7 @@ func (s *InteractiveSettingsOverlay) addSpaceToTextField(field *inputField) {
 }
 
 // handleDialogBackspace handles backspace key in dialog
-func (s *InteractiveSettingsOverlay) handleDialogBackspace() {
+func (s *SettingsOverlay) handleDialogBackspace() {
 	field := &s.activeDialog.fields[s.activeDialog.selectedField]
 	if field.fieldType == fieldTypeText && len(field.value) > 0 {
 		field.value = field.value[:len(field.value)-1]
@@ -952,7 +877,7 @@ func (s *InteractiveSettingsOverlay) handleDialogBackspace() {
 }
 
 // handleDialogCharInput handles character input in dialog
-func (s *InteractiveSettingsOverlay) handleDialogCharInput(keyMsg tea.KeyMsg) {
+func (s *SettingsOverlay) handleDialogCharInput(keyMsg tea.KeyMsg) {
 	field := &s.activeDialog.fields[s.activeDialog.selectedField]
 	if field.fieldType == fieldTypeText {
 		if len(keyMsg.String()) == 1 && (field.maxLength == 0 || len(field.value) < field.maxLength) {
@@ -963,7 +888,7 @@ func (s *InteractiveSettingsOverlay) handleDialogCharInput(keyMsg tea.KeyMsg) {
 }
 
 // handleConfirmInput handles keyboard input for confirmation dialogs
-func (s *InteractiveSettingsOverlay) handleConfirmInput(msg tea.Msg) (Overlay, tea.Cmd) {
+func (s *SettingsOverlay) handleConfirmInput(msg tea.Msg) (types.Overlay, tea.Cmd) {
 	if s.confirmDialog == nil {
 		return s, nil
 	}
@@ -1003,7 +928,7 @@ func (s *InteractiveSettingsOverlay) handleConfirmInput(msg tea.Msg) (Overlay, t
 }
 
 // renderWithDialog renders the settings view with an input dialog overlay
-func (s *InteractiveSettingsOverlay) renderWithDialog() string {
+func (s *SettingsOverlay) renderWithDialog() string {
 	// Render dialog on top
 	dialogView := s.renderInputDialog()
 
@@ -1012,7 +937,7 @@ func (s *InteractiveSettingsOverlay) renderWithDialog() string {
 }
 
 // renderWithConfirmation renders the settings view with a confirmation dialog overlay
-func (s *InteractiveSettingsOverlay) renderWithConfirmation() string {
+func (s *SettingsOverlay) renderWithConfirmation() string {
 	// Render confirmation dialog on top
 	dialogView := s.renderConfirmDialog()
 
@@ -1021,7 +946,7 @@ func (s *InteractiveSettingsOverlay) renderWithConfirmation() string {
 }
 
 // renderInputDialog renders an input dialog
-func (s *InteractiveSettingsOverlay) renderInputDialog() string {
+func (s *SettingsOverlay) renderInputDialog() string {
 	if s.activeDialog == nil {
 		return ""
 	}
@@ -1030,7 +955,7 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(salmonPink).
+		Foreground(types.SalmonPink).
 		Bold(true)
 	content.WriteString(titleStyle.Render(s.activeDialog.title))
 	content.WriteString("\n\n")
@@ -1040,7 +965,7 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 		isSelected := i == s.activeDialog.selectedField
 
 		// Label
-		labelStyle := lipgloss.NewStyle().Foreground(brightWhite)
+		labelStyle := lipgloss.NewStyle().Foreground(types.BrightWhite)
 		content.WriteString(labelStyle.Render(field.label))
 		content.WriteString("\n")
 
@@ -1049,13 +974,13 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 		case fieldTypeText:
 			// Text input field
 			fieldStyle := lipgloss.NewStyle().
-				Foreground(brightWhite).
-				Background(darkBg).
+				Foreground(types.BrightWhite).
+				Background(types.DarkBg).
 				Padding(0, 1)
 
 			if isSelected {
 				fieldStyle = fieldStyle.Border(lipgloss.RoundedBorder()).
-					BorderForeground(salmonPink)
+					BorderForeground(types.SalmonPink)
 			}
 
 			value := field.value
@@ -1068,11 +993,11 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 
 			// Character count or error
 			if field.errorMsg != "" {
-				errMsgStyle := lipgloss.NewStyle().Foreground(salmonPink)
+				errMsgStyle := lipgloss.NewStyle().Foreground(types.SalmonPink)
 				content.WriteString(errMsgStyle.Render(field.errorMsg))
 				content.WriteString("\n")
 			} else if field.maxLength > 0 {
-				countStyle := lipgloss.NewStyle().Foreground(mutedGray)
+				countStyle := lipgloss.NewStyle().Foreground(types.MutedGray)
 				count := fmt.Sprintf("[%d/%d]", len(field.value), field.maxLength)
 				content.WriteString(countStyle.Render(count))
 				content.WriteString("\n")
@@ -1081,7 +1006,7 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 		case fieldTypeRadio:
 			// Radio buttons
 			for j, option := range field.options {
-				radioStyle := lipgloss.NewStyle().Foreground(brightWhite)
+				radioStyle := lipgloss.NewStyle().Foreground(types.BrightWhite)
 				if isSelected {
 					radioStyle = radioStyle.Bold(true)
 				}
@@ -1089,7 +1014,7 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 				bullet := "○"
 				if option == field.value {
 					bullet = "●"
-					radioStyle = radioStyle.Foreground(mintGreen)
+					radioStyle = radioStyle.Foreground(types.MintGreen)
 				}
 
 				optionText := fmt.Sprintf("%s %s", bullet, option)
@@ -1112,14 +1037,14 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 		lipgloss.Top,
 		"[Enter to Add] [Esc to Cancel]",
 	)
-	buttonStyle := lipgloss.NewStyle().Foreground(mutedGray)
+	buttonStyle := lipgloss.NewStyle().Foreground(types.MutedGray)
 	content.WriteString(buttonStyle.Render(buttonRow))
 
 	// Create dialog box
 	dialogStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
-		Background(darkBg).
+		BorderForeground(types.SalmonPink).
+		Background(types.DarkBg).
 		Padding(1, 2).
 		Width(60)
 
@@ -1127,7 +1052,7 @@ func (s *InteractiveSettingsOverlay) renderInputDialog() string {
 }
 
 // renderConfirmDialog renders a confirmation dialog
-func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
+func (s *SettingsOverlay) renderConfirmDialog() string {
 	if s.confirmDialog == nil {
 		return ""
 	}
@@ -1136,18 +1061,18 @@ func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(salmonPink).
+		Foreground(types.SalmonPink).
 		Bold(true)
 	content.WriteString(titleStyle.Render(s.confirmDialog.title))
 	content.WriteString("\n\n")
 
 	// Message
-	messageStyle := lipgloss.NewStyle().Foreground(brightWhite)
+	messageStyle := lipgloss.NewStyle().Foreground(types.BrightWhite)
 	content.WriteString(messageStyle.Render(s.confirmDialog.message))
 	content.WriteString("\n\n")
 
 	// Details
-	detailStyle := lipgloss.NewStyle().Foreground(mutedGray)
+	detailStyle := lipgloss.NewStyle().Foreground(types.MutedGray)
 	for _, detail := range s.confirmDialog.details {
 		content.WriteString(detailStyle.Render(detail))
 		content.WriteString("\n")
@@ -1157,14 +1082,14 @@ func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
 
 	// Buttons
 	buttonRow := "[y] Yes, delete    [n] No, cancel"
-	buttonStyle := lipgloss.NewStyle().Foreground(mutedGray)
+	buttonStyle := lipgloss.NewStyle().Foreground(types.MutedGray)
 	content.WriteString(buttonStyle.Render(buttonRow))
 
 	// Create dialog box
 	dialogStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
-		Background(darkBg).
+		BorderForeground(types.SalmonPink).
+		Background(types.DarkBg).
 		Padding(1, 2).
 		Width(60)
 
@@ -1172,7 +1097,7 @@ func (s *InteractiveSettingsOverlay) renderConfirmDialog() string {
 }
 
 // layerDialogOver layers a dialog over the base view
-func (s *InteractiveSettingsOverlay) layerDialogOver(dialogView string) string {
+func (s *SettingsOverlay) layerDialogOver(dialogView string) string {
 	// Place dialog in center
 	return lipgloss.Place(
 		s.width,
@@ -1185,51 +1110,16 @@ func (s *InteractiveSettingsOverlay) layerDialogOver(dialogView string) string {
 	)
 }
 
-// renderToggle renders a toggle item
-func (s *InteractiveSettingsOverlay) renderToggle(item settingsItem, isSelected bool) string {
-	boolVal, ok := item.value.(bool)
-	if !ok {
-		boolVal = false
-	}
-
-	// Toggle indicator
-	var toggle string
-	if boolVal {
-		toggle = lipgloss.NewStyle().Foreground(mintGreen).Render("[✓]")
-	} else {
-		toggle = lipgloss.NewStyle().Foreground(mutedGray).Render("[ ]")
-	}
-
-	// Item name
-	nameStyle := lipgloss.NewStyle().Foreground(brightWhite)
-	if isSelected {
-		nameStyle = nameStyle.Bold(true)
-	}
-
-	return fmt.Sprintf("%s %s", toggle, nameStyle.Render(item.displayName))
-}
-
-// renderListItem renders a list item
-func (s *InteractiveSettingsOverlay) renderListItem(item settingsItem, isSelected bool) string {
-	nameStyle := lipgloss.NewStyle().Foreground(brightWhite)
-	if isSelected {
-		nameStyle = nameStyle.Bold(true)
-	}
-
-	bullet := lipgloss.NewStyle().Foreground(mintGreen).Render("✓")
-	return fmt.Sprintf("%s %s", bullet, nameStyle.Render(item.displayName))
-}
-
 // renderError renders an error message
-func (s *InteractiveSettingsOverlay) renderError(message string) string {
+func (s *SettingsOverlay) renderError(message string) string {
 	errMsgStyle := lipgloss.NewStyle().
-		Foreground(salmonPink).
+		Foreground(types.SalmonPink).
 		Bold(true)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
-		Background(darkBg).
+		BorderForeground(types.SalmonPink).
+		Background(types.DarkBg).
 		Padding(1, 2).
 		Width(s.width - 4).
 		Height(s.height - 4)
@@ -1246,16 +1136,16 @@ func (s *InteractiveSettingsOverlay) renderError(message string) string {
 }
 
 // Focused returns whether this overlay should handle input
-func (s *InteractiveSettingsOverlay) Focused() bool {
+func (s *SettingsOverlay) Focused() bool {
 	return s.focused
 }
 
 // Width returns the overlay width
-func (s *InteractiveSettingsOverlay) Width() int {
+func (s *SettingsOverlay) Width() int {
 	return s.width
 }
 
 // Height returns the overlay height
-func (s *InteractiveSettingsOverlay) Height() int {
+func (s *SettingsOverlay) Height() int {
 	return s.height
 }

@@ -1,4 +1,4 @@
-package tui
+package syntax
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // DiffLineType represents the type of line in a diff
@@ -28,8 +29,6 @@ type DiffLine struct {
 	Content string
 	Marker  string // The diff marker (+, -, space, @@)
 }
-
-// Color definitions for diff markers and backgrounds are now in styles.go
 
 // HighlightDiff applies syntax highlighting to unified diff content
 // It preserves diff markers while highlighting the code portions
@@ -144,9 +143,9 @@ func highlightDiffLine(line DiffLine, lexer chroma.Lexer, formatter chroma.Forma
 	// For headers and hunks, just apply the appropriate color
 	switch line.Type {
 	case DiffLineHeader:
-		return lipgloss.NewStyle().Foreground(diffHeaderColor).Render(line.Marker + line.Content), nil
+		return lipgloss.NewStyle().Foreground(types.DiffHeaderColor).Render(line.Marker + line.Content), nil
 	case DiffLineHunk:
-		return lipgloss.NewStyle().Foreground(diffHunkColor).Render(line.Marker + line.Content), nil
+		return lipgloss.NewStyle().Foreground(types.DiffHunkColor).Render(line.Marker + line.Content), nil
 	}
 
 	// For code lines (additions, deletions, context), highlight the code portion
@@ -178,24 +177,24 @@ func highlightDiffLine(line DiffLine, lexer chroma.Lexer, formatter chroma.Forma
 	case DiffLineAddition:
 		// Styled marker with background
 		marker = lipgloss.NewStyle().
-			Foreground(diffAddColor).
-			Background(diffAddBgColor).
+			Foreground(types.DiffAddColor).
+			Background(types.DiffAddBgColor).
 			Bold(true).
 			Render("+ ")
 		// Apply background to content while preserving Chroma's syntax colors
 		contentWithBg = lipgloss.NewStyle().
-			Background(diffAddBgColor).
+			Background(types.DiffAddBgColor).
 			Render(highlightedContent)
 	case DiffLineDeletion:
 		// Styled marker with background
 		marker = lipgloss.NewStyle().
-			Foreground(diffDeleteColor).
-			Background(diffDeleteBgColor).
+			Foreground(types.DiffDeleteColor).
+			Background(types.DiffDeleteBgColor).
 			Bold(true).
 			Render("- ")
 		// Apply background to content while preserving Chroma's syntax colors
 		contentWithBg = lipgloss.NewStyle().
-			Background(diffDeleteBgColor).
+			Background(types.DiffDeleteBgColor).
 			Render(highlightedContent)
 	default:
 		marker = "  "
@@ -222,13 +221,13 @@ func applyDiffColorToLine(line DiffLine) string {
 
 	switch line.Type {
 	case DiffLineHeader:
-		return lipgloss.NewStyle().Foreground(diffHeaderColor).Render(fullLine)
+		return lipgloss.NewStyle().Foreground(types.DiffHeaderColor).Render(fullLine)
 	case DiffLineHunk:
-		return lipgloss.NewStyle().Foreground(diffHunkColor).Render(fullLine)
+		return lipgloss.NewStyle().Foreground(types.DiffHunkColor).Render(fullLine)
 	case DiffLineAddition:
-		return lipgloss.NewStyle().Foreground(diffAddColor).Render(fullLine)
+		return lipgloss.NewStyle().Foreground(types.DiffAddColor).Render(fullLine)
 	case DiffLineDeletion:
-		return lipgloss.NewStyle().Foreground(diffDeleteColor).Render(fullLine)
+		return lipgloss.NewStyle().Foreground(types.DiffDeleteColor).Render(fullLine)
 	default:
 		return fullLine
 	}

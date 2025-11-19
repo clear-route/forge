@@ -1,9 +1,10 @@
-package tui
+package overlay
 
 import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // HelpOverlay displays help information in a modal dialog
@@ -27,13 +28,18 @@ func NewHelpOverlay(title, content string) *HelpOverlay {
 }
 
 // Update handles messages for the help overlay
-func (h *HelpOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (h *HelpOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEsc, tea.KeyCtrlC, tea.KeyEnter:
+			// Instead of returning nil, nil which meant "close" in the old system,
+			// we explicitly ask to clear the overlay.
+			// However, the interface contract says we return the updated *Overlay*.
+			// If we want to close, we should return nil or have actions.ClearOverlay().
+			// In the old system: "return nil, nil" meant "I am done, remove me".
 			return nil, nil
 		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
 			h.viewport, cmd = h.viewport.Update(msg)
@@ -50,9 +56,9 @@ func (h *HelpOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 
 // View renders the help overlay
 func (h *HelpOverlay) View() string {
-	header := OverlayTitleStyle.Render(h.title)
+	header := types.OverlayTitleStyle.Render(h.title)
 	viewportContent := h.viewport.View()
-	footer := OverlayHelpStyle.Render("Press ESC or Enter to close")
+	footer := types.OverlayHelpStyle.Render("Press ESC or Enter to close")
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -62,7 +68,7 @@ func (h *HelpOverlay) View() string {
 	)
 
 	// Use the viewport's width to determine the container width
-	return CreateOverlayContainerStyle(h.viewport.Width).Render(content)
+	return types.CreateOverlayContainerStyle(h.viewport.Width).Render(content)
 }
 
 // Focused returns whether this overlay should handle input
@@ -71,14 +77,11 @@ func (h *HelpOverlay) Focused() bool {
 }
 
 // Width returns the overlay width.
-// This is not used for positioning, which is handled by lipgloss.Place,
-// but is part of the Overlay interface.
 func (h *HelpOverlay) Width() int {
 	return h.viewport.Width
 }
 
 // Height returns the overlay height.
-// This is not used for positioning, but is part of the Overlay interface.
 func (h *HelpOverlay) Height() int {
 	return h.viewport.Height
 }
