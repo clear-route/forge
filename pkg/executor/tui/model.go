@@ -73,6 +73,9 @@ type model struct {
 	resultList       overlay.ResultListModel // Result history list overlay
 	lastToolCallID   string                  // Track the last tool call for 'v' shortcut
 	lastToolName     string                  // Track the last tool name
+
+	// Application state
+	shouldQuit bool // Flag to trigger application exit
 }
 
 // agentErrMsg represents an error from agent operations

@@ -36,6 +36,11 @@ func initDebugLog() {
 //
 //nolint:gocyclo
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Check if quit was requested by an overlay or component
+	if m.shouldQuit {
+		return m, tea.Quit
+	}
+
 	var (
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
