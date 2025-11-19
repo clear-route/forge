@@ -1,0 +1,120 @@
+package approval
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/types"
+	"github.com/google/uuid"
+)
+
+// EventEmitter is a function type for emitting events
+type EventEmitter func(event *types.AgentEvent)
+
+// Manager handles tool approval requests and responses
+type Manager struct {
+	timeout         time.Duration
+	pendingApproval *pendingApproval
+	mu              sync.Mutex
+	emitEvent       EventEmitter
+}
+
+// pendingApproval tracks an approval request that is waiting for user response
+type pendingApproval struct {
+	approvalID string
+	toolName   string
+	toolCall   tools.ToolCall
+	response   chan *types.ApprovalResponse
+}
+
+// NewManager creates a new approval manager
+func NewManager(timeout time.Duration, emitEvent EventEmitter) *Manager {
+	return &Manager{
+		timeout:   timeout,
+		emitEvent: emitEvent,
+	}
+}
+
+// RequestApproval sends an approval request and waits for user response
+// Returns (approved, timedOut) where:
+//   - approved: true if user approved, false if rejected
+//   - timedOut: true if the request timed out waiting for response
+func (m *Manager) RequestApproval(ctx context.Context, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
+	// Generate unique approval ID
+	approvalID := uuid.New().String()
+
+	// Create response channel for this approval
+	responseChannel := make(chan *types.ApprovalResponse, 1)
+
+	// Store pending approval
+	m.setupPendingApproval(approvalID, toolCall, responseChannel)
+
+	// Clean up pending approval when done
+	defer m.cleanupPendingApproval(responseChannel)
+
+	// Parse tool input for event
+	argsMap := parseToolArguments(toolCall)
+
+	// Check for auto-approval
+	if approved, autoApproved := m.checkAutoApproval(approvalID, toolCall, argsMap); autoApproved {
+		return approved, false
+	}
+
+	// Emit approval request event (tool requires manual approval)
+	m.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
+
+	// Wait for response with timeout
+	return m.waitForResponse(ctx, approvalID, toolCall, responseChannel)
+}
+
+// HandleResponse processes an approval response from the user
+func (m *Manager) HandleResponse(response *types.ApprovalResponse) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if we have a pending approval matching this response
+	if m.pendingApproval == nil || m.pendingApproval.approvalID != response.ApprovalID {
+		// No matching pending approval - ignore this response
+		return
+	}
+
+	// Send the response to the waiting goroutine
+	select {
+	case m.pendingApproval.response <- response:
+		// Response delivered
+	default:
+		// Channel full or closed - ignore
+	}
+}
+
+// setupPendingApproval stores the pending approval request
+func (m *Manager) setupPendingApproval(approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pendingApproval = &pendingApproval{
+		approvalID: approvalID,
+		toolName:   toolCall.ToolName,
+		toolCall:   toolCall,
+		response:   responseChannel,
+	}
+}
+
+// cleanupPendingApproval cleans up the pending approval
+func (m *Manager) cleanupPendingApproval(responseChannel chan *types.ApprovalResponse) {
+	m.mu.Lock()
+	m.pendingApproval = nil
+	m.mu.Unlock()
+	close(responseChannel)
+}
+
+// parseToolArguments safely parses tool call arguments into a map
+func parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
+	var argsMap map[string]interface{}
+	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
+		argsMap = make(map[string]interface{})
+	}
+	return argsMap
+}

@@ -8,18 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/entrhq/forge/pkg/agent/approval"
 	agentcontext "github.com/entrhq/forge/pkg/agent/context"
 	"github.com/entrhq/forge/pkg/agent/core"
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
-	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
 	"github.com/entrhq/forge/pkg/tools/coding"
 	"github.com/entrhq/forge/pkg/types"
-
-	"github.com/google/uuid"
 )
 
 var agentDebugLog *log.Logger
@@ -52,9 +50,8 @@ type DefaultAgent struct {
 	memory  memory.Memory
 
 	// Approval system
+	approvalManager *approval.Manager
 	approvalTimeout time.Duration
-	pendingApproval *pendingApproval
-	approvalMu      sync.Mutex
 
 	// Control channels
 	cancelMu     sync.Mutex
@@ -76,14 +73,6 @@ type DefaultAgent struct {
 
 	// Context management
 	contextManager *agentcontext.Manager
-}
-
-// pendingApproval tracks an approval request that is waiting for user response
-type pendingApproval struct {
-	approvalID string
-	toolName   string
-	toolCall   tools.ToolCall
-	response   chan *types.ApprovalResponse
 }
 
 // AgentOption is a function that configures an agent
@@ -142,12 +131,11 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 	}
 
 	a := &DefaultAgent{
-		provider:        provider,
-		bufferSize:      10,              // default buffer size
-		approvalTimeout: 5 * time.Minute, // default 5 minute approval timeout
-		tools:           make(map[string]tools.Tool),
-		memory:          memory.NewConversationMemory(),
-		tokenizer:       tok,
+		provider:   provider,
+		bufferSize: 10, // default buffer size
+		tools:      make(map[string]tools.Tool),
+		memory:     memory.NewConversationMemory(),
+		tokenizer:  tok,
 	}
 
 	// Register built-in tools
@@ -160,6 +148,10 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 
 	// Create channels with configured buffer size
 	a.channels = types.NewAgentChannels(a.bufferSize)
+
+	// Initialize approval manager with default timeout
+	a.approvalTimeout = 5 * time.Minute
+	a.approvalManager = approval.NewManager(a.approvalTimeout, a.emitEvent)
 
 	// If context manager was provided, set its event channel now that channels exist
 	if a.contextManager != nil {
@@ -880,22 +872,7 @@ func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall)
 
 // handleApprovalResponse processes an approval response from the user
 func (a *DefaultAgent) handleApprovalResponse(response *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	defer a.approvalMu.Unlock()
-
-	// Check if we have a pending approval matching this response
-	if a.pendingApproval == nil || a.pendingApproval.approvalID != response.ApprovalID {
-		// No matching pending approval - ignore this response
-		return
-	}
-
-	// Send the response to the waiting goroutine
-	select {
-	case a.pendingApproval.response <- response:
-		// Response delivered
-	default:
-		// Response channel full or closed - shouldn't happen
-	}
+	a.approvalManager.HandleResponse(response)
 }
 
 // handleCommandCancellation processes a command cancellation request
@@ -916,162 +893,6 @@ func (a *DefaultAgent) handleCommandCancellation(req *types.CancellationRequest)
 //   - approved: true if user approved, false if rejected
 //   - timedOut: true if the request timed out waiting for response
 func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
-	// Generate unique approval ID
-	approvalID := uuid.New().String()
-
-	// Create response channel for this approval
-	responseChannel := make(chan *types.ApprovalResponse, 1)
-
-	// Store pending approval
-	a.setupPendingApproval(approvalID, toolCall, responseChannel)
-
-	// Clean up pending approval when done
-	defer a.cleanupPendingApproval(responseChannel)
-
-	// Parse tool input for event
-	argsMap := a.parseToolArguments(toolCall)
-
-	// Check for auto-approval
-	if approved, autoApproved := a.checkAutoApproval(approvalID, toolCall, argsMap); autoApproved {
-		return approved, false
-	}
-
-	// Emit approval request event (tool requires manual approval)
-	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
-
-	// Wait for response with timeout
-	return a.waitForApprovalResponse(ctx, approvalID, toolCall, responseChannel, preview)
-}
-
-// setupPendingApproval stores the pending approval request
-func (a *DefaultAgent) setupPendingApproval(approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	defer a.approvalMu.Unlock()
-
-	a.pendingApproval = &pendingApproval{
-		approvalID: approvalID,
-		toolName:   toolCall.ToolName,
-		toolCall:   toolCall,
-		response:   responseChannel,
-	}
-}
-
-// cleanupPendingApproval cleans up the pending approval
-func (a *DefaultAgent) cleanupPendingApproval(responseChannel chan *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	a.pendingApproval = nil
-	a.approvalMu.Unlock()
-	close(responseChannel)
-}
-
-// parseToolArguments parses the tool arguments for the approval event
-func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
-	var argsMap map[string]interface{}
-	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
-		argsMap = make(map[string]interface{})
-	}
-	return argsMap
-}
-
-// checkAutoApproval checks if the tool or command should be auto-approved
-// Returns (approved, autoApproved) where autoApproved indicates if a decision was made
-func (a *DefaultAgent) checkAutoApproval(approvalID string, toolCall tools.ToolCall, argsMap map[string]interface{}) (bool, bool) {
-	// Special handling for execute_command: always check command whitelist first
-	// The execute_command tool uses a per-command whitelist, not tool-level auto-approval
-	if toolCall.ToolName == "execute_command" {
-		if a.isCommandWhitelisted(approvalID, argsMap) {
-			return true, true
-		}
-		// For execute_command, we only check the whitelist, not the tool-level auto-approval
-		return false, false
-	}
-
-	// For all other tools, check if tool is auto-approved
-	if config.IsToolAutoApproved(toolCall.ToolName) {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true, true
-	}
-
-	return false, false
-}
-
-// isCommandWhitelisted checks if a command is whitelisted
-func (a *DefaultAgent) isCommandWhitelisted(approvalID string, argsMap map[string]interface{}) bool {
-	cmdInterface, ok := argsMap["command"]
-	if !ok {
-		return false
-	}
-
-	cmd, ok := cmdInterface.(string)
-	if !ok {
-		return false
-	}
-
-	if config.IsCommandWhitelisted(cmd) {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, "execute_command"))
-		return true
-	}
-
-	return false
-}
-
-// waitForApprovalResponse waits for the user's approval response
-func (a *DefaultAgent) waitForApprovalResponse(ctx context.Context, approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse, preview *tools.ToolPreview) (bool, bool) {
-	timeout := time.NewTimer(a.approvalTimeout)
-	defer timeout.Stop()
-
-	select {
-	case <-ctx.Done():
-		return false, false
-
-	case <-timeout.C:
-		a.emitEvent(types.NewToolApprovalTimeoutEvent(approvalID, toolCall.ToolName))
-		return false, true
-
-	case approval := <-a.channels.Approval:
-		return a.handleDirectApproval(ctx, approval, approvalID, toolCall, preview)
-
-	case response := <-responseChannel:
-		approved := a.handleChannelResponse(approvalID, toolCall, response)
-		return approved, false
-	}
-}
-
-// handleDirectApproval handles approval received directly from executor channel
-func (a *DefaultAgent) handleDirectApproval(ctx context.Context, approval *types.ApprovalResponse, approvalID string, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
-	if approval == nil {
-		return false, false
-	}
-
-	// Verify it's for this approval request
-	if approval.ApprovalID != approvalID {
-		// Put it back for the right handler
-		select {
-		case a.channels.Approval <- approval:
-		default:
-		}
-		// Continue waiting
-		return a.requestApproval(ctx, toolCall, preview)
-	}
-
-	// Process the approval
-	if approval.IsGranted() {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true, false
-	}
-
-	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
-	return false, false
-}
-
-// handleChannelResponse handles response from internal response channel
-// Returns true if approved, false if rejected
-func (a *DefaultAgent) handleChannelResponse(approvalID string, toolCall tools.ToolCall, response *types.ApprovalResponse) bool {
-	if response.IsGranted() {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true
-	}
-
-	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
-	return false
+	// Delegate all approval logic to the approval manager
+	return a.approvalManager.RequestApproval(ctx, toolCall, preview)
 }
