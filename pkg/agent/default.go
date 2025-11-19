@@ -806,26 +806,37 @@ func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent stri
 	return a.executeTool(ctx, toolCall)
 }
 
-// executeTool handles tool lookup, execution, and result processing
-// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
-func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall) (bool, string) {
-	// Look up the tool
-	tool, exists := a.getTool(toolCall.ToolName)
+// lookupTool retrieves a tool by name and handles lookup errors
+// Returns (tool, shouldContinue, errorContext)
+func (a *DefaultAgent) lookupTool(toolName string) (tools.Tool, bool, string) {
+	tool, exists := a.getTool(toolName)
 	if !exists {
 		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
 			Type:           prompts.ErrorTypeUnknownTool,
-			ToolName:       toolCall.ToolName,
+			ToolName:       toolName,
 			AvailableTools: a.getToolsList(),
 		})
 
 		// Track error and check circuit breaker
 		if a.trackError(errMsg) {
 			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive unknown tool errors")))
-			return false, ""
+			return nil, false, ""
 		}
 
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("unknown tool: %s", toolCall.ToolName)))
-		return true, errMsg // Continue with error context
+		a.emitEvent(types.NewErrorEvent(fmt.Errorf("unknown tool: %s", toolName)))
+		return nil, true, errMsg
+	}
+
+	return tool, true, ""
+}
+
+// executeTool handles tool lookup, execution, and result processing
+// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
+func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall) (bool, string) {
+	// Look up the tool
+	tool, shouldContinue, errCtx := a.lookupTool(toolCall.ToolName)
+	if errCtx != "" || !shouldContinue {
+		return shouldContinue, errCtx
 	}
 
 	// Check if tool requires approval
