@@ -1,47 +1,54 @@
-package tui
+package overlay
 
 import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
+
+// CommandItem represents a command in the palette
+type CommandItem struct {
+	Name        string
+	Description string
+}
 
 // CommandPalette manages command suggestions and selection
 type CommandPalette struct {
-	commands         []*SlashCommand
-	filteredCommands []*SlashCommand
+	commands         []CommandItem
+	filteredCommands []CommandItem
 	selectedIndex    int
 	filter           string
 	active           bool
 }
 
-// newCommandPalette creates a new command palette
-func newCommandPalette() *CommandPalette {
+// NewCommandPalette creates a new command palette
+func NewCommandPalette(commands []CommandItem) *CommandPalette {
 	return &CommandPalette{
-		commands:         getAllCommands(),
-		filteredCommands: getAllCommands(),
+		commands:         commands,
+		filteredCommands: commands,
 		selectedIndex:    0,
 		active:           false,
 	}
 }
 
-// activate shows the command palette
-func (cp *CommandPalette) activate() {
+// Activate shows the command palette
+func (cp *CommandPalette) Activate() {
 	cp.active = true
 	cp.filter = ""
 	cp.selectedIndex = 0
 	cp.updateFiltered()
 }
 
-// deactivate hides the command palette
-func (cp *CommandPalette) deactivate() {
+// Deactivate hides the command palette
+func (cp *CommandPalette) Deactivate() {
 	cp.active = false
 	cp.filter = ""
 	cp.selectedIndex = 0
 }
 
-// updateFilter updates the filter string and refreshes filtered commands
-func (cp *CommandPalette) updateFilter(filter string) {
+// UpdateFilter updates the filter string and refreshes filtered commands
+func (cp *CommandPalette) UpdateFilter(filter string) {
 	newFilter := strings.ToLower(strings.TrimSpace(filter))
 	// Only reset selection if the filter actually changed
 	if newFilter != cp.filter {
@@ -58,7 +65,7 @@ func (cp *CommandPalette) updateFiltered() {
 		return
 	}
 
-	filtered := make([]*SlashCommand, 0)
+	filtered := make([]CommandItem, 0)
 	for _, cmd := range cp.commands {
 		// Match on command name or description
 		if strings.Contains(strings.ToLower(cmd.Name), cp.filter) ||
@@ -77,16 +84,16 @@ func (cp *CommandPalette) updateFiltered() {
 	}
 }
 
-// selectNext moves selection down
-func (cp *CommandPalette) selectNext() {
+// SelectNext moves selection down
+func (cp *CommandPalette) SelectNext() {
 	if len(cp.filteredCommands) == 0 {
 		return
 	}
 	cp.selectedIndex = (cp.selectedIndex + 1) % len(cp.filteredCommands)
 }
 
-// selectPrev moves selection up
-func (cp *CommandPalette) selectPrev() {
+// SelectPrev moves selection up
+func (cp *CommandPalette) SelectPrev() {
 	if len(cp.filteredCommands) == 0 {
 		return
 	}
@@ -96,16 +103,16 @@ func (cp *CommandPalette) selectPrev() {
 	}
 }
 
-// getSelected returns the currently selected command
-func (cp *CommandPalette) getSelected() *SlashCommand {
+// GetSelected returns the currently selected command
+func (cp *CommandPalette) GetSelected() *CommandItem {
 	if len(cp.filteredCommands) == 0 || cp.selectedIndex >= len(cp.filteredCommands) {
 		return nil
 	}
-	return cp.filteredCommands[cp.selectedIndex]
+	return &cp.filteredCommands[cp.selectedIndex]
 }
 
-// render renders the command palette
-func (cp *CommandPalette) render(width int) string {
+// Render renders the command palette
+func (cp *CommandPalette) Render(width int) string {
 	if !cp.active || len(cp.filteredCommands) == 0 {
 		return ""
 	}
@@ -123,7 +130,7 @@ func (cp *CommandPalette) render(width int) string {
 
 	// Header
 	headerStyle := lipgloss.NewStyle().
-		Foreground(salmonPink).
+		Foreground(types.SalmonPink).
 		Bold(true).
 		PaddingLeft(1)
 
@@ -145,16 +152,16 @@ func (cp *CommandPalette) render(width int) string {
 
 		// Command name in salmon pink, description in soft gray
 		cmdNameStyle := lipgloss.NewStyle().
-			Foreground(salmonPink).
+			Foreground(types.SalmonPink).
 			Bold(i == cp.selectedIndex)
 
 		descStyle := lipgloss.NewStyle().
-			Foreground(mutedGray)
+			Foreground(types.MutedGray)
 
 		if i == cp.selectedIndex {
 			// Highlighted background for selected item
 			lineStyle := lipgloss.NewStyle().
-				Background(lipgloss.Color("#2d2d2d")).
+				Background(types.PaletteBg).
 				Width(paletteWidth - 2).
 				PaddingLeft(1)
 
@@ -170,7 +177,7 @@ func (cp *CommandPalette) render(width int) string {
 	// Footer hint
 	if len(cp.filteredCommands) > maxVisible {
 		footerStyle := lipgloss.NewStyle().
-			Foreground(mutedGray).
+			Foreground(types.MutedGray).
 			Italic(true).
 			PaddingLeft(1)
 		sb.WriteString(footerStyle.Render("... and more. Keep typing to filter."))
@@ -180,9 +187,14 @@ func (cp *CommandPalette) render(width int) string {
 	// Wrap in border
 	paletteStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
+		BorderForeground(types.SalmonPink).
 		Width(paletteWidth).
 		Padding(0, 1)
 
 	return paletteStyle.Render(sb.String())
+}
+
+// IsActive returns whether the palette is active
+func (cp *CommandPalette) IsActive() bool {
+	return cp.active
 }

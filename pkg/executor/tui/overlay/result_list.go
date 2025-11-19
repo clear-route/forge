@@ -1,5 +1,4 @@
-// Package tui provides a result list overlay for browsing cached tool results
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -8,11 +7,12 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // resultListItem represents a single item in the result list
 type resultListItem struct {
-	result *CachedResult
+	result *types.CachedResult
 }
 
 func (i resultListItem) FilterValue() string {
@@ -40,19 +40,19 @@ type resultListDelegate struct {
 func newResultListDelegate() resultListDelegate {
 	d := list.NewDefaultDelegate()
 
-	// Customize styles to match Forge theme
+	// Customize styles to match Forge theme using types constants
 	d.Styles.SelectedTitle = d.Styles.SelectedTitle.
-		Foreground(salmonPink).
-		BorderForeground(salmonPink)
+		Foreground(types.SalmonPink).
+		BorderForeground(types.SalmonPink)
 	d.Styles.SelectedDesc = d.Styles.SelectedDesc.
-		Foreground(mutedGray).
-		BorderForeground(salmonPink)
+		Foreground(types.MutedGray).
+		BorderForeground(types.SalmonPink)
 
 	return resultListDelegate{DefaultDelegate: d}
 }
 
-// resultListModel represents the state of the result list overlay
-type resultListModel struct {
+// ResultListModel represents the state of the result list overlay
+type ResultListModel struct {
 	list     list.Model
 	width    int
 	height   int
@@ -60,16 +60,17 @@ type resultListModel struct {
 	quitting bool
 }
 
-// newResultListModel creates a new result list model
-func newResultListModel() resultListModel {
+// NewResultListModel creates a new result list model
+func NewResultListModel() ResultListModel {
 	delegate := newResultListDelegate()
 
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "Tool Result History"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(false)
+
 	l.Styles.Title = lipgloss.NewStyle().
-		Foreground(salmonPink).
+		Foreground(types.SalmonPink).
 		Bold(true).
 		Padding(0, 1)
 
@@ -87,14 +88,14 @@ func newResultListModel() resultListModel {
 		}
 	}
 
-	return resultListModel{
+	return ResultListModel{
 		list:   l,
 		active: false,
 	}
 }
 
-// activate shows the result list with the given cached results
-func (m *resultListModel) activate(results []*CachedResult, width, height int) {
+// Activate shows the result list with the given cached results
+func (m *ResultListModel) Activate(results []*types.CachedResult, width, height int) {
 	m.active = true
 	m.width = width
 	m.height = height
@@ -109,14 +110,23 @@ func (m *resultListModel) activate(results []*CachedResult, width, height int) {
 	m.list.SetSize(width-4, height-4)
 }
 
-// deactivate hides the result list
-func (m *resultListModel) deactivate() {
+// Deactivate hides the result list
+func (m *ResultListModel) Deactivate() {
 	m.active = false
 	m.quitting = false
 }
 
-// Update handles updates to the result list
-func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+// IsActive returns whether the result list is active
+func (m *ResultListModel) IsActive() bool {
+	return m.active
+}
+
+// Init implements tea.Model
+func (m *ResultListModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m *ResultListModel) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
@@ -125,7 +135,7 @@ func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", keyEsc:
-			m.quitting = true
+			m.Deactivate()
 			return m, nil
 		case keyEnter:
 			// Return the selected result
@@ -133,7 +143,7 @@ func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 				// Signal that we want to view this result
 				m.quitting = true
 				return m, func() tea.Msg {
-					return viewResultMsg{resultID: item.result.ID}
+					return types.ViewResultMsg{ResultID: item.result.ID}
 				}
 			}
 		}
@@ -149,7 +159,7 @@ func (m *resultListModel) Update(msg tea.Msg) (Overlay, tea.Cmd) {
 }
 
 // View renders the result list
-func (m *resultListModel) View() string {
+func (m *ResultListModel) View() string {
 	if !m.active {
 		return ""
 	}
@@ -157,7 +167,7 @@ func (m *resultListModel) View() string {
 	// Create a bordered container for the list
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(salmonPink).
+		BorderForeground(types.SalmonPink).
 		Padding(1, 2).
 		Width(m.width - 4).
 		Height(m.height - 4)
@@ -166,21 +176,16 @@ func (m *resultListModel) View() string {
 }
 
 // Focused returns whether the result list should handle input
-func (m *resultListModel) Focused() bool {
+func (m *ResultListModel) Focused() bool {
 	return m.active
 }
 
 // Width returns the width of the result list
-func (m *resultListModel) Width() int {
+func (m *ResultListModel) Width() int {
 	return m.width
 }
 
 // Height returns the height of the result list
-func (m *resultListModel) Height() int {
+func (m *ResultListModel) Height() int {
 	return m.height
-}
-
-// viewResultMsg is sent when a result is selected from the list
-type viewResultMsg struct {
-	resultID string
 }

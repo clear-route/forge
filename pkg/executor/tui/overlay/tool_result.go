@@ -1,4 +1,4 @@
-package tui
+package overlay
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // ToolResultOverlay displays the full result of a tool call
@@ -45,10 +46,13 @@ func NewToolResultOverlay(toolName, result string, width, height int) *ToolResul
 }
 
 // Update handles messages
-func (o *ToolResultOverlay) Update(msg tea.Msg) (Overlay, tea.Cmd) {
+func (o *ToolResultOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "q", keyEsc, "v":
+		case "q", "esc", "v":
+			if actions != nil {
+				actions.ClearOverlay()
+			}
 			return nil, nil // Signal to close
 		}
 	}
@@ -64,7 +68,7 @@ func (o *ToolResultOverlay) View() string {
 	// Create header
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#87CEEB")). // Sky blue
+		Foreground(types.DiffHunkColor). // Cyan/Sky blue
 		Render(fmt.Sprintf("Tool Result: %s", o.toolName))
 
 	// Create help text
@@ -88,7 +92,7 @@ func (o *ToolResultOverlay) View() string {
 	// Create bordered box
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#87CEEB")). // Sky blue
+		BorderForeground(types.DiffHunkColor). // Cyan/Sky blue
 		Padding(1, 2).
 		Width(o.width).
 		Height(o.height)
@@ -117,7 +121,7 @@ func centerOverlay(content string, width, height int) string {
 	var centered strings.Builder
 
 	// Add vertical padding
-	verticalPadding := (height - len(lines)) / 2
+	verticalPadding := max(0, (height-len(lines))/2)
 	for i := 0; i < verticalPadding; i++ {
 		centered.WriteString("\n")
 	}
@@ -126,7 +130,7 @@ func centerOverlay(content string, width, height int) string {
 	for _, line := range lines {
 		// Calculate horizontal padding (account for ANSI codes)
 		lineWidth := lipgloss.Width(line)
-		horizontalPadding := (width - lineWidth) / 2
+		horizontalPadding := max(0, (width-lineWidth)/2)
 		if horizontalPadding > 0 {
 			centered.WriteString(strings.Repeat(" ", horizontalPadding))
 		}

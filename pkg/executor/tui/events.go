@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent/tools"
+	"github.com/entrhq/forge/pkg/executor/tui/overlay"
+	tuitypes "github.com/entrhq/forge/pkg/executor/tui/types"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -299,7 +301,7 @@ func (m *model) handleToolApprovalRequest(event *types.AgentEvent) {
 			}
 
 			// Create and activate diff viewer overlay
-			diffViewer := NewDiffViewer(
+			diffViewer := overlay.NewDiffViewer(
 				event.ApprovalID,
 				event.ToolName,
 				preview,
@@ -307,7 +309,7 @@ func (m *model) handleToolApprovalRequest(event *types.AgentEvent) {
 				m.height,
 				responseFunc,
 			)
-			m.overlay.activate(OverlayModeDiffViewer, diffViewer)
+			m.overlay.activate(tuitypes.OverlayModeDiffViewer, diffViewer)
 		}
 	}
 }
@@ -364,13 +366,13 @@ func (m *model) handleCommandExecutionStart(event *types.AgentEvent) {
 		m.viewport.GotoBottom()
 
 		// Create and activate command execution overlay
-		overlay := NewCommandExecutionOverlay(
+		overlay := overlay.NewCommandExecutionOverlay(
 			event.CommandExecution.Command,
 			event.CommandExecution.WorkingDir,
 			event.CommandExecution.ExecutionID,
 			m.channels.Cancel,
 		)
-		m.overlay.activate(OverlayModeCommandOutput, overlay)
+		m.overlay.activate(tuitypes.OverlayModeCommandOutput, overlay)
 	}
 }
 

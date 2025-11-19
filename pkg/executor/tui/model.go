@@ -10,6 +10,8 @@ import (
 	"github.com/entrhq/forge/pkg/agent"
 	"github.com/entrhq/forge/pkg/agent/git"
 	"github.com/entrhq/forge/pkg/agent/slash"
+	"github.com/entrhq/forge/pkg/executor/tui/approval"
+	"github.com/entrhq/forge/pkg/executor/tui/overlay"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -38,7 +40,7 @@ type model struct {
 
 	// UI state
 	overlay        *overlayState
-	commandPalette *CommandPalette
+	commandPalette *overlay.CommandPalette
 	summarization  *summarizationStatus
 	toast          *toastNotification
 
@@ -68,13 +70,18 @@ type model struct {
 	resultClassifier *ToolResultClassifier
 	resultSummarizer *ToolResultSummarizer
 	resultCache      *resultCache
-	resultList       resultListModel // Result history list overlay
-	lastToolCallID   string          // Track the last tool call for 'v' shortcut
-	lastToolName     string          // Track the last tool name
+	resultList       overlay.ResultListModel // Result history list overlay
+	lastToolCallID   string                  // Track the last tool call for 'v' shortcut
+	lastToolName     string                  // Track the last tool name
 }
 
 // agentErrMsg represents an error from agent operations
 type agentErrMsg struct{ err error }
+
+// approvalRequestMsg signals that a tool approval request is needed
+type approvalRequestMsg struct {
+	request approval.ApprovalRequest
+}
 
 // slashCommandCompleteMsg signals that a slash command has completed
 type slashCommandCompleteMsg struct{}
@@ -92,6 +99,14 @@ type operationCompleteMsg struct {
 	successIcon  string
 	errorTitle   string
 	errorIcon    string
+}
+
+// toastMsg triggers a toast notification
+type toastMsg struct {
+	message string
+	details string
+	icon    string
+	isError bool
 }
 
 // summarizationStatus tracks an active context summarization operation

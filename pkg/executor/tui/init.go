@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/overlay"
 )
 
 // initialModel returns the initial state of the TUI.
@@ -33,6 +34,16 @@ func initialModel() model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(salmonPink)
 
+	// Initialize command palette with registered commands
+	commands := getAllCommands()
+	cmdItems := make([]overlay.CommandItem, len(commands))
+	for i, cmd := range commands {
+		cmdItems[i] = overlay.CommandItem{
+			Name:        cmd.Name,
+			Description: cmd.Description,
+		}
+	}
+
 	return model{
 		viewport:         vp,
 		textarea:         ta,
@@ -40,7 +51,7 @@ func initialModel() model {
 		thinkingBuffer:   &strings.Builder{},
 		messageBuffer:    &strings.Builder{},
 		overlay:          newOverlayState(),
-		commandPalette:   newCommandPalette(),
+		commandPalette:   overlay.NewCommandPalette(cmdItems),
 		summarization:    &summarizationStatus{},
 		toast:            &toastNotification{},
 		spinner:          s,
@@ -48,7 +59,7 @@ func initialModel() model {
 		resultClassifier: NewToolResultClassifier(),
 		resultSummarizer: NewToolResultSummarizer(),
 		resultCache:      newResultCache(20),
-		resultList:       newResultListModel(),
+		resultList:       overlay.NewResultListModel(),
 	}
 }
 

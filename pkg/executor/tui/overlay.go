@@ -3,94 +3,52 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
-
-// OverlayMode represents the current overlay state
-type OverlayMode int
-
-const (
-	// OverlayModeNone indicates no overlay is active
-	OverlayModeNone OverlayMode = iota
-	// OverlayModeDiffViewer shows the diff approval overlay
-	OverlayModeDiffViewer
-	// OverlayModeFileTree shows the file tree overlay
-	OverlayModeFileTree
-	// OverlayModeCommandOutput shows command output overlay
-	OverlayModeCommandOutput
-	// OverlayModeHelp shows the help overlay
-	OverlayModeHelp
-	// OverlayModeSlashCommandPreview shows slash command preview
-	OverlayModeSlashCommandPreview
-	// OverlayModeSettings shows the settings overlay
-	OverlayModeSettings
-	// OverlayModeContext shows the context information overlay
-	OverlayModeContext
-	// OverlayModeToolResult shows full tool result overlay
-	OverlayModeToolResult
-)
-
-// Overlay is the base interface for all overlay components
-type Overlay interface {
-	// Update handles messages and returns updated overlay
-	Update(msg tea.Msg) (Overlay, tea.Cmd)
-
-	// View renders the overlay
-	View() string
-
-	// Focused returns whether this overlay should handle input
-	Focused() bool
-
-	// Width returns the overlay width
-	Width() int
-
-	// Height returns the overlay height
-	Height() int
-}
 
 // overlayState tracks the active overlay and its state
 type overlayState struct {
-	mode    OverlayMode
-	overlay Overlay
+	mode    types.OverlayMode
+	overlay types.Overlay
 }
 
 // newOverlayState creates a new overlay state
 func newOverlayState() *overlayState {
 	return &overlayState{
-		mode: OverlayModeNone,
+		mode: types.OverlayModeNone,
 	}
 }
 
 // activate activates an overlay
-func (o *overlayState) activate(mode OverlayMode, overlay Overlay) {
+func (o *overlayState) activate(mode types.OverlayMode, overlay types.Overlay) {
 	o.mode = mode
 	o.overlay = overlay
 }
 
 // deactivate closes the current overlay
 func (o *overlayState) deactivate() {
-	o.mode = OverlayModeNone
+	o.mode = types.OverlayModeNone
 	o.overlay = nil
 }
 
 // isActive returns whether any overlay is currently active
 func (o *overlayState) isActive() bool {
 	// Check mode first, then verify overlay is not nil
-	if o.mode == OverlayModeNone {
+	if o.mode == types.OverlayModeNone {
 		return false
 	}
 	// If mode is set but overlay is nil, this is an inconsistent state
 	// We should deactivate to prevent panics
 	if o.overlay == nil {
-		o.mode = OverlayModeNone
+		o.mode = types.OverlayModeNone
 		return false
 	}
 	return true
 }
 
 // renderOverlay renders an overlay on top of the base content
-func renderOverlay(baseView string, overlay Overlay, width, height int) string {
+func renderOverlay(baseView string, overlay types.Overlay, width, height int) string {
 	if overlay == nil {
 		return baseView
 	}

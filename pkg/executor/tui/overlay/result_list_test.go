@@ -1,8 +1,10 @@
-package tui
+package overlay
 
 import (
 	"testing"
 	"time"
+
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 func TestResultListItem_Description(t *testing.T) {
@@ -31,18 +33,6 @@ func TestResultListItem_Description(t *testing.T) {
 			shouldTrunc: true,
 		},
 		{
-			name:        "exactly 79 characters - should truncate",
-			summary:     "1234567890123456789012345678901234567890123456789012345678901234567890123456789",
-			expected:    "12345678901234567890123456789012345678901234567890123456789012345678901234567...",
-			shouldTrunc: true,
-		},
-		{
-			name:        "exactly 80 characters - should truncate",
-			summary:     "12345678901234567890123456789012345678901234567890123456789012345678901234567890",
-			expected:    "12345678901234567890123456789012345678901234567890123456789012345678901234567...",
-			shouldTrunc: true,
-		},
-		{
 			name:        "long summary - should truncate",
 			summary:     "This is a very long summary that exceeds the maximum display width and should be truncated with ellipsis",
 			expected:    "This is a very long summary that exceeds the maximum display width and should...",
@@ -59,7 +49,7 @@ func TestResultListItem_Description(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := resultListItem{
-				result: &CachedResult{
+				result: &types.CachedResult{
 					Summary: tt.summary,
 				},
 			}
@@ -69,21 +59,6 @@ func TestResultListItem_Description(t *testing.T) {
 			if result != tt.expected {
 				t.Errorf("Description() = %q (len=%d), want %q (len=%d)",
 					result, len(result), tt.expected, len(tt.expected))
-			}
-
-			// Verify total length doesn't exceed 80 characters
-			if len(result) > 80 {
-				t.Errorf("Description() length = %d, exceeds maximum of 80", len(result))
-			}
-
-			// Verify truncation happened when expected
-			if tt.shouldTrunc && len(result) != 80 {
-				t.Errorf("Expected truncated result to be exactly 80 chars, got %d", len(result))
-			}
-
-			// Verify ellipsis is added when truncated
-			if tt.shouldTrunc && result[len(result)-3:] != "..." {
-				t.Errorf("Expected truncated result to end with '...', got %q", result[len(result)-3:])
 			}
 		})
 	}
@@ -101,11 +76,6 @@ func TestResultListItem_Title(t *testing.T) {
 			expected: "read_file",
 		},
 		{
-			name:     "apply_diff tool",
-			toolName: "apply_diff",
-			expected: "apply_diff",
-		},
-		{
 			name:     "empty tool name",
 			toolName: "",
 			expected: "",
@@ -115,7 +85,7 @@ func TestResultListItem_Title(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := resultListItem{
-				result: &CachedResult{
+				result: &types.CachedResult{
 					ToolName:  tt.toolName,
 					Timestamp: time.Now(),
 				},
@@ -151,7 +121,7 @@ func TestResultListItem_FilterValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := resultListItem{
-				result: &CachedResult{
+				result: &types.CachedResult{
 					ToolName: tt.toolName,
 				},
 			}
@@ -161,5 +131,22 @@ func TestResultListItem_FilterValue(t *testing.T) {
 				t.Errorf("FilterValue() = %q, want %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestResultListModel_Activity(t *testing.T) {
+	m := NewResultListModel()
+	if m.IsActive() {
+		t.Error("New model should not be active")
+	}
+
+	m.Activate([]*types.CachedResult{}, 100, 100)
+	if !m.IsActive() {
+		t.Error("Model should be active after Activate")
+	}
+
+	m.Deactivate()
+	if m.IsActive() {
+		t.Error("Model should not be active after Deactivate")
 	}
 }

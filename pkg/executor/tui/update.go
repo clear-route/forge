@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/entrhq/forge/pkg/executor/tui/overlay"
+	tuitypes "github.com/entrhq/forge/pkg/executor/tui/types"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -45,38 +47,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle command palette keyboard input BEFORE updating textarea
 	// This prevents Enter from being processed by textarea when palette is active
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.commandPalette.active {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.commandPalette.IsActive() {
 		switch keyMsg.Type {
 		case tea.KeyEsc:
 			// Cancel command palette
-			m.commandPalette.deactivate()
+			m.commandPalette.Deactivate()
 			m.textarea.Reset()
 			return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 		case tea.KeyUp:
 			// Navigate up in palette, don't update textarea
-			m.commandPalette.selectPrev()
+			m.commandPalette.SelectPrev()
 			return m, spinnerCmd
 		case tea.KeyDown:
 			// Navigate down in palette, don't update textarea
-			m.commandPalette.selectNext()
+			m.commandPalette.SelectNext()
 			return m, spinnerCmd
 		case tea.KeyTab:
 			// Autocomplete with selected command and close palette
-			selected := m.commandPalette.getSelected()
+			selected := m.commandPalette.GetSelected()
 			if selected != nil {
 				m.textarea.SetValue("/" + selected.Name + " ")
 				m.textarea.CursorEnd()
 			}
-			m.commandPalette.deactivate()
+			m.commandPalette.Deactivate()
 			return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 		case tea.KeyEnter:
 			// Autocomplete with the selected command and close the palette
-			selected := m.commandPalette.getSelected()
+			selected := m.commandPalette.GetSelected()
 			if selected != nil {
 				m.textarea.SetValue("/" + selected.Name + " ")
 				m.textarea.CursorEnd()
 			}
-			m.commandPalette.deactivate()
+			m.commandPalette.Deactivate()
 			return m, tea.Batch(tiCmd, vpCmd, spinnerCmd)
 		}
 		// For other keys, continue to textarea update below
@@ -84,7 +86,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Only update textarea if no overlay or result list is active
 	// This prevents the textarea from capturing scroll events when an overlay is open
-	if !m.overlay.isActive() && !m.resultList.active {
+	if !m.overlay.isActive() && !m.resultList.IsActive() {
 		// Store old textarea height to detect changes
 		oldHeight := m.textarea.Height()
 		m.textarea, tiCmd = m.textarea.Update(msg)
@@ -100,17 +102,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle command palette activation/deactivation based on input
 		switch {
-		case value == "/" && !m.commandPalette.active:
+		case value == "/" && !m.commandPalette.IsActive():
 			// Only activate palette if input is exactly "/" as first character
-			m.commandPalette.activate()
-			m.commandPalette.updateFilter("")
-		case strings.HasPrefix(value, "/") && m.commandPalette.active:
+			m.commandPalette.Activate()
+			m.commandPalette.UpdateFilter("")
+		case strings.HasPrefix(value, "/") && m.commandPalette.IsActive():
 			// Update filter if palette is already active
 			filter := strings.TrimPrefix(value, "/")
-			m.commandPalette.updateFilter(filter)
-		case !strings.HasPrefix(value, "/") && m.commandPalette.active:
+			m.commandPalette.UpdateFilter(filter)
+		case !strings.HasPrefix(value, "/") && m.commandPalette.IsActive():
 			// Deactivate palette if input no longer starts with /
-			m.commandPalette.deactivate()
+			m.commandPalette.Deactivate()
 		}
 
 		// Auto-adjust textarea height based on content after any key press
@@ -118,7 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case viewResultMsg:
+	case tuitypes.ViewResultMsg:
 		debugLog.Printf("Received viewResultMsg")
 		return m.handleViewResult(msg)
 
@@ -134,13 +136,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		debugLog.Printf("Received operationStartMsg: %s", msg.message)
 		return m.handleOperationStart(msg)
 
+	case tuitypes.OperationStartMsg:
+		debugLog.Printf("Received types.OperationStartMsg: %s", msg.Message)
+		// Convert to internal type
+		return m.handleOperationStart(operationStartMsg{message: msg.Message})
+
 	case operationCompleteMsg:
 		debugLog.Printf("Received operationCompleteMsg: result=%s, err=%v", msg.result, msg.err)
 		return m.handleOperationComplete(msg)
 
+	case tuitypes.OperationCompleteMsg:
+		debugLog.Printf("Received types.OperationCompleteMsg: result=%s, err=%v", msg.Result, msg.Err)
+		// Convert to internal type
+		return m.handleOperationComplete(operationCompleteMsg{
+			result:       msg.Result,
+			err:          msg.Err,
+			successTitle: msg.SuccessTitle,
+			successIcon:  msg.SuccessIcon,
+			errorTitle:   msg.ErrorTitle,
+			errorIcon:    msg.ErrorIcon,
+		})
+
 	case toastMsg:
 		debugLog.Printf("Received toastMsg: %s", msg.message)
 		return m.handleToast(msg)
+
+	case tuitypes.ToastMsg:
+		debugLog.Printf("Received types.ToastMsg: %s", msg.Message)
+		// Convert to internal type
+		return m.handleToast(toastMsg{
+			message: msg.Message,
+			details: msg.Details,
+			icon:    msg.Icon,
+			isError: msg.IsError,
+		})
 
 	case agentErrMsg:
 		debugLog.Printf("Received agentErrMsg: %v", msg.err)
@@ -159,7 +188,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If overlay is active and it's a command execution event, forward to overlay
 		if m.overlay.isActive() && msg.IsCommandExecutionEvent() {
 			var overlayCmd tea.Cmd
-			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg)
+			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg, &m, &m)
 			// Still handle the event in the main model too
 			m.handleAgentEvent(msg)
 			return m, tea.Batch(tiCmd, vpCmd, overlayCmd, spinnerCmd)
@@ -176,7 +205,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If overlay is active, forward mouse events to it
 		if m.overlay.isActive() {
 			var overlayCmd tea.Cmd
-			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg)
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg, &m, &m)
 
 			// Check if overlay returned nil (signals to close)
 			if updatedOverlay == nil {
@@ -209,29 +238,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleViewResult processes result selection from the result list
-func (m model) handleViewResult(msg viewResultMsg) (tea.Model, tea.Cmd) {
-	if result, ok := m.resultCache.get(msg.resultID); ok {
+func (m model) handleViewResult(msg tuitypes.ViewResultMsg) (tea.Model, tea.Cmd) {
+	if result, ok := m.resultCache.get(msg.ResultID); ok {
 		// Close the result list
-		m.resultList.deactivate()
+		m.resultList.Deactivate()
 		// Open the result in an overlay
-		overlay := NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
-		m.overlay.activate(OverlayModeToolResult, overlay)
+		overlay := overlay.NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
+		m.overlay.activate(tuitypes.OverlayModeToolResult, overlay)
 		return m, nil
 	}
 	// If result not found, just close the list
-	m.resultList.deactivate()
+	m.resultList.Deactivate()
 	return m, nil
 }
 
 // handleWindowResize processes window size change events
+// calculateViewportHeight computes the appropriate viewport height based on current model state
+func (m *model) calculateViewportHeight() int {
+	headerHeight := 10                     // ASCII art (6) + tips (1) + status bar (1) + blank line (1) + spacing (1)
+	inputHeight := m.textarea.Height() + 2 // textarea height + border
+	statusBarHeight := 1
+	loadingHeight := 0
+	if m.agentBusy {
+		loadingHeight = 1 // Loading indicator is a separate line when visible
+	}
+
+	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight - loadingHeight
+	if viewportHeight < 5 {
+		viewportHeight = 5
+	}
+	return viewportHeight
+}
+
 func (m model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	// Update viewport on window resize
 	m.viewport, _ = m.viewport.Update(msg)
 
 	// Also update result list if active
-	if m.resultList.active {
-		updated, listCmd := m.resultList.Update(msg)
-		if rl, ok := updated.(*resultListModel); ok {
+	if m.resultList.IsActive() {
+		updated, listCmd := m.resultList.Update(msg, &m, &m)
+		if rl, ok := updated.(*overlay.ResultListModel); ok {
 			m.resultList = *rl
 		}
 		return m, listCmd
@@ -240,20 +286,9 @@ func (m model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	// Calculate heights for different sections
-	headerHeight := 10 // ASCII art (6) + tips (1) + status bar (1) + blank line (1) + spacing (1)
-	// Input height is dynamic based on textarea height (with border padding)
-	inputHeight := m.textarea.Height() + 2 // textarea height + border
-	statusBarHeight := 1
-
-	// Set viewport to fill remaining space
-	viewportHeight := m.height - headerHeight - inputHeight - statusBarHeight
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
-
+	// Calculate and set viewport dimensions
 	m.viewport.Width = m.width - 4
-	m.viewport.Height = viewportHeight
+	m.viewport.Height = m.calculateViewportHeight()
 	m.textarea.SetWidth(m.width - 8)
 	m.ready = true
 	m.recalculateLayout()
@@ -323,8 +358,8 @@ func (m model) handleBashCommandResult(msg bashCommandResultMsg) (tea.Model, tea
 // handleApprovalRequest processes generic approval requests (for slash commands, etc.)
 func (m model) handleApprovalRequest(msg approvalRequestMsg) (tea.Model, tea.Cmd) {
 	// Create and activate generic approval overlay
-	overlay := NewGenericApprovalOverlay(msg.request, m.width, m.height)
-	m.overlay.activate(OverlayModeSlashCommandPreview, overlay)
+	overlay := overlay.NewGenericApprovalOverlay(msg.request, m.width, m.height)
+	m.overlay.activate(tuitypes.OverlayModeSlashCommandPreview, overlay)
 	return m, nil
 }
 
@@ -336,7 +371,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) 
 	// If an overlay is active, pass keys to the overlay
 	if m.overlay.isActive() {
 		if m.overlay.overlay != nil {
-			updated, cmd := m.overlay.overlay.Update(msg)
+			updated, cmd := m.overlay.overlay.Update(msg, &m, &m)
 			// If overlay returns nil, it wants to close
 			if updated == nil {
 				m.overlay.deactivate()
@@ -351,9 +386,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) 
 	}
 
 	// If result list is active, pass keys to the result list
-	if m.resultList.active {
-		updated, cmd := m.resultList.Update(msg)
-		if rl, ok := updated.(*resultListModel); ok {
+	if m.resultList.IsActive() {
+		updated, cmd := m.resultList.Update(msg, &m, &m)
+		if rl, ok := updated.(*overlay.ResultListModel); ok {
 			m.resultList = *rl
 		}
 		return m, tea.Batch(cmd, spinnerCmd)
@@ -416,8 +451,8 @@ func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
 func (m model) handleCtrlV() (tea.Model, tea.Cmd) {
 	if m.lastToolCallID != "" {
 		if result, ok := m.resultCache.get(m.lastToolCallID); ok {
-			overlay := NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
-			m.overlay.activate(OverlayModeToolResult, overlay)
+			overlay := overlay.NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
+			m.overlay.activate(tuitypes.OverlayModeToolResult, overlay)
 		}
 	}
 	return m, nil
@@ -426,26 +461,26 @@ func (m model) handleCtrlV() (tea.Model, tea.Cmd) {
 // handleCtrlL handles Ctrl+L key press (show result history)
 func (m model) handleCtrlL() (tea.Model, tea.Cmd) {
 	results := m.resultCache.getAll()
-	m.resultList.activate(results, m.width, m.height)
+	m.resultList.Activate(results, m.width, m.height)
 	return m, nil
 }
 
 // handleCtrlK handles Ctrl+K key press (toggle command palette)
 func (m model) handleCtrlK() (tea.Model, tea.Cmd) {
-	if m.commandPalette.active {
-		m.commandPalette.deactivate()
+	if m.commandPalette.IsActive() {
+		m.commandPalette.Deactivate()
 	} else {
-		m.commandPalette.activate()
+		m.commandPalette.Activate()
 	}
 	return m, nil
 }
 
 // handleCtrlP handles Ctrl+P key press (toggle command palette - alternate)
 func (m model) handleCtrlP() (tea.Model, tea.Cmd) {
-	if m.commandPalette.active {
-		m.commandPalette.deactivate()
+	if m.commandPalette.IsActive() {
+		m.commandPalette.Deactivate()
 	} else {
-		m.commandPalette.activate()
+		m.commandPalette.Activate()
 	}
 	return m, nil
 }
@@ -568,6 +603,8 @@ func (m model) handleAgentMessage(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd
 
 // recalculateLayout updates viewport content and scrolls to bottom
 func (m *model) recalculateLayout() {
+	// Update viewport height based on current state (including loading indicator)
+	m.viewport.Height = m.calculateViewportHeight()
 	m.viewport.SetContent(m.content.String())
 	m.viewport.GotoBottom()
 }

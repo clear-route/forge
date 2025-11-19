@@ -1,4 +1,4 @@
-package tui
+package approval
 
 import (
 	"context"
@@ -7,11 +7,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/agent/slash"
+	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
-// PRApprovalRequest is a concrete implementation of ApprovalRequest for pull requests.
+// PRRequest is a concrete implementation of ApprovalRequest for pull requests.
 // It encapsulates all data needed to preview and execute a PR operation.
-type PRApprovalRequest struct {
+type PRRequest struct {
 	branch       string
 	prTitle      string
 	prDesc       string
@@ -20,9 +21,9 @@ type PRApprovalRequest struct {
 	slashHandler *slash.Handler
 }
 
-// NewPRApprovalRequest creates a new PR approval request
-func NewPRApprovalRequest(branch, prTitle, prDesc, changes, args string, slashHandler *slash.Handler) *PRApprovalRequest {
-	return &PRApprovalRequest{
+// NewPRRequest creates a new PR approval request
+func NewPRRequest(branch, prTitle, prDesc, changes, args string, slashHandler *slash.Handler) *PRRequest {
+	return &PRRequest{
 		branch:       branch,
 		prTitle:      prTitle,
 		prDesc:       prDesc,
@@ -33,7 +34,7 @@ func NewPRApprovalRequest(branch, prTitle, prDesc, changes, args string, slashHa
 }
 
 // Title returns the approval dialog title
-func (p *PRApprovalRequest) Title() string {
+func (p *PRRequest) Title() string {
 	// Use the generated PR title if available
 	if p.prTitle != "" && p.prTitle != p.args {
 		return p.prTitle
@@ -46,12 +47,12 @@ func (p *PRApprovalRequest) Title() string {
 }
 
 // Content returns the formatted content for the PR preview
-func (p *PRApprovalRequest) Content() string {
+func (p *PRRequest) Content() string {
 	var b strings.Builder
 
 	// Show branch info at the top
 	if p.branch != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Branch:"))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Branch:"))
 		b.WriteString("\n")
 		b.WriteString("  " + p.branch + "\n")
 		b.WriteString("\n")
@@ -60,7 +61,7 @@ func (p *PRApprovalRequest) Content() string {
 	// Show PR title if it's different from the overlay title
 	// (i.e., if we're showing user-provided title in header, show generated title here)
 	if p.prTitle != "" && p.args != "" && p.prTitle != p.args {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Generated Title:"))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Generated Title:"))
 		b.WriteString("\n")
 		b.WriteString(p.prTitle)
 		b.WriteString("\n\n")
@@ -68,7 +69,7 @@ func (p *PRApprovalRequest) Content() string {
 
 	// Show PR description prominently if available
 	if p.prDesc != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Description:"))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Description:"))
 		b.WriteString("\n")
 		b.WriteString(p.prDesc)
 		b.WriteString("\n\n")
@@ -76,7 +77,7 @@ func (p *PRApprovalRequest) Content() string {
 
 	// Show commits and changes
 	if p.changes != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(salmonPink).Render("Commits & Changes:"))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(types.SalmonPink).Render("Commits & Changes:"))
 		b.WriteString("\n")
 		b.WriteString(p.changes)
 	}
@@ -85,12 +86,12 @@ func (p *PRApprovalRequest) Content() string {
 }
 
 // OnApprove returns the command to execute when the user approves the PR
-func (p *PRApprovalRequest) OnApprove() tea.Cmd {
+func (p *PRRequest) OnApprove() tea.Cmd {
 	return tea.Batch(
 		// First, signal that we're starting PR creation
 		func() tea.Msg {
-			return operationStartMsg{
-				message: "Creating pull request on GitHub...",
+			return types.OperationStartMsg{
+				Message: "Creating pull request on GitHub...",
 			}
 		},
 		// Then execute the PR creation
@@ -100,26 +101,26 @@ func (p *PRApprovalRequest) OnApprove() tea.Cmd {
 				Name: "pr",
 				Arg:  p.args,
 			})
-			return operationCompleteMsg{
-				result:       result,
-				err:          err,
-				successTitle: "Success",
-				successIcon:  "🔀",
-				errorTitle:   "PR Failed",
-				errorIcon:    "❌",
+			return types.OperationCompleteMsg{
+				Result:       result,
+				Err:          err,
+				SuccessTitle: "Success",
+				SuccessIcon:  "🔀",
+				ErrorTitle:   "PR Failed",
+				ErrorIcon:    "❌",
 			}
 		},
 	)
 }
 
 // OnReject returns the command to execute when the user rejects the PR
-func (p *PRApprovalRequest) OnReject() tea.Cmd {
+func (p *PRRequest) OnReject() tea.Cmd {
 	return func() tea.Msg {
-		return toastMsg{
-			message: "Canceled",
-			details: "/pr command canceled",
-			icon:    "ℹ️",
-			isError: false,
+		return types.ToastMsg{
+			Message: "Canceled",
+			Details: "/pr command canceled",
+			Icon:    "ℹ️",
+			IsError: false,
 		}
 	}
 }

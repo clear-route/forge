@@ -163,12 +163,12 @@ func (m model) applyOverlays(baseView string) string {
 		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
 	}
 
-	if m.resultList.active {
+	if m.resultList.IsActive() {
 		baseView = renderOverlay(baseView, &m.resultList, m.width, m.height)
 	}
 
-	if m.commandPalette.active {
-		paletteContent := m.commandPalette.render(m.width)
+	if m.commandPalette.IsActive() {
+		paletteContent := m.commandPalette.Render(m.width)
 		baseView = renderToastOverlay(baseView, paletteContent)
 	}
 
