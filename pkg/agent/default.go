@@ -8,18 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/entrhq/forge/pkg/agent/approval"
 	agentcontext "github.com/entrhq/forge/pkg/agent/context"
-	"github.com/entrhq/forge/pkg/agent/core"
 	"github.com/entrhq/forge/pkg/agent/memory"
 	"github.com/entrhq/forge/pkg/agent/prompts"
 	"github.com/entrhq/forge/pkg/agent/tools"
-	"github.com/entrhq/forge/pkg/config"
 	"github.com/entrhq/forge/pkg/llm"
 	"github.com/entrhq/forge/pkg/llm/tokenizer"
-	"github.com/entrhq/forge/pkg/tools/coding"
 	"github.com/entrhq/forge/pkg/types"
-
-	"github.com/google/uuid"
 )
 
 var agentDebugLog *log.Logger
@@ -52,9 +48,8 @@ type DefaultAgent struct {
 	memory  memory.Memory
 
 	// Approval system
+	approvalManager *approval.Manager
 	approvalTimeout time.Duration
-	pendingApproval *pendingApproval
-	approvalMu      sync.Mutex
 
 	// Control channels
 	cancelMu     sync.Mutex
@@ -76,14 +71,6 @@ type DefaultAgent struct {
 
 	// Context management
 	contextManager *agentcontext.Manager
-}
-
-// pendingApproval tracks an approval request that is waiting for user response
-type pendingApproval struct {
-	approvalID string
-	toolName   string
-	toolCall   tools.ToolCall
-	response   chan *types.ApprovalResponse
 }
 
 // AgentOption is a function that configures an agent
@@ -142,12 +129,11 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 	}
 
 	a := &DefaultAgent{
-		provider:        provider,
-		bufferSize:      10,              // default buffer size
-		approvalTimeout: 5 * time.Minute, // default 5 minute approval timeout
-		tools:           make(map[string]tools.Tool),
-		memory:          memory.NewConversationMemory(),
-		tokenizer:       tok,
+		provider:   provider,
+		bufferSize: 10, // default buffer size
+		tools:      make(map[string]tools.Tool),
+		memory:     memory.NewConversationMemory(),
+		tokenizer:  tok,
 	}
 
 	// Register built-in tools
@@ -160,6 +146,10 @@ func NewDefaultAgent(provider llm.Provider, opts ...AgentOption) *DefaultAgent {
 
 	// Create channels with configured buffer size
 	a.channels = types.NewAgentChannels(a.bufferSize)
+
+	// Initialize approval manager with default timeout
+	a.approvalTimeout = 5 * time.Minute
+	a.approvalManager = approval.NewManager(a.approvalTimeout, a.emitEvent)
 
 	// If context manager was provided, set its event channel now that channels exist
 	if a.contextManager != nil {
@@ -329,171 +319,11 @@ func (a *DefaultAgent) processUserInput(ctx context.Context, content string) {
 	a.emitEvent(types.NewUpdateBusyEvent(true))
 	defer a.emitEvent(types.NewUpdateBusyEvent(false))
 
-	// Run agent loop
+	// Run agent loop (now in assistant.go)
 	a.runAgentLoop(turnCtx)
 
 	// Emit turn end
 	a.emitEvent(types.NewTurnEndEvent())
-}
-
-// runAgentLoop executes the agent loop with tools and thinking
-// The loop continues until a loop-breaking tool is used or circuit breaker triggers
-func (a *DefaultAgent) runAgentLoop(ctx context.Context) {
-	var errorContext string
-
-	for {
-		// Check if context was canceled (e.g., via /stop command)
-		select {
-		case <-ctx.Done():
-			// Context canceled - stop the agent loop
-			// Emit a user-friendly message about the cancellation
-			a.memory.Add(types.NewUserMessage("Operation stopped by user."))
-			return
-		default:
-			// Continue with iteration
-		}
-
-		// Execute one iteration with optional error context from previous iteration
-		shouldContinue, nextErrorContext := a.executeIteration(ctx, errorContext)
-		if !shouldContinue {
-			// Loop-breaking tool was called or terminal error occurred
-			return
-		}
-
-		// Update error context for next iteration
-		errorContext = nextErrorContext
-	}
-}
-
-// executeIteration performs a single iteration of the agent loop
-// Returns (shouldContinue, errorContext) where:
-//   - shouldContinue: false if loop should terminate (loop-breaking tool or terminal error)
-//   - errorContext: error message to pass to next iteration, or empty string if successful
-func (a *DefaultAgent) executeIteration(ctx context.Context, errorContext string) (bool, string) {
-	// Build system prompt with tool schemas
-	systemPrompt := a.buildSystemPrompt()
-
-	// Get conversation history
-	history := a.memory.GetAll()
-
-	// Build messages for this iteration with optional error context
-	messages := prompts.BuildMessages(systemPrompt, history, "", errorContext)
-
-	// Count input tokens if tokenizer is available
-	var promptTokens int
-	if a.tokenizer != nil {
-		promptTokens = a.tokenizer.CountMessagesTokens(messages)
-	}
-
-	// Evaluate context summarization strategies before each turn
-	agentDebugLog.Printf("=== Agent Loop Iteration ===")
-	agentDebugLog.Printf("contextManager != nil: %v", a.contextManager != nil)
-	agentDebugLog.Printf("tokenizer != nil: %v", a.tokenizer != nil)
-	agentDebugLog.Printf("Prompt tokens: %d", promptTokens)
-
-	if a.contextManager != nil && a.tokenizer != nil {
-		agentDebugLog.Printf("Checking if memory is ConversationMemory...")
-		// Get the conversation memory (cast from interface)
-		if convMem, ok := a.memory.(*memory.ConversationMemory); ok {
-			agentDebugLog.Printf("Memory is ConversationMemory - calling EvaluateAndSummarize")
-			// Evaluate and run summarization strategies if needed
-			_, err := a.contextManager.EvaluateAndSummarize(ctx, convMem, promptTokens)
-			if err != nil {
-				agentDebugLog.Printf("EvaluateAndSummarize returned error: %v", err)
-				// Log error but continue - summarization failure shouldn't stop the agent
-				a.emitEvent(types.NewErrorEvent(fmt.Errorf("context summarization failed: %w", err)))
-			} else {
-				agentDebugLog.Printf("EvaluateAndSummarize completed successfully")
-			}
-
-			// Rebuild messages after potential summarization
-			history = a.memory.GetAll()
-			messages = prompts.BuildMessages(systemPrompt, history, "", errorContext)
-
-			// Recalculate tokens with updated messages
-			if a.tokenizer != nil {
-				promptTokens = a.tokenizer.CountMessagesTokens(messages)
-				agentDebugLog.Printf("Tokens after potential summarization: %d", promptTokens)
-			}
-		} else {
-			agentDebugLog.Printf("Memory is NOT ConversationMemory - type: %T", a.memory)
-		}
-	}
-
-	// Emit API call start event with context information
-	maxTokens := 0
-	if a.contextManager != nil {
-		maxTokens = a.contextManager.GetMaxTokens()
-	}
-	a.emitEvent(types.NewApiCallStartEvent("llm", promptTokens, maxTokens))
-
-	// Get response from LLM
-	stream, err := a.provider.StreamCompletion(ctx, messages)
-	if err != nil {
-		// Check if this is a context cancellation (user stopped the agent)
-		if ctx.Err() != nil {
-			return false, "" // Stop silently - user requested cancellation
-		}
-		// Terminal error - LLM/API failures should stop the loop
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to start completion: %w", err)))
-		return false, ""
-	}
-
-	// Process stream and collect response
-	var assistantContent string
-	var toolCallContent string
-	core.ProcessStream(stream, a.emitEvent, func(content, thinking, toolCall, role string) {
-		assistantContent = content
-		toolCallContent = toolCall
-	})
-
-	// Count completion tokens if tokenizer is available
-	var completionTokens int
-	if a.tokenizer != nil {
-		fullResponse := assistantContent
-		if toolCallContent != "" {
-			fullResponse += toolCallContent
-		}
-		completionTokens = a.tokenizer.CountTokens(fullResponse)
-	}
-
-	// Emit token usage event if we have token counts
-	if promptTokens > 0 || completionTokens > 0 {
-		totalTokens := promptTokens + completionTokens
-		a.emitEvent(types.NewTokenUsageEvent(promptTokens, completionTokens, totalTokens))
-	}
-
-	// Add assistant's response to memory
-	fullResponse := assistantContent
-	if toolCallContent != "" {
-		fullResponse += "<tool>" + toolCallContent + "</tool>"
-	}
-	a.memory.Add(&types.Message{
-		Role:    types.RoleAssistant,
-		Content: fullResponse,
-	})
-
-	// Process the tool call (parse, validate, execute)
-	return a.processToolCall(ctx, toolCallContent)
-}
-
-// buildSystemPrompt constructs the system prompt with tool schemas and custom instructions
-func (a *DefaultAgent) buildSystemPrompt() string {
-	builder := prompts.NewPromptBuilder().
-		WithTools(a.getToolsList())
-
-	// Add user's custom instructions if provided
-	if a.customInstructions != "" {
-		builder.WithCustomInstructions(a.customInstructions)
-	}
-
-	return builder.Build()
-}
-
-// emitEvent sends an event on the event channel.
-// This is a blocking send to ensure critical events like TurnEnd are not dropped.
-func (a *DefaultAgent) emitEvent(event *types.AgentEvent) {
-	a.channels.Event <- event
 }
 
 // RegisterTool adds a custom tool to the agent's tool registry.
@@ -648,430 +478,4 @@ func (a *DefaultAgent) GetContextInfo() *ContextInfo {
 		TotalCompletionTokens: 0,
 		TotalTokens:           0,
 	}
-}
-
-// getToolsList returns tools as []tools.Tool for internal use
-func (a *DefaultAgent) getToolsList() []tools.Tool {
-	a.toolsMu.RLock()
-	defer a.toolsMu.RUnlock()
-
-	toolsList := make([]tools.Tool, 0, len(a.tools))
-	for _, tool := range a.tools {
-		toolsList = append(toolsList, tool)
-	}
-	return toolsList
-}
-
-// getTool retrieves a tool by name (thread-safe)
-func (a *DefaultAgent) getTool(name string) (tools.Tool, bool) {
-	a.toolsMu.RLock()
-	defer a.toolsMu.RUnlock()
-
-	tool, exists := a.tools[name]
-	return tool, exists
-}
-
-// trackError adds an error to the ring buffer and checks if we've hit the circuit breaker
-// Returns true if the circuit breaker should trigger (5 identical consecutive errors)
-func (a *DefaultAgent) trackError(errMsg string) bool {
-	// Add to ring buffer
-	a.lastErrors[a.errorIndex] = errMsg
-	a.errorIndex = (a.errorIndex + 1) % 5
-
-	// Check if all 5 are identical and non-empty
-	if a.lastErrors[0] == "" {
-		return false // Not enough errors yet
-	}
-
-	first := a.lastErrors[0]
-	for i := 1; i < 5; i++ {
-		if a.lastErrors[i] != first {
-			return false
-		}
-	}
-
-	return true // All 5 errors are identical
-}
-
-// resetErrorTracking clears the error ring buffer after a successful iteration
-func (a *DefaultAgent) resetErrorTracking() {
-	for i := range a.lastErrors {
-		a.lastErrors[i] = ""
-	}
-	a.errorIndex = 0
-}
-
-// processToolCall handles parsing, validation, and execution of tool calls
-// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
-func (a *DefaultAgent) processToolCall(ctx context.Context, toolCallContent string) (bool, string) {
-	// Check if context was canceled before processing
-	if ctx.Err() != nil {
-		return false, "" // Stop silently - user requested cancellation
-	}
-
-	// Check if tool call exists
-	if toolCallContent == "" {
-		// If context was canceled, this is expected (stream was interrupted)
-		if ctx.Err() != nil {
-			return false, ""
-		}
-
-		a.emitEvent(types.NewNoToolCallEvent())
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type: prompts.ErrorTypeNoToolCall,
-		})
-
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive no tool call errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("no tool call found in response")))
-		return true, errMsg
-	}
-
-	// Parse the tool call (supports both XML and JSON formats)
-	// Wrap content in <tool> tags since streaming parser strips them
-	wrappedContent := "<tool>" + toolCallContent + "</tool>"
-	parsedToolCall, _, err := tools.ParseToolCall(wrappedContent)
-	if err != nil {
-		// Log the actual content for debugging
-		a.emitEvent(types.NewMessageContentEvent(fmt.Sprintf("\n🔍 DEBUG - Failed to parse tool call:\n%s\n", toolCallContent)))
-
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:    prompts.ErrorTypeInvalidXML,
-			Error:   err,
-			Content: toolCallContent,
-		})
-
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive parse errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to parse tool call: %w", err)))
-		return true, errMsg
-	}
-
-	// Use the parsed tool call
-	toolCall := *parsedToolCall
-
-	// Validate required fields
-	if toolCall.ToolName == "" {
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type: prompts.ErrorTypeMissingToolName,
-		})
-
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive missing tool name errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool_name is required in tool call")))
-		return true, errMsg
-	}
-
-	// Server name defaults to "local" if not specified
-	if toolCall.ServerName == "" {
-		toolCall.ServerName = "local"
-	}
-
-	// Execute the tool
-	return a.executeTool(ctx, toolCall)
-}
-
-// executeTool handles tool lookup, execution, and result processing
-// Returns (shouldContinue, errorContext) following the same pattern as executeIteration
-func (a *DefaultAgent) executeTool(ctx context.Context, toolCall tools.ToolCall) (bool, string) {
-	// Look up the tool
-	tool, exists := a.getTool(toolCall.ToolName)
-	if !exists {
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:           prompts.ErrorTypeUnknownTool,
-			ToolName:       toolCall.ToolName,
-			AvailableTools: a.getToolsList(),
-		})
-
-		// Track error and check circuit breaker
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive unknown tool errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("unknown tool: %s", toolCall.ToolName)))
-		return true, errMsg // Continue with error context
-	}
-
-	// Check if tool requires approval
-	if previewable, ok := tool.(tools.Previewable); ok {
-		// Generate preview
-		preview, err := previewable.GeneratePreview(ctx, toolCall.GetArgumentsXML())
-		if err != nil {
-			// If preview generation fails, log error but continue with execution
-			// (degraded mode - execute without approval)
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("failed to generate preview for %s: %w", toolCall.ToolName, err)))
-		} else {
-			// Request approval from user
-			approved, timedOut := a.requestApproval(ctx, toolCall, preview)
-
-			if timedOut {
-				// Timeout - treat as rejection and continue loop
-				errMsg := fmt.Sprintf("Tool approval request timed out after %v. The tool was not executed.", a.approvalTimeout)
-				a.memory.Add(types.NewUserMessage(errMsg))
-				return true, ""
-			}
-
-			if !approved {
-				// User rejected - continue loop without executing
-				errMsg := fmt.Sprintf("Tool '%s' execution was rejected by user.", toolCall.ToolName)
-				a.memory.Add(types.NewUserMessage(errMsg))
-				return true, ""
-			}
-
-			// User approved - continue with execution
-		}
-	}
-
-	// Emit tool call event
-	var argsMap map[string]interface{}
-	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
-		argsMap = make(map[string]interface{})
-	}
-	a.emitEvent(types.NewToolCallEvent(toolCall.ToolName, argsMap))
-
-	// Inject event emitter and command registry into context for tools that support streaming events
-	ctxWithEmitter := context.WithValue(ctx, coding.EventEmitterKey, coding.EventEmitter(a.emitEvent))
-	ctxWithRegistry := context.WithValue(ctxWithEmitter, coding.CommandRegistryKey, &a.activeCommands)
-
-	// Execute the tool
-	result, toolErr := tool.Execute(ctxWithRegistry, toolCall.GetArgumentsXML())
-	if toolErr != nil {
-		a.emitEvent(types.NewToolResultErrorEvent(toolCall.ToolName, toolErr))
-		errMsg := prompts.BuildErrorRecoveryMessage(prompts.ErrorRecoveryContext{
-			Type:     prompts.ErrorTypeToolExecution,
-			ToolName: toolCall.ToolName,
-			Error:    toolErr,
-		})
-
-		// Track error and check circuit breaker
-		if a.trackError(errMsg) {
-			a.emitEvent(types.NewErrorEvent(fmt.Errorf("circuit breaker triggered: 5 consecutive tool execution errors")))
-			return false, ""
-		}
-
-		a.emitEvent(types.NewErrorEvent(fmt.Errorf("tool execution failed: %w", toolErr)))
-		return true, errMsg // Continue with error context
-	}
-
-	a.emitEvent(types.NewToolResultEvent(toolCall.ToolName, result))
-
-	// Success! Reset error tracking
-	a.resetErrorTracking()
-
-	// Check if this is a loop-breaking tool
-	if tool.IsLoopBreaking() {
-		return false, "" // Stop loop
-	}
-
-	// For non-breaking tools, add result to memory and continue loop
-	a.memory.Add(types.NewUserMessage(fmt.Sprintf("Tool '%s' result:\n%s", toolCall.ToolName, result)))
-	return true, "" // Continue with no error
-}
-
-// handleApprovalResponse processes an approval response from the user
-func (a *DefaultAgent) handleApprovalResponse(response *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	defer a.approvalMu.Unlock()
-
-	// Check if we have a pending approval matching this response
-	if a.pendingApproval == nil || a.pendingApproval.approvalID != response.ApprovalID {
-		// No matching pending approval - ignore this response
-		return
-	}
-
-	// Send the response to the waiting goroutine
-	select {
-	case a.pendingApproval.response <- response:
-		// Response delivered
-	default:
-		// Response channel full or closed - shouldn't happen
-	}
-}
-
-// handleCommandCancellation processes a command cancellation request
-func (a *DefaultAgent) handleCommandCancellation(req *types.CancellationRequest) {
-	// Look up the cancel function for this execution ID
-	if cancelFunc, ok := a.activeCommands.Load(req.ExecutionID); ok {
-		// Cancel the context (cancellation never returns an error)
-		if cf, ok := cancelFunc.(context.CancelFunc); ok {
-			cf()
-		}
-		// Remove from active commands
-		a.activeCommands.Delete(req.ExecutionID)
-	}
-}
-
-// requestApproval sends an approval request and waits for user response
-// Returns (approved, timedOut) where:
-//   - approved: true if user approved, false if rejected
-//   - timedOut: true if the request timed out waiting for response
-func (a *DefaultAgent) requestApproval(ctx context.Context, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
-	// Generate unique approval ID
-	approvalID := uuid.New().String()
-
-	// Create response channel for this approval
-	responseChannel := make(chan *types.ApprovalResponse, 1)
-
-	// Store pending approval
-	a.setupPendingApproval(approvalID, toolCall, responseChannel)
-
-	// Clean up pending approval when done
-	defer a.cleanupPendingApproval(responseChannel)
-
-	// Parse tool input for event
-	argsMap := a.parseToolArguments(toolCall)
-
-	// Check for auto-approval
-	if approved, autoApproved := a.checkAutoApproval(approvalID, toolCall, argsMap); autoApproved {
-		return approved, false
-	}
-
-	// Emit approval request event (tool requires manual approval)
-	a.emitEvent(types.NewToolApprovalRequestEvent(approvalID, toolCall.ToolName, argsMap, preview))
-
-	// Wait for response with timeout
-	return a.waitForApprovalResponse(ctx, approvalID, toolCall, responseChannel, preview)
-}
-
-// setupPendingApproval stores the pending approval request
-func (a *DefaultAgent) setupPendingApproval(approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	defer a.approvalMu.Unlock()
-
-	a.pendingApproval = &pendingApproval{
-		approvalID: approvalID,
-		toolName:   toolCall.ToolName,
-		toolCall:   toolCall,
-		response:   responseChannel,
-	}
-}
-
-// cleanupPendingApproval cleans up the pending approval
-func (a *DefaultAgent) cleanupPendingApproval(responseChannel chan *types.ApprovalResponse) {
-	a.approvalMu.Lock()
-	a.pendingApproval = nil
-	a.approvalMu.Unlock()
-	close(responseChannel)
-}
-
-// parseToolArguments parses the tool arguments for the approval event
-func (a *DefaultAgent) parseToolArguments(toolCall tools.ToolCall) map[string]interface{} {
-	var argsMap map[string]interface{}
-	if err := tools.UnmarshalXMLWithFallback(toolCall.GetArgumentsXML(), &argsMap); err != nil {
-		argsMap = make(map[string]interface{})
-	}
-	return argsMap
-}
-
-// checkAutoApproval checks if the tool or command should be auto-approved
-// Returns (approved, autoApproved) where autoApproved indicates if a decision was made
-func (a *DefaultAgent) checkAutoApproval(approvalID string, toolCall tools.ToolCall, argsMap map[string]interface{}) (bool, bool) {
-	// Special handling for execute_command: always check command whitelist first
-	// The execute_command tool uses a per-command whitelist, not tool-level auto-approval
-	if toolCall.ToolName == "execute_command" {
-		if a.isCommandWhitelisted(approvalID, argsMap) {
-			return true, true
-		}
-		// For execute_command, we only check the whitelist, not the tool-level auto-approval
-		return false, false
-	}
-
-	// For all other tools, check if tool is auto-approved
-	if config.IsToolAutoApproved(toolCall.ToolName) {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true, true
-	}
-
-	return false, false
-}
-
-// isCommandWhitelisted checks if a command is whitelisted
-func (a *DefaultAgent) isCommandWhitelisted(approvalID string, argsMap map[string]interface{}) bool {
-	cmdInterface, ok := argsMap["command"]
-	if !ok {
-		return false
-	}
-
-	cmd, ok := cmdInterface.(string)
-	if !ok {
-		return false
-	}
-
-	if config.IsCommandWhitelisted(cmd) {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, "execute_command"))
-		return true
-	}
-
-	return false
-}
-
-// waitForApprovalResponse waits for the user's approval response
-func (a *DefaultAgent) waitForApprovalResponse(ctx context.Context, approvalID string, toolCall tools.ToolCall, responseChannel chan *types.ApprovalResponse, preview *tools.ToolPreview) (bool, bool) {
-	timeout := time.NewTimer(a.approvalTimeout)
-	defer timeout.Stop()
-
-	select {
-	case <-ctx.Done():
-		return false, false
-
-	case <-timeout.C:
-		a.emitEvent(types.NewToolApprovalTimeoutEvent(approvalID, toolCall.ToolName))
-		return false, true
-
-	case approval := <-a.channels.Approval:
-		return a.handleDirectApproval(ctx, approval, approvalID, toolCall, preview)
-
-	case response := <-responseChannel:
-		approved := a.handleChannelResponse(approvalID, toolCall, response)
-		return approved, false
-	}
-}
-
-// handleDirectApproval handles approval received directly from executor channel
-func (a *DefaultAgent) handleDirectApproval(ctx context.Context, approval *types.ApprovalResponse, approvalID string, toolCall tools.ToolCall, preview *tools.ToolPreview) (bool, bool) {
-	if approval == nil {
-		return false, false
-	}
-
-	// Verify it's for this approval request
-	if approval.ApprovalID != approvalID {
-		// Put it back for the right handler
-		select {
-		case a.channels.Approval <- approval:
-		default:
-		}
-		// Continue waiting
-		return a.requestApproval(ctx, toolCall, preview)
-	}
-
-	// Process the approval
-	if approval.IsGranted() {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true, false
-	}
-
-	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
-	return false, false
-}
-
-// handleChannelResponse handles response from internal response channel
-// Returns true if approved, false if rejected
-func (a *DefaultAgent) handleChannelResponse(approvalID string, toolCall tools.ToolCall, response *types.ApprovalResponse) bool {
-	if response.IsGranted() {
-		a.emitEvent(types.NewToolApprovalGrantedEvent(approvalID, toolCall.ToolName))
-		return true
-	}
-
-	a.emitEvent(types.NewToolApprovalRejectedEvent(approvalID, toolCall.ToolName))
-	return false
 }

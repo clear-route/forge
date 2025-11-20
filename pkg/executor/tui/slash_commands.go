@@ -8,6 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/entrhq/forge/pkg/agent/git"
+	"github.com/entrhq/forge/pkg/executor/tui/approval"
+	"github.com/entrhq/forge/pkg/executor/tui/overlay"
+	tuitypes "github.com/entrhq/forge/pkg/executor/tui/types"
 	"github.com/entrhq/forge/pkg/types"
 )
 
@@ -158,7 +161,7 @@ func parseSlashCommand(input string) (string, []string, bool) {
 }
 
 // executeSlashCommand executes a slash command
-func executeSlashCommand(m model, commandName string, args []string) (model, tea.Cmd) {
+func executeSlashCommand(m *model, commandName string, args []string) (*model, tea.Cmd) {
 	cmd, exists := getCommand(commandName)
 	if !exists {
 		// Unknown command - show error toast
@@ -178,7 +181,7 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 
 	// Execute the command handler
 	if cmd.Handler != nil {
-		result := cmd.Handler(&m, args)
+		result := cmd.Handler(m, args)
 
 		// Handle different return types
 		switch v := result.(type) {
@@ -191,6 +194,7 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 			if commandName == "commit" || commandName == "pr" {
 				m.agentBusy = true
 				m.currentLoadingMessage = getRandomLoadingMessage()
+				m.recalculateLayout()
 				// Wrap the command to clear busy state when done
 				return m, func() tea.Msg {
 					msg := v()
@@ -202,7 +206,7 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 				}
 			}
 			return m, tea.Cmd(v)
-		case ApprovalRequest:
+		case approval.ApprovalRequest:
 			// Command requires approval - send approval request message
 			return m, func() tea.Msg {
 				return approvalRequestMsg{request: v}
@@ -244,8 +248,8 @@ func handleHelpCommand(m *model, args []string) interface{} {
 	helpContent.WriteString("  • Press Escape to cancel command entry\n")
 
 	// Create and activate the help overlay
-	helpOverlay := NewHelpOverlay("Help", helpContent.String())
-	m.overlay.activate(OverlayModeHelp, helpOverlay)
+	helpOverlay := overlay.NewHelpOverlay("Help", helpContent.String())
+	m.overlay.activate(tuitypes.OverlayModeHelp, helpOverlay)
 
 	return nil
 }
@@ -313,7 +317,7 @@ func handleCommitCommand(m *model, args []string) interface{} {
 
 		// Return approval request instead of command-specific message
 		return approvalRequestMsg{
-			request: NewCommitApprovalRequest(files, message, diff, commitMessage, m.slashHandler),
+			request: approval.NewCommitRequest(files, message, diff, commitMessage, m.slashHandler),
 		}
 	}
 }
@@ -445,7 +449,7 @@ func handlePRCommand(m *model, args []string) interface{} {
 		// Return approval request instead of command-specific message
 		branchInfo := fmt.Sprintf("%s → %s", head, base)
 		return approvalRequestMsg{
-			request: NewPRApprovalRequest(branchInfo, prContent.Title, prContent.Description, changesContent.String(), prTitle, m.slashHandler),
+			request: approval.NewPRRequest(branchInfo, prContent.Title, prContent.Description, changesContent.String(), prTitle, m.slashHandler),
 		}
 	}
 }
@@ -461,6 +465,15 @@ func getCurrentBranch(workingDir string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// handleSettingsCommand shows the settings configuration
+func handleSettingsCommand(m *model, args []string) interface{} {
+	// Create and activate settings overlay
+	settingsOverlay := overlay.NewSettingsOverlay(m.width, m.height)
+	m.overlay.activate(tuitypes.OverlayModeSettings, settingsOverlay)
+
+	return nil
 }
 
 // handleContextCommand shows detailed context information
@@ -482,7 +495,7 @@ func handleContextCommand(m *model, args []string) interface{} {
 	}
 
 	// Build overlay info structure
-	overlayInfo := &ContextInfo{
+	overlayInfo := &overlay.ContextInfo{
 		SystemPromptTokens:    contextInfo.SystemPromptTokens,
 		CustomInstructions:    contextInfo.CustomInstructions,
 		ToolCount:             contextInfo.ToolCount,
@@ -501,8 +514,8 @@ func handleContextCommand(m *model, args []string) interface{} {
 	}
 
 	// Create and activate context overlay
-	contextOverlay := NewContextOverlay(overlayInfo)
-	m.overlay.activate(OverlayModeContext, contextOverlay)
+	contextOverlay := overlay.NewContextOverlay(overlayInfo, m.width, m.height)
+	m.overlay.activate(tuitypes.OverlayModeContext, contextOverlay)
 
 	return nil
 }
@@ -513,12 +526,4 @@ func handleBashCommand(m *model, args []string) interface{} {
 	m.updatePrompt()
 	m.showToast("Bash Mode", "Entered bash mode. Commands will be executed directly. Type 'exit' or press Ctrl+C to return.", "🔧", false)
 	return nil
-}
-
-// toastMsg is a message type for showing toast notifications
-type toastMsg struct {
-	message string
-	details string
-	icon    string
-	isError bool
 }

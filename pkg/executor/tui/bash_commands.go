@@ -14,7 +14,7 @@ import (
 )
 
 // executeBashCommand executes a shell command directly, bypassing the agent
-func (m model) executeBashCommand(command string) tea.Cmd {
+func (m *model) executeBashCommand(command string) tea.Cmd {
 	return func() tea.Msg {
 		// Get the tool from agent's tool registry
 		toolIface := m.agent.GetTool("execute_command")

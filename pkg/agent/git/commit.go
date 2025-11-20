@@ -138,6 +138,14 @@ func GetModifiedFiles(workingDir string) ([]string, error) {
 		// Where X and Y are status codes (2 chars total)
 		// There's a space after the status, so filename starts at position 3
 		if len(line) > 2 {
+			// Check if file is deleted (status code D in either position)
+			// First char is index status, second char is worktree status
+			status := line[:2]
+			if status[0] == 'D' || status[1] == 'D' {
+				// Skip deleted files - they can't be staged with git add
+				continue
+			}
+
 			// Split on whitespace and take the last part (handles renamed files too)
 			parts := strings.Fields(line)
 			if len(parts) > 0 {

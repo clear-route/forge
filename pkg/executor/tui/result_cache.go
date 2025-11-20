@@ -4,23 +4,16 @@ package tui
 import (
 	"sync"
 	"time"
-)
 
-// CachedResult represents a single cached tool result with metadata
-type CachedResult struct {
-	ID        string    // Unique identifier
-	ToolName  string    // Name of the tool that produced this result
-	Result    string    // The actual result content
-	Timestamp time.Time // When this result was created
-	Summary   string    // Brief summary of the result
-}
+	"github.com/entrhq/forge/pkg/executor/tui/types"
+)
 
 // resultCache stores tool results for later viewing in overlays
 type resultCache struct {
 	mu      sync.RWMutex
-	results map[string]*CachedResult // toolCallID -> cached result
-	order   []string                 // LRU order (oldest first)
-	maxSize int                      // Maximum number of results to cache
+	results map[string]*types.CachedResult // toolCallID -> cached result
+	order   []string                       // LRU order (oldest first)
+	maxSize int                            // Maximum number of results to cache
 }
 
 // newResultCache creates a new result cache with the specified size
@@ -29,7 +22,7 @@ func newResultCache(maxSize int) *resultCache {
 		maxSize = 20 // Default
 	}
 	return &resultCache{
-		results: make(map[string]*CachedResult),
+		results: make(map[string]*types.CachedResult),
 		order:   make([]string, 0, maxSize),
 		maxSize: maxSize,
 	}
@@ -53,7 +46,7 @@ func (rc *resultCache) store(id string, toolName string, result string, summary 
 	}
 
 	// Add new result
-	rc.results[id] = &CachedResult{
+	rc.results[id] = &types.CachedResult{
 		ID:        id,
 		ToolName:  toolName,
 		Result:    result,
@@ -64,7 +57,7 @@ func (rc *resultCache) store(id string, toolName string, result string, summary 
 }
 
 // get retrieves a result from the cache
-func (rc *resultCache) get(id string) (*CachedResult, bool) {
+func (rc *resultCache) get(id string) (*types.CachedResult, bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -74,11 +67,11 @@ func (rc *resultCache) get(id string) (*CachedResult, bool) {
 
 // getLast retrieves the most recently added result
 // getAll retrieves all cached results in reverse chronological order (newest first)
-func (rc *resultCache) getAll() []*CachedResult {
+func (rc *resultCache) getAll() []*types.CachedResult {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	results := make([]*CachedResult, 0, len(rc.order))
+	results := make([]*types.CachedResult, 0, len(rc.order))
 	// Iterate in reverse order (newest first)
 	for i := len(rc.order) - 1; i >= 0; i-- {
 		id := rc.order[i]
