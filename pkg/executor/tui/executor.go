@@ -78,7 +78,7 @@ func (e *Executor) Run(ctx context.Context) error {
 	}
 
 	e.program = tea.NewProgram(
-		m,
+		&m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

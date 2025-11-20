@@ -65,6 +65,6 @@ func initialModel() model {
 
 // Init is the first function that will be called by Bubble Tea.
 // It returns commands to start the textarea blink animation and spinner.
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }

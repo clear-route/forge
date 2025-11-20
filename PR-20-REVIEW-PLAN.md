@@ -78,7 +78,7 @@ func (m *Manager) cleanupPendingApproval(pa *pendingApproval) {
 ---
 
 ### ✅ 2. Overlay Update Signature Mismatch 🔴
-**Status**: PENDING
+**Status**: COMPLETED ✓
 **Priority**: P0 - Compilation Failure
 **Files**: `pkg/executor/tui/overlay/*.go`
 
@@ -362,7 +362,7 @@ Inconsistent `max` function usage. Some files define local `max`, others rely on
 
 **Status**:
 - [✓] Issue 1: Race Condition in Approval Manager - COMPLETED
-- [ ] Issue 2: Overlay Update Signature Mismatch
+- [✓] Issue 2: Overlay Update Signature Mismatch - COMPLETED
 - [ ] Issue 3: Value Semantics Issue
 - [ ] Issue 4: Git Status Parsing
 - [ ] Issue 5: Index Out of Bounds

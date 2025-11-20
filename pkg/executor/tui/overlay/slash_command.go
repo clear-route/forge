@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/syntax"
@@ -13,7 +12,7 @@ import (
 
 // SlashCommandPreview displays a preview of slash command changes before execution
 type SlashCommandPreview struct {
-	viewport    viewport.Model
+	*BaseOverlay
 	commandName string
 	title       string
 	files       []string
@@ -22,9 +21,6 @@ type SlashCommandPreview struct {
 	prTitle     string // PR title (only for PR commands)
 	prDesc      string // PR description (only for PR commands)
 	selected    ApprovalChoice
-	width       int
-	height      int
-	focused     bool
 	onApprove   tea.Cmd // Command to execute on approval
 	onReject    tea.Cmd // Command to execute on rejection
 }
@@ -43,15 +39,7 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 	// Plus viewport height
 	overlayHeight := viewportHeight + 9
 
-	vp := viewport.New(overlayWidth-4, viewportHeight)
-	vp.Style = lipgloss.NewStyle()
-
-	// Build content showing files, message, and diff preview
-	content := buildPreviewContent(commandName, files, message, diff, prTitle, prDesc)
-	vp.SetContent(content)
-
-	return &SlashCommandPreview{
-		viewport:    vp,
+	overlay := &SlashCommandPreview{
 		commandName: commandName,
 		title:       title,
 		files:       files,
@@ -60,12 +48,35 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 		prTitle:     prTitle,
 		prDesc:      prDesc,
 		selected:    ApprovalChoiceAccept,
-		width:       overlayWidth,
-		height:      overlayHeight,
-		focused:     true,
 		onApprove:   onApprove,
 		onReject:    onReject,
 	}
+
+	// Build content showing files, message, and diff preview
+	content := buildPreviewContent(commandName, files, message, diff, prTitle, prDesc)
+
+	// Configure base overlay
+	baseConfig := BaseOverlayConfig{
+		Width:          overlayWidth,
+		Height:         overlayHeight,
+		ViewportWidth:  overlayWidth - 4,
+		ViewportHeight: viewportHeight,
+		Content:        content,
+		OnClose: func(actions types.ActionHandler) tea.Cmd {
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+			return overlay.onReject
+		},
+		OnCustomKey: func(msg tea.KeyMsg) (bool, tea.Cmd) {
+			return overlay.handleCustomKeys(msg)
+		},
+		RenderHeader: overlay.renderHeader,
+		RenderFooter: overlay.renderFooter,
+	}
+
+	overlay.BaseOverlay = NewBaseOverlay(baseConfig)
+	return overlay
 }
 
 // buildPreviewContent creates the content to display in the viewport
@@ -146,95 +157,56 @@ func buildPreviewContent(commandName string, files []string, message, diff, prTi
 }
 
 func (s *SlashCommandPreview) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return s.handleKeyMsg(msg, actions)
-	case tea.WindowSizeMsg:
-		return s.handleWindowResize(msg)
+	// Let BaseOverlay handle standard messages
+	handled, updatedBase, cmd := s.BaseOverlay.Update(msg, actions)
+	s.BaseOverlay = updatedBase
+
+	if handled {
+		return s, cmd
 	}
+
 	return s, nil
 }
 
-func (s *SlashCommandPreview) handleKeyMsg(msg tea.KeyMsg, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
+// handleCustomKeys processes slash command-specific key presses
+func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc", "ctrl+r":
-		return s.handleReject(actions)
+		return true, s.onReject
 	case "ctrl+a":
-		return s.handleApprove(actions)
+		return true, s.onApprove
 	case "tab":
-		return s.handleToggleSelection()
+		s.handleToggleSelection()
+		return true, nil
 	case "enter":
-		return s.handleSubmit(actions)
+		if s.selected == ApprovalChoiceAccept {
+			return true, s.onApprove
+		}
+		return true, s.onReject
 	case "left", "h":
-		return s.handleSelectAccept()
+		s.selected = ApprovalChoiceAccept
+		return true, nil
 	case "right", "l":
-		return s.handleSelectReject()
-	default:
-		return s.handleViewportScroll(msg)
+		s.selected = ApprovalChoiceReject
+		return true, nil
 	}
+	return false, nil
 }
 
-func (s *SlashCommandPreview) handleReject(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	// Close overlay and execute rejection command
-	if actions != nil {
-		actions.ClearOverlay()
-	}
-	return nil, s.onReject
-}
-
-func (s *SlashCommandPreview) handleApprove(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	// Close overlay and execute approval command
-	if actions != nil {
-		actions.ClearOverlay()
-	}
-	return nil, s.onApprove
-}
-
-func (s *SlashCommandPreview) handleToggleSelection() (types.Overlay, tea.Cmd) {
+func (s *SlashCommandPreview) handleToggleSelection() {
 	if s.selected == ApprovalChoiceAccept {
 		s.selected = ApprovalChoiceReject
 	} else {
 		s.selected = ApprovalChoiceAccept
 	}
-	return s, nil
 }
 
-func (s *SlashCommandPreview) handleSubmit(actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	if s.selected == ApprovalChoiceAccept {
-		return s.handleApprove(actions)
-	}
-	return s.handleReject(actions)
-}
-
-func (s *SlashCommandPreview) handleSelectAccept() (types.Overlay, tea.Cmd) {
-	s.selected = ApprovalChoiceAccept
-	return s, nil
-}
-
-func (s *SlashCommandPreview) handleSelectReject() (types.Overlay, tea.Cmd) {
-	s.selected = ApprovalChoiceReject
-	return s, nil
-}
-
-func (s *SlashCommandPreview) handleViewportScroll(msg tea.KeyMsg) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
-	s.viewport, cmd = s.viewport.Update(msg)
-	return s, cmd
-}
-
-func (s *SlashCommandPreview) handleWindowResize(msg tea.WindowSizeMsg) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
-	s.width = msg.Width
-	s.height = msg.Height
-	s.viewport, cmd = s.viewport.Update(msg)
-	return s, cmd
-}
-
-func (s *SlashCommandPreview) View() string {
+// renderHeader renders the slash command preview header
+func (s *SlashCommandPreview) renderHeader() string {
 	var b strings.Builder
 
-	// Content width accounts for outer container border (2) + padding (4) = 6 chars
-	contentWidth := s.width - 6
+	// Content width accounts for container styling
+	contentWidth := s.Width() - 6
 
 	title := s.title
 	subtitle := fmt.Sprintf("/%s", s.commandName)
@@ -248,7 +220,15 @@ func (s *SlashCommandPreview) View() string {
 	b.WriteString(strings.Repeat(" ", titlePadding) + types.OverlayTitleStyle.Render(title))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat(" ", subtitlePadding) + types.OverlaySubtitleStyle.Render(subtitle))
-	b.WriteString("\n\n")
+
+	return b.String()
+}
+
+// renderFooter renders the viewport in a bordered box with buttons and hints
+func (s *SlashCommandPreview) renderFooter() string {
+	var b strings.Builder
+
+	contentWidth := s.Width() - 6
 
 	// Content box has its own border (2) + padding (2), so reduce width further
 	contentStyle := lipgloss.NewStyle().
@@ -257,7 +237,7 @@ func (s *SlashCommandPreview) View() string {
 		Padding(0, 1).
 		Width(contentWidth - 4)
 
-	b.WriteString(contentStyle.Render(s.viewport.View()))
+	b.WriteString(contentStyle.Render(s.BaseOverlay.Viewport().View()))
 	b.WriteString("\n\n")
 
 	// Use shared button styles for consistency
@@ -286,18 +266,10 @@ func (s *SlashCommandPreview) View() string {
 
 	b.WriteString(strings.Repeat(" ", hintsPadding) + types.OverlayHelpStyle.Render(hints))
 
-	// Use shared overlay container style for consistency (width only, height determined by content)
-	return types.CreateOverlayContainerStyle(s.width).Render(b.String())
+	return b.String()
 }
 
-func (s *SlashCommandPreview) Focused() bool {
-	return s.focused
-}
-
-func (s *SlashCommandPreview) Width() int {
-	return s.width
-}
-
-func (s *SlashCommandPreview) Height() int {
-	return s.height
+// View renders the overlay
+func (s *SlashCommandPreview) View() string {
+	return s.BaseOverlay.View(s.Width())
 }

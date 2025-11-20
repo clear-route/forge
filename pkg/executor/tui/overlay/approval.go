@@ -1,6 +1,8 @@
 package overlay
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/approval"
@@ -53,6 +55,7 @@ func NewGenericApprovalOverlay(request approval.ApprovalRequest, width, height i
 			ViewportHeight: viewportHeight,
 			Content:        request.Content(),
 			RenderHeader:   overlay.renderHeader,
+			RenderFooter:   overlay.renderFooter,
 		},
 		OnApprove:    request.OnApprove,
 		OnReject:     request.OnReject,
@@ -77,25 +80,41 @@ func (a *GenericApprovalOverlay) renderHeader() string {
 	return types.OverlayTitleStyle.Render(a.request.Title())
 }
 
+// renderFooter renders the approval overlay footer with buttons and hints
+func (a *GenericApprovalOverlay) renderFooter() string {
+	contentWidth := a.Width() - 6
+
+	var footer strings.Builder
+
+	// Wrap viewport content in a bordered box
+	contentStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(types.SalmonPink).
+		Padding(0, 1).
+		Width(contentWidth - 4)
+
+	footer.WriteString(contentStyle.Render(a.Viewport().View()))
+	footer.WriteString("\n\n")
+
+	// Render buttons
+	buttonsRow := a.RenderButtons()
+	buttonsLen := lipgloss.Width(buttonsRow)
+	buttonsPadding := max(0, (contentWidth-buttonsLen)/2)
+	footer.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
+	footer.WriteString("\n")
+
+	// Render hints
+	hints := types.OverlayHelpStyle.Render("Ctrl+A: Accept • Ctrl+R: Reject • Tab: Toggle • ↑/↓: Scroll")
+	hintsLen := lipgloss.Width(hints)
+	hintsPadding := max(0, (contentWidth-hintsLen)/2)
+	footer.WriteString(strings.Repeat(" ", hintsPadding) + hints)
+
+	return footer.String()
+}
+
 // View renders the approval overlay
 func (a *GenericApprovalOverlay) View() string {
-	var sections []string
-
-	// Header
-	sections = append(sections, a.renderHeader())
-	sections = append(sections, "")
-
-	// Viewport content
-	sections = append(sections, a.Viewport().View())
-	sections = append(sections, "")
-
-	// Buttons
-	sections = append(sections, a.RenderButtons())
-
-	// Hints - custom hints for generic approval
-	hints := types.OverlayHelpStyle.Render("Ctrl+A: Accept • Ctrl+R: Reject • Tab: Toggle • ↑/↓: Scroll")
-	sections = append(sections, hints)
-
-	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return types.CreateOverlayContainerStyle(a.Width() - 4).Render(content)
+	// Delegate to base overlay's View method which handles the rendering
+	// The base already calls renderHeader, renderFooter, and wraps in container
+	return a.BaseOverlay.View(a.Width())
 }

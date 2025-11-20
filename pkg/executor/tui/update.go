@@ -34,8 +34,12 @@ func initDebugLog() {
 // Update handles all state updates for the TUI model.
 // This is the main event loop handler for Bubble Tea.
 //
+// Uses pointer receiver to ensure overlay mutations via ActionHandler persist.
+// Without pointer receiver, &m passed to overlays points to a local copy,
+// causing state changes (SetInput, ShowToast, etc.) to be lost.
+//
 //nolint:gocyclo
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Check if quit was requested by an overlay or component
 	if m.shouldQuit {
 		return m, tea.Quit
@@ -193,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If overlay is active and it's a command execution event, forward to overlay
 		if m.overlay.isActive() && msg.IsCommandExecutionEvent() {
 			var overlayCmd tea.Cmd
-			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg, &m, &m)
+			m.overlay.overlay, overlayCmd = m.overlay.overlay.Update(msg, m, m)
 			// Still handle the event in the main model too
 			m.handleAgentEvent(msg)
 			return m, tea.Batch(tiCmd, vpCmd, overlayCmd, spinnerCmd)
@@ -210,7 +214,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If overlay is active, forward mouse events to it
 		if m.overlay.isActive() {
 			var overlayCmd tea.Cmd
-			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg, &m, &m)
+			updatedOverlay, overlayCmd := m.overlay.overlay.Update(msg, m, m)
 
 			// Check if overlay returned nil (signals to close)
 			if updatedOverlay == nil {
@@ -243,7 +247,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleViewResult processes result selection from the result list
-func (m model) handleViewResult(msg tuitypes.ViewResultMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleViewResult(msg tuitypes.ViewResultMsg) (tea.Model, tea.Cmd) {
 	if result, ok := m.resultCache.get(msg.ResultID); ok {
 		// Close the result list
 		m.resultList.Deactivate()
@@ -275,13 +279,13 @@ func (m *model) calculateViewportHeight() int {
 	return viewportHeight
 }
 
-func (m model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	// Update viewport on window resize
 	m.viewport, _ = m.viewport.Update(msg)
 
 	// Also update result list if active
 	if m.resultList.IsActive() {
-		updated, listCmd := m.resultList.Update(msg, &m, &m)
+		updated, listCmd := m.resultList.Update(msg, m, m)
 		if rl, ok := updated.(*overlay.ResultListModel); ok {
 			m.resultList = *rl
 		}
@@ -301,14 +305,14 @@ func (m model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleSlashCommandComplete processes slash command completion
-func (m model) handleSlashCommandComplete() (tea.Model, tea.Cmd) {
+func (m *model) handleSlashCommandComplete() (tea.Model, tea.Cmd) {
 	m.agentBusy = false
 	m.recalculateLayout()
 	return m, nil
 }
 
 // handleOperationStart processes operation start events
-func (m model) handleOperationStart(msg operationStartMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleOperationStart(msg operationStartMsg) (tea.Model, tea.Cmd) {
 	m.agentBusy = true
 	m.currentLoadingMessage = msg.message
 	m.recalculateLayout()
@@ -316,7 +320,7 @@ func (m model) handleOperationStart(msg operationStartMsg) (tea.Model, tea.Cmd) 
 }
 
 // handleOperationComplete processes operation completion events
-func (m model) handleOperationComplete(msg operationCompleteMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleOperationComplete(msg operationCompleteMsg) (tea.Model, tea.Cmd) {
 	m.agentBusy = false
 	m.recalculateLayout()
 
@@ -325,19 +329,36 @@ func (m model) handleOperationComplete(msg operationCompleteMsg) (tea.Model, tea
 	} else {
 		m.showToast(msg.successTitle, msg.result, msg.successIcon, false)
 	}
+
+	// Close any active overlay after operation completes
+	if m.overlay.isActive() {
+		m.overlay.deactivate()
+		m.viewport.SetContent(m.content.String())
+		m.viewport.GotoBottom()
+	}
+
 	return m, nil
 }
 
 // handleToast processes toast notification messages
-func (m model) handleToast(msg toastMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleToast(msg toastMsg) (tea.Model, tea.Cmd) {
 	m.showToast(msg.message, msg.details, msg.icon, msg.isError)
 	m.agentBusy = false
 	m.recalculateLayout()
+
+	// Close any active overlay after showing toast
+	// This handles rejection cases where overlay should close
+	if m.overlay.isActive() {
+		m.overlay.deactivate()
+		m.viewport.SetContent(m.content.String())
+		m.viewport.GotoBottom()
+	}
+
 	return m, nil
 }
 
 // handleAgentError processes agent error messages
-func (m model) handleAgentError(msg agentErrMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleAgentError(msg agentErrMsg) (tea.Model, tea.Cmd) {
 	m.content.WriteString(errorStyle.Render(fmt.Sprintf("  ❌ Error: %v", msg.err)))
 	m.content.WriteString("\n\n")
 	m.viewport.SetContent(m.content.String())
@@ -348,7 +369,7 @@ func (m model) handleAgentError(msg agentErrMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleBashCommandResult processes bash command execution results
-func (m model) handleBashCommandResult(msg bashCommandResultMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleBashCommandResult(msg bashCommandResultMsg) (tea.Model, tea.Cmd) {
 	// Display the result in the viewport
 	m.content.WriteString(fmt.Sprintf("[%s] Command completed:\n", msg.timestamp))
 	m.content.WriteString(msg.result)
@@ -361,7 +382,7 @@ func (m model) handleBashCommandResult(msg bashCommandResultMsg) (tea.Model, tea
 }
 
 // handleApprovalRequest processes generic approval requests (for slash commands, etc.)
-func (m model) handleApprovalRequest(msg approvalRequestMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleApprovalRequest(msg approvalRequestMsg) (tea.Model, tea.Cmd) {
 	// Create and activate generic approval overlay
 	overlay := overlay.NewGenericApprovalOverlay(msg.request, m.width, m.height)
 	m.overlay.activate(tuitypes.OverlayModeSlashCommandPreview, overlay)
@@ -369,14 +390,14 @@ func (m model) handleApprovalRequest(msg approvalRequestMsg) (tea.Model, tea.Cmd
 }
 
 // handleKeyPress processes keyboard input
-func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Command palette handling is now done earlier in Update() before textarea update
 	// This prevents the duplicate handling issue
 
 	// If an overlay is active, pass keys to the overlay
 	if m.overlay.isActive() {
 		if m.overlay.overlay != nil {
-			updated, cmd := m.overlay.overlay.Update(msg, &m, &m)
+			updated, cmd := m.overlay.overlay.Update(msg, m, m)
 			// If overlay returns nil, it wants to close
 			if updated == nil {
 				m.overlay.deactivate()
@@ -392,7 +413,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) 
 
 	// If result list is active, pass keys to the result list
 	if m.resultList.IsActive() {
-		updated, cmd := m.resultList.Update(msg, &m, &m)
+		updated, cmd := m.resultList.Update(msg, m, m)
 		if rl, ok := updated.(*overlay.ResultListModel); ok {
 			m.resultList = *rl
 		}
@@ -441,7 +462,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg, vpCmd, tiCmd, spinnerCmd tea.Cmd) 
 }
 
 // handleCtrlC handles Ctrl+C key press (exit or exit bash mode)
-func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
+func (m *model) handleCtrlC() (tea.Model, tea.Cmd) {
 	if m.bashMode {
 		m.bashMode = false
 		m.textarea.Reset()
@@ -453,7 +474,7 @@ func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
 }
 
 // handleCtrlV handles Ctrl+V key press (view last tool result)
-func (m model) handleCtrlV() (tea.Model, tea.Cmd) {
+func (m *model) handleCtrlV() (tea.Model, tea.Cmd) {
 	if m.lastToolCallID != "" {
 		if result, ok := m.resultCache.get(m.lastToolCallID); ok {
 			overlay := overlay.NewToolResultOverlay(result.ToolName, result.Result, m.width, m.height)
@@ -464,14 +485,14 @@ func (m model) handleCtrlV() (tea.Model, tea.Cmd) {
 }
 
 // handleCtrlL handles Ctrl+L key press (show result history)
-func (m model) handleCtrlL() (tea.Model, tea.Cmd) {
+func (m *model) handleCtrlL() (tea.Model, tea.Cmd) {
 	results := m.resultCache.getAll()
 	m.resultList.Activate(results, m.width, m.height)
 	return m, nil
 }
 
 // handleCtrlK handles Ctrl+K key press (toggle command palette)
-func (m model) handleCtrlK() (tea.Model, tea.Cmd) {
+func (m *model) handleCtrlK() (tea.Model, tea.Cmd) {
 	if m.commandPalette.IsActive() {
 		m.commandPalette.Deactivate()
 	} else {
@@ -481,7 +502,7 @@ func (m model) handleCtrlK() (tea.Model, tea.Cmd) {
 }
 
 // handleCtrlP handles Ctrl+P key press (toggle command palette - alternate)
-func (m model) handleCtrlP() (tea.Model, tea.Cmd) {
+func (m *model) handleCtrlP() (tea.Model, tea.Cmd) {
 	if m.commandPalette.IsActive() {
 		m.commandPalette.Deactivate()
 	} else {
@@ -491,7 +512,7 @@ func (m model) handleCtrlP() (tea.Model, tea.Cmd) {
 }
 
 // handleEnter handles Enter key press (send message or execute bash command)
-func (m model) handleEnter(tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleEnter(tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.textarea.Value())
 
 	if input == "" {
@@ -518,7 +539,7 @@ func (m model) handleEnter(tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd
 }
 
 // handleBashModeInput processes bash mode input
-func (m model) handleBashModeInput(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleBashModeInput(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Check for exit command
 	if input == "exit" {
 		m.bashMode = false
@@ -541,7 +562,7 @@ func (m model) handleBashModeInput(input string, tiCmd, vpCmd, spinnerCmd tea.Cm
 }
 
 // handleSlashCommand processes slash commands
-func (m model) handleSlashCommand(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleSlashCommand(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Do NOT display slash commands in chat history - they are executed silently
 
 	// Clear the input area
@@ -560,7 +581,7 @@ func (m model) handleSlashCommand(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd
 }
 
 // handleSingleShotBash processes single-shot bash commands
-func (m model) handleSingleShotBash(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleSingleShotBash(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Remove the leading '!' and get the command
 	bashCmd := strings.TrimSpace(input[1:])
 	if bashCmd == "" {
@@ -581,7 +602,7 @@ func (m model) handleSingleShotBash(input string, tiCmd, vpCmd, spinnerCmd tea.C
 }
 
 // handleAgentMessage processes regular agent messages
-func (m model) handleAgentMessage(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleAgentMessage(input string, tiCmd, vpCmd, spinnerCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Display user message
 	formatted := formatEntry("You: ", input, userStyle, m.width, true)
 	// Strip any trailing newlines before adding our spacing

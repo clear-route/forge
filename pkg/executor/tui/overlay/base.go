@@ -137,8 +137,12 @@ func (b *BaseOverlay) View(contentWidth int) string {
 		sections = append(sections, b.renderHeader())
 	}
 
-	// Add viewport content
-	sections = append(sections, b.viewport.View())
+	// Add viewport content ONLY if no footer renderer is provided
+	// If footer renderer exists, it's responsible for rendering the viewport
+	// (typically wrapped in a bordered box along with buttons/hints)
+	if b.renderFooter == nil {
+		sections = append(sections, b.viewport.View())
+	}
 
 	// Add footer if provided
 	if b.renderFooter != nil {

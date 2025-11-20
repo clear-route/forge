@@ -2,7 +2,6 @@ package overlay
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -93,41 +92,5 @@ func (o *ToolResultOverlay) renderFooter() string {
 
 // View renders the overlay
 func (o *ToolResultOverlay) View() string {
-	content := o.BaseOverlay.View(o.Width())
-
-	// Create bordered box
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(types.DiffHunkColor). // Cyan/Sky blue
-		Padding(1, 2).
-		Width(o.Width()).
-		Height(o.Height())
-
-	return centerOverlay(boxStyle.Render(content), o.Width(), o.Height())
-}
-
-// centerOverlay centers an overlay on the screen
-func centerOverlay(content string, width, height int) string {
-	lines := strings.Split(content, "\n")
-	var centered strings.Builder
-
-	// Add vertical padding
-	verticalPadding := max(0, (height-len(lines))/2)
-	for i := 0; i < verticalPadding; i++ {
-		centered.WriteString("\n")
-	}
-
-	// Center each line horizontally
-	for _, line := range lines {
-		// Calculate horizontal padding (account for ANSI codes)
-		lineWidth := lipgloss.Width(line)
-		horizontalPadding := max(0, (width-lineWidth)/2)
-		if horizontalPadding > 0 {
-			centered.WriteString(strings.Repeat(" ", horizontalPadding))
-		}
-		centered.WriteString(line)
-		centered.WriteString("\n")
-	}
-
-	return centered.String()
+	return o.BaseOverlay.View(o.Width())
 }

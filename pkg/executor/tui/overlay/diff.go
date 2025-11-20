@@ -164,7 +164,8 @@ func (d *DiffViewer) renderFooter() string {
 }
 
 func (d *DiffViewer) View() string {
-	return types.CreateOverlayContainerStyle(d.Width()).Render(d.BaseOverlay.View(d.Width()))
+	// BaseOverlay.View() already wraps in CreateOverlayContainerStyle, so just call it directly
+	return d.BaseOverlay.View(d.Width())
 }
 
 func max(a, b int) int {
