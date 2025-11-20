@@ -14,8 +14,8 @@ const (
 	OverlayModeCommandOutput
 	// OverlayModeHelp shows the help overlay
 	OverlayModeHelp
-	// OverlayModeSlashCommandPreview shows slash command preview
-	OverlayModeSlashCommandPreview
+	// OverlayModeApproval shows generic approval overlay
+	OverlayModeApproval
 	// OverlayModeSettings shows the settings overlay
 	OverlayModeSettings
 	// OverlayModeContext shows the context information overlay
