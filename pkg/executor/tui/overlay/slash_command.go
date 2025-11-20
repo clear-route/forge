@@ -172,29 +172,20 @@ func (s *SlashCommandPreview) Update(msg tea.Msg, state types.StateProvider, act
 func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc", "ctrl+r":
-		// Close overlay before executing reject command
-		if actions != nil {
-			actions.ClearOverlay()
-		}
-		return true, s.onReject
+		// Return batched command: close overlay first, then execute reject
+		return true, s.closeAndExecute(actions, s.onReject)
 	case "ctrl+a":
-		// Close overlay before executing approve command
-		if actions != nil {
-			actions.ClearOverlay()
-		}
-		return true, s.onApprove
+		// Return batched command: close overlay first, then execute approve
+		return true, s.closeAndExecute(actions, s.onApprove)
 	case "tab":
 		s.handleToggleSelection()
 		return true, nil
 	case "enter":
-		// Close overlay before executing selected command
-		if actions != nil {
-			actions.ClearOverlay()
-		}
+		// Return batched command: close overlay first, then execute selected action
 		if s.selected == ApprovalChoiceAccept {
-			return true, s.onApprove
+			return true, s.closeAndExecute(actions, s.onApprove)
 		}
-		return true, s.onReject
+		return true, s.closeAndExecute(actions, s.onReject)
 	case "left", "h":
 		s.selected = ApprovalChoiceAccept
 		return true, nil
@@ -203,6 +194,26 @@ func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg, actions types.Act
 		return true, nil
 	}
 	return false, nil
+}
+
+// closeAndExecute returns a command that closes the overlay and then executes the action
+func (s *SlashCommandPreview) closeAndExecute(actions types.ActionHandler, actionCmd tea.Cmd) tea.Cmd {
+	if actions == nil {
+		return actionCmd
+	}
+	
+	// Create a command that clears the overlay
+	clearCmd := func() tea.Msg {
+		actions.ClearOverlay()
+		return nil
+	}
+	
+	// Batch the clear command first, then the action command
+	// This ensures the overlay is cleared before the action executes
+	if actionCmd == nil {
+		return clearCmd
+	}
+	return tea.Batch(clearCmd, actionCmd)
 }
 
 func (s *SlashCommandPreview) handleToggleSelection() {
