@@ -139,8 +139,9 @@ func GetModifiedFiles(workingDir string) ([]string, error) {
 		// There's a space after the status, so filename starts at position 3
 		if len(line) > 2 {
 			// Check if file is deleted (status code D in either position)
+			// First char is index status, second char is worktree status
 			status := line[:2]
-			if strings.Contains(status, "D") {
+			if status[0] == 'D' || status[1] == 'D' {
 				// Skip deleted files - they can't be staged with git add
 				continue
 			}

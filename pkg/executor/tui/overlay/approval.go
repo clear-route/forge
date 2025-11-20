@@ -1,7 +1,8 @@
 package overlay
 
 import (
-	"github.com/charmbracelet/bubbles/viewport"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/approval"
@@ -23,12 +24,8 @@ const (
 // GenericApprovalOverlay displays an approval request for any command.
 // It is completely agnostic of the specific command being approved.
 type GenericApprovalOverlay struct {
-	viewport viewport.Model
-	request  approval.ApprovalRequest
-	selected ApprovalChoice
-	width    int
-	height   int
-	focused  bool
+	*ApprovalOverlayBase
+	request approval.ApprovalRequest
 }
 
 // NewGenericApprovalOverlay creates a new generic approval overlay
@@ -45,142 +42,98 @@ func NewGenericApprovalOverlay(request approval.ApprovalRequest, width, height i
 	// Plus viewport height
 	overlayHeight := viewportHeight + 9
 
-	vp := viewport.New(overlayWidth-4, viewportHeight)
-	vp.Style = lipgloss.NewStyle()
-	vp.SetContent(request.Content())
-
-	return &GenericApprovalOverlay{
-		viewport: vp,
-		request:  request,
-		selected: ApprovalChoiceAccept,
-		width:    overlayWidth,
-		height:   overlayHeight,
-		focused:  true,
+	overlay := &GenericApprovalOverlay{
+		request: request,
 	}
+
+	// Configure approval overlay
+	approvalConfig := ApprovalOverlayConfig{
+		BaseConfig: BaseOverlayConfig{
+			Width:          overlayWidth,
+			Height:         overlayHeight,
+			ViewportWidth:  overlayWidth - 4,
+			ViewportHeight: viewportHeight,
+			Content:        request.Content(),
+			RenderHeader:   overlay.renderHeader,
+			RenderFooter:   overlay.renderFooter,
+		},
+		OnApprove:    request.OnApprove,
+		OnReject:     request.OnReject,
+		ApproveLabel: " ✓ Accept ",
+		RejectLabel:  " ✗ Reject ",
+		ShowHints:    true,
+	}
+
+	overlay.ApprovalOverlayBase = NewApprovalOverlayBase(approvalConfig)
+	return overlay
 }
 
 // Update handles messages for the approval overlay
 func (a *GenericApprovalOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return a.handleKeyMsg(msg)
-	case tea.WindowSizeMsg:
-		return a.handleWindowResize(msg)
+	// Check if this is an approval/rejection key before delegating to base
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case keyCtrlA:
+			// Ctrl+A always approves, return nil to close overlay immediately
+			return nil, a.request.OnApprove()
+		case keyCtrlR, keyCtrlC, keyEsc:
+			// These always reject, return nil to close overlay immediately
+			return nil, a.request.OnReject()
+		case keyEnter:
+			// Enter submits the currently selected choice
+			if a.ApprovalOverlayBase.Selected() == ApprovalChoiceAccept {
+				return nil, a.request.OnApprove()
+			}
+			return nil, a.request.OnReject()
+		}
 	}
-	return a, nil
-}
-
-func (a *GenericApprovalOverlay) handleKeyMsg(msg tea.KeyMsg) (types.Overlay, tea.Cmd) {
-	switch msg.String() {
-	case keyCtrlC, keyEsc, keyCtrlR:
-		return a.handleReject()
-	case keyCtrlA:
-		return a.handleApprove()
-	case keyTab:
-		return a.handleToggleSelection()
-	case keyEnter:
-		return a.handleSubmit()
-	case keyLeft, "h":
-		return a.handleSelectAccept()
-	case keyRight, "l":
-		return a.handleSelectReject()
-	default:
-		return a.handleViewportScroll(msg)
-	}
-}
-
-func (a *GenericApprovalOverlay) handleReject() (types.Overlay, tea.Cmd) {
-	// Close overlay and execute rejection command from the request
-	return nil, a.request.OnReject()
-}
-
-func (a *GenericApprovalOverlay) handleApprove() (types.Overlay, tea.Cmd) {
-	// Close overlay and execute approval command from the request
-	return nil, a.request.OnApprove()
-}
-
-func (a *GenericApprovalOverlay) handleToggleSelection() (types.Overlay, tea.Cmd) {
-	if a.selected == ApprovalChoiceAccept {
-		a.selected = ApprovalChoiceReject
-	} else {
-		a.selected = ApprovalChoiceAccept
-	}
-	return a, nil
-}
-
-func (a *GenericApprovalOverlay) handleSubmit() (types.Overlay, tea.Cmd) {
-	if a.selected == ApprovalChoiceAccept {
-		return a.handleApprove()
-	}
-	return a.handleReject()
-}
-
-func (a *GenericApprovalOverlay) handleSelectAccept() (types.Overlay, tea.Cmd) {
-	a.selected = ApprovalChoiceAccept
-	return a, nil
-}
-
-func (a *GenericApprovalOverlay) handleSelectReject() (types.Overlay, tea.Cmd) {
-	a.selected = ApprovalChoiceReject
-	return a, nil
-}
-
-func (a *GenericApprovalOverlay) handleViewportScroll(msg tea.KeyMsg) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
-	a.viewport, cmd = a.viewport.Update(msg)
+	
+	// Let base handle other keys (tab, arrows, scrolling, etc.)
+	updatedApproval, cmd := a.ApprovalOverlayBase.Update(msg, state, actions)
+	a.ApprovalOverlayBase = updatedApproval
 	return a, cmd
 }
 
-func (a *GenericApprovalOverlay) handleWindowResize(msg tea.WindowSizeMsg) (types.Overlay, tea.Cmd) {
-	a.width = msg.Width
-	a.height = msg.Height
-	a.viewport.Width = min(76, a.width-4)
-	a.viewport.Height = min(20, a.height-10)
-	return a, nil
+// renderHeader renders the approval overlay header
+func (a *GenericApprovalOverlay) renderHeader() string {
+	return types.OverlayTitleStyle.Render(a.request.Title())
+}
+
+// renderFooter renders the approval overlay footer with buttons and hints
+func (a *GenericApprovalOverlay) renderFooter() string {
+	contentWidth := a.Width() - 6
+
+	var footer strings.Builder
+
+	// Wrap viewport content in a bordered box
+	contentStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(types.SalmonPink).
+		Padding(0, 1).
+		Width(contentWidth - 4)
+
+	footer.WriteString(contentStyle.Render(a.Viewport().View()))
+	footer.WriteString("\n\n")
+
+	// Render buttons
+	buttonsRow := a.RenderButtons()
+	buttonsLen := lipgloss.Width(buttonsRow)
+	buttonsPadding := max(0, (contentWidth-buttonsLen)/2)
+	footer.WriteString(strings.Repeat(" ", buttonsPadding) + buttonsRow)
+	footer.WriteString("\n")
+
+	// Render hints
+	hints := types.OverlayHelpStyle.Render("Ctrl+A: Accept • Ctrl+R: Reject • Tab: Toggle • ↑/↓: Scroll")
+	hintsLen := lipgloss.Width(hints)
+	hintsPadding := max(0, (contentWidth-hintsLen)/2)
+	footer.WriteString(strings.Repeat(" ", hintsPadding) + hints)
+
+	return footer.String()
 }
 
 // View renders the approval overlay
 func (a *GenericApprovalOverlay) View() string {
-	title := types.OverlayTitleStyle.Render(a.request.Title())
-	viewportContent := a.viewport.View()
-
-	// Render approval buttons using style functions
-	acceptStyle := types.GetAcceptButtonStyle(a.selected == ApprovalChoiceAccept)
-	rejectStyle := types.GetRejectButtonStyle(a.selected == ApprovalChoiceReject)
-
-	buttons := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		acceptStyle.Render(" ✓ Accept "),
-		"  ",
-		rejectStyle.Render(" ✗ Reject "),
-	)
-
-	hints := types.OverlayHelpStyle.Render("Ctrl+A: Accept • Ctrl+R: Reject • Tab: Toggle • ↑/↓: Scroll")
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		"",
-		viewportContent,
-		"",
-		buttons,
-		hints,
-	)
-
-	return types.CreateOverlayContainerStyle(a.width - 4).Render(content)
-}
-
-// Focused returns whether this overlay should handle input
-func (a *GenericApprovalOverlay) Focused() bool {
-	return a.focused
-}
-
-// Width returns the overlay width
-func (a *GenericApprovalOverlay) Width() int {
-	return a.width
-}
-
-// Height returns the overlay height
-func (a *GenericApprovalOverlay) Height() int {
-	return a.height
+	// Delegate to base overlay's View method which handles the rendering
+	// The base already calls renderHeader, renderFooter, and wraps in container
+	return a.BaseOverlay.View(a.Width())
 }

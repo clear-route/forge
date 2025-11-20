@@ -47,16 +47,19 @@ func (o *overlayState) isActive() bool {
 	return true
 }
 
-// renderOverlay renders an overlay on top of the base content
+// renderOverlay renders an overlay centered on a clean background
+// This creates a modal appearance by not showing the base view underneath
 func renderOverlay(baseView string, overlay types.Overlay, width, height int) string {
 	if overlay == nil {
 		return baseView
 	}
 
-	// Center the overlay
+	// Get the overlay content
 	overlayView := overlay.View()
 
-	// Position the overlay
+	// Position the overlay centered on a clean background
+	// The lipgloss.Place function will fill the remaining space with whitespace
+	// creating a clean modal appearance
 	return lipgloss.Place(
 		width,
 		height,
@@ -64,6 +67,7 @@ func renderOverlay(baseView string, overlay types.Overlay, width, height int) st
 		lipgloss.Center,
 		overlayView,
 		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
 	)
 }
 

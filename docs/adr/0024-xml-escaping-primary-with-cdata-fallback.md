@@ -1,7 +1,7 @@
 # 24. XML Entity Escaping as Primary Method with CDATA Fallback
 
-**Status:** Proposed
-**Date:** 2025-11-20
+**Status:** Accepted
+**Date:** 2024-01-20
 **Deciders:** Forge Core Team
 **Technical Story:** Simplify XML tool call format by making entity escaping the primary method, with CDATA as fallback option
 **Supersedes:** ADR-0019 (revises approach based on practical usage)
@@ -197,6 +197,15 @@ FALLBACK METHOD - CDATA Sections:
 ⚠️ Use CDATA if escaping is complex or causes parse errors:
 <content><![CDATA[func example() *Config { return &Config{} }]]></content>
 
+IMPORTANT CDATA LIMITATION:
+The sequence ]]> terminates a CDATA section and cannot appear within CDATA content.
+If your content contains ]]>, you must use entity escaping instead.
+
+WHEN TO USE EACH METHOD:
+- Entity Escaping (PREFERRED): Use for most content, especially when you have <5 special characters
+- CDATA (FALLBACK): Use for large code blocks or when escaping becomes too complex
+- NEVER MIX: Choose ONE method per field - either escape ALL special chars OR wrap in CDATA
+
 Both methods are valid and fully supported by the parser.
 ```
 
@@ -209,15 +218,16 @@ ERROR: Invalid XML in tool call.
 
 Parse error: {error details}
 
-SOLUTION 1 - Use XML entity escaping (preferred):
+SOLUTION 1 - Use XML entity escaping (RECOMMENDED FIRST):
 Escape special characters: & → &amp;, < → &lt;, > → &gt;
 Example: <content>code with &amp; &lt; &gt;</content>
 
-SOLUTION 2 - Use CDATA for complex content:
+SOLUTION 2 - Use CDATA as fallback for complex content:
 Wrap content in CDATA markers (no escaping needed):
 Example: <content><![CDATA[code with & < >]]></content>
+NOTE: CDATA cannot contain ]]> - use escaping if your content has this sequence.
 
-Both methods are supported. Choose the one that works best for your content.
+Both methods are supported. Try entity escaping first, use CDATA as fallback.
 ```
 
 ### XML Example Generator (pkg/agent/prompts/xml_example.go)
@@ -300,4 +310,4 @@ Implementation is straightforward:
 
 **Agent Choice:** We trust the agent's intelligence to recognize when escaping fails and try CDATA instead, rather than building complex error tracking logic. Modern LLMs are smart enough to adapt based on error messages.
 
-**Last Updated:** 2025-11-20
+**Last Updated:** 2024-01-20

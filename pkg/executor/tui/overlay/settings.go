@@ -427,7 +427,7 @@ func (s *SettingsOverlay) View() string {
 	var content strings.Builder
 
 	// Title
-	title := types.OverlayTitleStyle.Render("⚙️  Settings")
+	title := types.OverlayTitleStyle.Render("Settings")
 	content.WriteString(title)
 	content.WriteString("\n\n")
 
@@ -455,7 +455,8 @@ func (s *SettingsOverlay) View() string {
 	}
 
 	// Create bordered box
-	boxStyle := types.CreateOverlayContainerStyle(s.width - 4).Height(s.height - 4)
+	// CreateOverlayContainerStyle adds border (2) + padding (4) = 6 total width
+	boxStyle := types.CreateOverlayContainerStyle(s.width - 6).Height(s.height - 4)
 
 	return lipgloss.Place(
 		s.width,

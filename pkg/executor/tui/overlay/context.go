@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/types"
@@ -12,11 +11,8 @@ import (
 
 // ContextOverlay displays detailed context information in a modal dialog
 type ContextOverlay struct {
-	viewport viewport.Model
-	title    string
-	content  string
-	width    int
-	height   int
+	*BaseOverlay
+	title string
 }
 
 // ContextInfo contains all context statistics to display
@@ -53,18 +49,33 @@ type ContextInfo struct {
 func NewContextOverlay(info *ContextInfo, width, height int) *ContextOverlay {
 	content := buildContextContent(info)
 
-	// Use fixed width like help overlay for consistent centered appearance
-	vp := viewport.New(76, 20)
-	vp.Style = lipgloss.NewStyle()
-	vp.SetContent(content)
-
-	return &ContextOverlay{
-		viewport: vp,
-		title:    "Context Information",
-		content:  content,
-		width:    width,
-		height:   height,
+	overlay := &ContextOverlay{
+		title: "Context Information",
 	}
+
+	// Use fixed width like help overlay for consistent centered appearance
+	overlayWidth := 80
+	overlayHeight := 24
+
+	// Configure base overlay
+	baseConfig := BaseOverlayConfig{
+		Width:          overlayWidth,
+		Height:         overlayHeight,
+		ViewportWidth:  76,
+		ViewportHeight: 20,
+		Content:        content,
+		OnClose: func(actions types.ActionHandler) tea.Cmd {
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+			return nil
+		},
+		RenderHeader: overlay.renderHeader,
+		RenderFooter: overlay.renderFooter,
+	}
+
+	overlay.BaseOverlay = NewBaseOverlay(baseConfig)
+	return overlay
 }
 
 // formatTokenCount formats a token count with K/M suffixes for readability
@@ -151,58 +162,34 @@ func buildContextContent(info *ContextInfo) string {
 
 // Update handles messages for the context overlay
 func (c *ContextOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
+	handled, updatedBase, cmd := c.BaseOverlay.Update(msg, actions)
+	c.BaseOverlay = updatedBase
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEsc, tea.KeyCtrlC, tea.KeyEnter:
-			if actions != nil {
-				actions.ClearOverlay()
-			}
-			return nil, nil
-		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
+	if handled {
+		return c, cmd
+	}
+
+	// Handle Enter key to close (in addition to Esc)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if keyMsg.Type == tea.KeyEnter {
+			return c, c.BaseOverlay.close(actions)
 		}
-
-	case tea.WindowSizeMsg:
-		c.width = msg.Width
-		c.height = msg.Height
-		// Adjust viewport height if screen is too small, but keep width fixed
-		c.viewport.Height = min(20, msg.Height-10)
 	}
 
 	return c, nil
 }
 
-// View renders the context overlay
+// renderHeader renders the context overlay header
+func (c *ContextOverlay) renderHeader() string {
+	return types.OverlayTitleStyle.Render(c.title)
+}
+
+// renderFooter renders the context overlay footer
+func (c *ContextOverlay) renderFooter() string {
+	return types.OverlayHelpStyle.Render("Press ESC or Enter to close • ↑/↓ to scroll")
+}
+
+// View renders the overlay
 func (c *ContextOverlay) View() string {
-	header := types.OverlayTitleStyle.Render(c.title)
-	viewportContent := c.viewport.View()
-	footer := types.OverlayHelpStyle.Render("Press ESC or Enter to close • ↑/↓ to scroll")
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		viewportContent,
-		footer,
-	)
-
-	return types.CreateOverlayContainerStyle(c.viewport.Width).Render(content)
-}
-
-// Focused returns whether this overlay should handle input
-func (c *ContextOverlay) Focused() bool {
-	return true
-}
-
-// Width returns the overlay width
-func (c *ContextOverlay) Width() int {
-	return c.viewport.Width
-}
-
-// Height returns the overlay height
-func (c *ContextOverlay) Height() int {
-	return c.viewport.Height
+	return c.BaseOverlay.View(c.Width())
 }

@@ -27,6 +27,7 @@ type pendingApproval struct {
 	toolName   string
 	toolCall   tools.ToolCall
 	response   chan *types.ApprovalResponse
+	closeOnce  sync.Once // Ensures channel is closed exactly once
 }
 
 // NewManager creates a new approval manager
@@ -81,11 +82,13 @@ func (m *Manager) HandleResponse(response *types.ApprovalResponse) {
 	}
 
 	// Send the response to the waiting goroutine
+	// Use non-blocking send to prevent deadlock if channel is full or being cleaned up
 	select {
 	case m.pendingApproval.response <- response:
-		// Response delivered
+		// Response delivered successfully
 	default:
-		// Channel full or closed - ignore
+		// Channel full, closed, or no receiver - this is safe to ignore
+		// The cleanup process may have already started
 	}
 }
 
@@ -103,11 +106,20 @@ func (m *Manager) setupPendingApproval(approvalID string, toolCall tools.ToolCal
 }
 
 // cleanupPendingApproval cleans up the pending approval
+// This method is safe to call multiple times due to sync.Once
 func (m *Manager) cleanupPendingApproval(responseChannel chan *types.ApprovalResponse) {
 	m.mu.Lock()
+	pa := m.pendingApproval
 	m.pendingApproval = nil
 	m.mu.Unlock()
-	close(responseChannel)
+
+	// Close the channel exactly once using sync.Once
+	// This prevents race conditions between cleanup and HandleResponse
+	if pa != nil {
+		pa.closeOnce.Do(func() {
+			close(responseChannel)
+		})
+	}
 }
 
 // parseToolArguments safely parses tool call arguments into a map

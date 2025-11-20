@@ -11,7 +11,7 @@ import (
 
 // View renders the entire TUI interface.
 // This is called by Bubble Tea whenever the UI needs to be redrawn.
-func (m model) View() string {
+func (m *model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
@@ -35,7 +35,7 @@ func (m model) View() string {
 }
 
 // buildHeader renders the Forge ASCII art header
-func (m model) buildHeader() string {
+func (m *model) buildHeader() string {
 	return headerStyle.Render(`
 	███████╗ ██████╗ ██████╗  ██████╗ ███████╗
 	██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
@@ -46,7 +46,7 @@ func (m model) buildHeader() string {
 }
 
 // buildTips renders context-sensitive usage tips
-func (m model) buildTips() string {
+func (m *model) buildTips() string {
 	if m.bashMode {
 		return tipsStyle.Render(`  Bash Mode: Commands execute directly • Type 'exit' or Ctrl+C to return • Enter to run`)
 	}
@@ -54,7 +54,7 @@ func (m model) buildTips() string {
 }
 
 // buildTopStatus renders the working directory status bar
-func (m model) buildTopStatus() string {
+func (m *model) buildTopStatus() string {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "~"
@@ -63,7 +63,7 @@ func (m model) buildTopStatus() string {
 }
 
 // buildLoadingIndicator renders the loading spinner when agent is busy
-func (m model) buildLoadingIndicator() string {
+func (m *model) buildLoadingIndicator() string {
 	if !m.agentBusy {
 		return ""
 	}
@@ -76,12 +76,12 @@ func (m model) buildLoadingIndicator() string {
 }
 
 // buildInputBox renders the text input area
-func (m model) buildInputBox() string {
+func (m *model) buildInputBox() string {
 	return inputBoxStyle.Width(m.width - 4).Render(m.textarea.View())
 }
 
 // buildBottomBar renders the bottom status bar with token usage
-func (m model) buildBottomBar() string {
+func (m *model) buildBottomBar() string {
 	bottomLeft := "~/forge"
 	bottomCenter := "Enter to send • Alt+Enter for new line"
 	if m.bashMode {
@@ -109,7 +109,7 @@ func (m model) buildBottomBar() string {
 }
 
 // buildTokenDisplay renders the token usage statistics
-func (m model) buildTokenDisplay() string {
+func (m *model) buildTokenDisplay() string {
 	if m.totalTokens == 0 {
 		return "Forge Agent"
 	}
@@ -131,7 +131,7 @@ func (m model) buildTokenDisplay() string {
 }
 
 // assembleBaseView combines all UI components into the base view
-func (m model) assembleBaseView(header, tips, topStatus, viewportSection, loadingIndicator, inputBox, bottomBar string) string {
+func (m *model) assembleBaseView(header, tips, topStatus, viewportSection, loadingIndicator, inputBox, bottomBar string) string {
 	if m.agentBusy {
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -158,7 +158,7 @@ func (m model) assembleBaseView(header, tips, topStatus, viewportSection, loadin
 }
 
 // applyOverlays layers all active overlays on top of the base view
-func (m model) applyOverlays(baseView string) string {
+func (m *model) applyOverlays(baseView string) string {
 	if m.overlay.isActive() {
 		baseView = renderOverlay(baseView, m.overlay.overlay, m.width, m.height)
 	}
@@ -187,7 +187,7 @@ func (m model) applyOverlays(baseView string) string {
 }
 
 // renderSummarizationStatus renders the context summarization status overlay
-func (m model) renderSummarizationStatus() string {
+func (m *model) renderSummarizationStatus() string {
 	if !m.summarization.active {
 		return ""
 	}
@@ -247,7 +247,7 @@ func (m model) renderSummarizationStatus() string {
 }
 
 // renderToast renders a toast notification
-func (m model) renderToast() string {
+func (m *model) renderToast() string {
 	if !m.toast.active || time.Now().After(m.toast.showUntil) {
 		return ""
 	}

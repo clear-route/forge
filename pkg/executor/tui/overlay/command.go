@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/types"
@@ -20,7 +19,7 @@ var (
 
 // CommandExecutionOverlay displays streaming command output with cancellation support
 type CommandExecutionOverlay struct {
-	viewport      viewport.Model
+	*BaseOverlay
 	command       string
 	workingDir    string
 	executionID   string
@@ -28,40 +27,61 @@ type CommandExecutionOverlay struct {
 	status        string
 	exitCode      int
 	isRunning     bool
-	width         int
-	height        int
 	cancelChannel chan<- *pkgtypes.CancellationRequest
 }
 
 // NewCommandExecutionOverlay creates a new command execution overlay
 func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelChan chan<- *pkgtypes.CancellationRequest) *CommandExecutionOverlay {
-	vp := viewport.New(76, 20) // Slightly smaller than overlay for padding
-	vp.Style = lipgloss.NewStyle()
-
-	return &CommandExecutionOverlay{
-		viewport:      vp,
+	overlay := &CommandExecutionOverlay{
 		command:       command,
 		workingDir:    workingDir,
 		executionID:   executionID,
 		output:        &strings.Builder{},
 		status:        "Running...",
 		isRunning:     true,
-		width:         80,
-		height:        30,
 		cancelChannel: cancelChan,
 	}
+
+	overlayWidth := 80
+	overlayHeight := 30
+
+	// Configure base overlay
+	baseConfig := BaseOverlayConfig{
+		Width:          overlayWidth,
+		Height:         overlayHeight,
+		ViewportWidth:  76,
+		ViewportHeight: 20,
+		Content:        "", // Content will be updated via streaming
+		OnClose: func(actions types.ActionHandler) tea.Cmd {
+			// Don't close if running - cancellation happens via Ctrl+C
+			if overlay.isRunning {
+				return nil
+			}
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+			return nil
+		},
+		RenderHeader: overlay.renderHeader,
+		RenderFooter: overlay.renderFooter,
+	}
+
+	overlay.BaseOverlay = NewBaseOverlay(baseConfig)
+	return overlay
 }
 
 // Update handles messages for the command overlay
-//
-//nolint:gocyclo // Complex key handling logic is intentional for overlay UX
 func (c *CommandExecutionOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
+	// Handle command execution events first
+	if event, ok := msg.(*pkgtypes.AgentEvent); ok {
+		if event.IsCommandExecutionEvent() {
+			return c.handleCommandEvent(event, actions)
+		}
+	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Debug: Always try to handle cancellation keys regardless of isRunning state
-		switch msg.Type {
+	// Handle Ctrl+C and Esc specially for cancellation
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			// Send cancellation request if running
 			if c.isRunning && c.cancelChannel != nil {
@@ -72,81 +92,26 @@ func (c *CommandExecutionOverlay) Update(msg tea.Msg, state types.StateProvider,
 				return c, nil
 			}
 			// If not running, close the overlay
+			if actions != nil {
+				actions.ClearOverlay()
+			}
 			return nil, nil
 		}
+	}
 
-		// Handle viewport scrolling
-		switch msg.Type {
-		case tea.KeyUp:
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case tea.KeyDown:
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case tea.KeyPgUp:
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case tea.KeyPgDown:
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case tea.KeyHome:
-			c.viewport.GotoTop()
-			return c, nil
-		case tea.KeyEnd:
-			c.viewport.GotoBottom()
-			return c, nil
-		}
+	// Let BaseOverlay handle standard keys (scrolling, etc.)
+	handled, updatedBase, cmd := c.BaseOverlay.Update(msg, actions)
+	c.BaseOverlay = updatedBase
 
-		// Also handle vi-style keys with string matching
-		switch msg.String() {
-		case "k":
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case "j":
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case "b":
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case "f":
-			c.viewport, cmd = c.viewport.Update(msg)
-			return c, cmd
-		case "g":
-			c.viewport.GotoTop()
-			return c, nil
-		case "G":
-			c.viewport.GotoBottom()
-			return c, nil
-		}
-
-	case tea.MouseMsg:
-		// Handle mouse events (especially scroll wheel) for viewport scrolling
-		c.viewport, cmd = c.viewport.Update(msg)
+	if handled {
 		return c, cmd
-
-	case *pkgtypes.AgentEvent:
-		// Handle command execution events
-		if msg.IsCommandExecutionEvent() {
-			return c.handleCommandEvent(msg)
-		}
-
-	case tea.WindowSizeMsg:
-		// Update overlay size
-		c.width = min(msg.Width-4, 80)
-		c.height = min(msg.Height-4, 30)
-
-		// Update viewport size
-		viewportWidth := c.width - 4   // Account for border and padding
-		viewportHeight := c.height - 8 // Account for header, status, help text
-		c.viewport.Width = viewportWidth
-		c.viewport.Height = viewportHeight
 	}
 
 	return c, nil
 }
 
 // handleCommandEvent processes command execution events
-func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent) (types.Overlay, tea.Cmd) {
+func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	if event.CommandExecution == nil {
 		return c, nil
 	}
@@ -160,13 +125,14 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent)
 
 	switch event.Type {
 	case pkgtypes.EventTypeCommandOutput:
-		// Append new output
+		// Append new output and update viewport
 		c.output.WriteString(data.Output)
-		c.viewport.SetContent(c.output.String())
+		c.BaseOverlay.SetContent(c.output.String())
 
 		// Auto-scroll to bottom if we were already at the bottom
-		if c.viewport.AtBottom() {
-			c.viewport.GotoBottom()
+		vp := c.BaseOverlay.Viewport()
+		if vp.AtBottom() {
+			vp.GotoBottom()
 		}
 
 	case pkgtypes.EventTypeCommandExecutionComplete:
@@ -183,65 +149,57 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent)
 		c.isRunning = false
 		c.status = "Canceled by user"
 		// Auto-close overlay on cancellation
+		if actions != nil {
+			actions.ClearOverlay()
+		}
 		return nil, nil
 	}
 
 	return c, nil
 }
 
-// View renders the command overlay
-func (c *CommandExecutionOverlay) View() string {
-	// Build header using shared overlay title style with margin
-	headerStyle := types.OverlayTitleStyle.MarginBottom(1)
-	header := headerStyle.Render("Command Execution")
+// renderHeader renders the command execution header
+func (c *CommandExecutionOverlay) renderHeader() string {
+	var b strings.Builder
 
-	// Build command info
-	commandInfo := fmt.Sprintf("Command: %s", c.command)
+	b.WriteString(types.OverlayTitleStyle.Render("Command Execution"))
+	b.WriteString("\n\n")
+
+	// Command info
+	b.WriteString(fmt.Sprintf("Command: %s", c.command))
 	if c.workingDir != "" {
-		commandInfo += fmt.Sprintf("\nWorking Dir: %s", c.workingDir)
+		b.WriteString(fmt.Sprintf("\nWorking Dir: %s", c.workingDir))
 	}
+	b.WriteString("\n")
 
-	// Build status line
-	statusLine := commandStatusStyle.Render(c.status)
+	// Status line
+	b.WriteString(commandStatusStyle.Render(c.status))
 
-	// Build output viewport
-	outputView := c.viewport.View()
+	return b.String()
+}
 
-	// Build help text using shared overlay help style with margin
-	helpStyle := types.OverlayHelpStyle.MarginTop(1)
-	var helpText string
+// renderFooter renders the viewport output and help text
+func (c *CommandExecutionOverlay) renderFooter() string {
+	var b strings.Builder
+
+	// Add blank line after header
+	b.WriteString("\n")
+
+	// Render viewport with command output
+	b.WriteString(c.BaseOverlay.Viewport().View())
+	b.WriteString("\n")
+
+	// Add help text
 	if c.isRunning {
-		helpText = helpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page")
+		b.WriteString(types.OverlayHelpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page"))
 	} else {
-		helpText = helpStyle.Render("Press Esc key to close")
+		b.WriteString(types.OverlayHelpStyle.Render("Press Esc key to close"))
 	}
 
-	// Combine all parts
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		commandInfo,
-		statusLine,
-		"",
-		outputView,
-		helpText,
-	)
-
-	// Use shared overlay container style for consistency (width only, height determined by content)
-	return types.CreateOverlayContainerStyle(c.width).Render(content)
+	return b.String()
 }
 
-// Focused returns whether this overlay should handle input
-func (c *CommandExecutionOverlay) Focused() bool {
-	return true
-}
-
-// Width returns the overlay width
-func (c *CommandExecutionOverlay) Width() int {
-	return c.width
-}
-
-// Height returns the overlay height
-func (c *CommandExecutionOverlay) Height() int {
-	return c.height
+// View renders the overlay
+func (c *CommandExecutionOverlay) View() string {
+	return c.BaseOverlay.View(c.Width())
 }

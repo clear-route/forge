@@ -161,7 +161,7 @@ func parseSlashCommand(input string) (string, []string, bool) {
 }
 
 // executeSlashCommand executes a slash command
-func executeSlashCommand(m model, commandName string, args []string) (model, tea.Cmd) {
+func executeSlashCommand(m *model, commandName string, args []string) (*model, tea.Cmd) {
 	cmd, exists := getCommand(commandName)
 	if !exists {
 		// Unknown command - show error toast
@@ -181,7 +181,7 @@ func executeSlashCommand(m model, commandName string, args []string) (model, tea
 
 	// Execute the command handler
 	if cmd.Handler != nil {
-		result := cmd.Handler(&m, args)
+		result := cmd.Handler(m, args)
 
 		// Handle different return types
 		switch v := result.(type) {
