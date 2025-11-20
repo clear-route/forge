@@ -1,10 +1,12 @@
 # 19. Pure XML with CDATA for Tool Call Arguments
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0024](0024-xml-escaping-primary-with-cdata-fallback.md)
 **Date:** 2025-11-17
 **Deciders:** Forge Core Team
 **Technical Story:** Eliminating ALL parsing issues by using pure XML structure
 **Supersedes:** ADR-0002 (revised approach based on feedback)
+
+> **Note:** This ADR established CDATA as mandatory for all code/content fields. ADR-0024 revises this approach to make XML entity escaping the primary method, with CDATA as a fallback option. Both methods remain fully supported.
 
 ---
 
