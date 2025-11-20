@@ -76,11 +76,12 @@ func (cp *CommandPalette) updateFiltered() {
 	cp.filteredCommands = filtered
 
 	// Ensure selected index is valid after filtering
-	if len(cp.filteredCommands) == 0 {
+	switch {
+	case len(cp.filteredCommands) == 0:
 		cp.selectedIndex = 0
-	} else if cp.selectedIndex >= len(cp.filteredCommands) {
+	case cp.selectedIndex >= len(cp.filteredCommands):
 		cp.selectedIndex = len(cp.filteredCommands) - 1
-	} else if cp.selectedIndex < 0 {
+	case cp.selectedIndex < 0:
 		cp.selectedIndex = 0
 	}
 }
@@ -106,9 +107,9 @@ func (cp *CommandPalette) SelectPrev() {
 
 // GetSelected returns the currently selected command
 func (cp *CommandPalette) GetSelected() *CommandItem {
-	if len(cp.filteredCommands) == 0 || 
-	   cp.selectedIndex < 0 || 
-	   cp.selectedIndex >= len(cp.filteredCommands) {
+	if len(cp.filteredCommands) == 0 ||
+		cp.selectedIndex < 0 ||
+		cp.selectedIndex >= len(cp.filteredCommands) {
 		return nil
 	}
 	return &cp.filteredCommands[cp.selectedIndex]

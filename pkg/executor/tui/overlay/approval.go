@@ -87,7 +87,7 @@ func (a *GenericApprovalOverlay) Update(msg tea.Msg, state types.StateProvider, 
 			return nil, a.request.OnReject()
 		}
 	}
-	
+
 	// Let base handle other keys (tab, arrows, scrolling, etc.)
 	updatedApproval, cmd := a.ApprovalOverlayBase.Update(msg, state, actions)
 	a.ApprovalOverlayBase = updatedApproval
