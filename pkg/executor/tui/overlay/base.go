@@ -17,7 +17,7 @@ type BaseOverlay struct {
 
 	// Handlers for custom behavior
 	onClose      func(actions types.ActionHandler) tea.Cmd
-	onCustomKey  func(msg tea.KeyMsg) (bool, tea.Cmd) // Returns (handled, cmd)
+	onCustomKey  func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) // Returns (handled, cmd)
 	renderHeader func() string
 	renderFooter func() string
 }
@@ -30,7 +30,7 @@ type BaseOverlayConfig struct {
 	ViewportHeight int
 	Content        string
 	OnClose        func(actions types.ActionHandler) tea.Cmd
-	OnCustomKey    func(msg tea.KeyMsg) (bool, tea.Cmd)
+	OnCustomKey    func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd)
 	RenderHeader   func() string
 	RenderFooter   func() string
 }
@@ -76,7 +76,7 @@ func (b *BaseOverlay) handleKeyMsg(msg tea.KeyMsg, actions types.ActionHandler) 
 
 	// Give custom handler first priority
 	if b.onCustomKey != nil {
-		if handled, cmd := b.onCustomKey(msg); handled {
+		if handled, cmd := b.onCustomKey(msg, actions); handled {
 			return true, b, cmd
 		}
 	}

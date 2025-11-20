@@ -40,7 +40,7 @@ func NewApprovalOverlayBase(config ApprovalOverlayConfig) *ApprovalOverlayBase {
 	}
 
 	// Configure custom key handler for approval-specific keys
-	config.BaseConfig.OnCustomKey = func(msg tea.KeyMsg) (bool, tea.Cmd) {
+	config.BaseConfig.OnCustomKey = func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
 		return false, nil // Will be set after creation
 	}
 
@@ -76,7 +76,7 @@ func (a *ApprovalOverlayBase) Update(msg tea.Msg, state types.StateProvider, act
 }
 
 // handleApprovalKeys processes approval-specific keyboard input
-func (a *ApprovalOverlayBase) handleApprovalKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (a *ApprovalOverlayBase) handleApprovalKeys(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
 	switch msg.String() {
 	case keyCtrlA:
 		return true, a.approve()

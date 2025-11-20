@@ -71,8 +71,6 @@ func NewCommandExecutionOverlay(command, workingDir, executionID string, cancelC
 }
 
 // Update handles messages for the command overlay
-//
-//nolint:gocyclo // Complex key handling logic is intentional for overlay UX
 func (c *CommandExecutionOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
 	// Handle command execution events first
 	if event, ok := msg.(*pkgtypes.AgentEvent); ok {
@@ -163,41 +161,41 @@ func (c *CommandExecutionOverlay) handleCommandEvent(event *pkgtypes.AgentEvent,
 // renderHeader renders the command execution header
 func (c *CommandExecutionOverlay) renderHeader() string {
 	var b strings.Builder
-	
+
 	b.WriteString(types.OverlayTitleStyle.Render("Command Execution"))
 	b.WriteString("\n\n")
-	
+
 	// Command info
 	b.WriteString(fmt.Sprintf("Command: %s", c.command))
 	if c.workingDir != "" {
 		b.WriteString(fmt.Sprintf("\nWorking Dir: %s", c.workingDir))
 	}
 	b.WriteString("\n")
-	
+
 	// Status line
 	b.WriteString(commandStatusStyle.Render(c.status))
-	
+
 	return b.String()
 }
 
 // renderFooter renders the viewport output and help text
 func (c *CommandExecutionOverlay) renderFooter() string {
 	var b strings.Builder
-	
+
 	// Add blank line after header
 	b.WriteString("\n")
-	
+
 	// Render viewport with command output
 	b.WriteString(c.BaseOverlay.Viewport().View())
 	b.WriteString("\n")
-	
+
 	// Add help text
 	if c.isRunning {
 		b.WriteString(types.OverlayHelpStyle.Render("Ctrl+C or Esc: Cancel | ↑↓: Scroll | PgUp/PgDn: Page"))
 	} else {
 		b.WriteString(types.OverlayHelpStyle.Render("Press Esc key to close"))
 	}
-	
+
 	return b.String()
 }
 

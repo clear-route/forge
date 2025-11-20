@@ -68,8 +68,8 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 			}
 			return overlay.onReject
 		},
-		OnCustomKey: func(msg tea.KeyMsg) (bool, tea.Cmd) {
-			return overlay.handleCustomKeys(msg)
+		OnCustomKey: func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
+			return overlay.handleCustomKeys(msg, actions)
 		},
 		RenderHeader: overlay.renderHeader,
 		RenderFooter: overlay.renderFooter,
@@ -169,16 +169,28 @@ func (s *SlashCommandPreview) Update(msg tea.Msg, state types.StateProvider, act
 }
 
 // handleCustomKeys processes slash command-specific key presses
-func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc", "ctrl+r":
+		// Close overlay before executing reject command
+		if actions != nil {
+			actions.ClearOverlay()
+		}
 		return true, s.onReject
 	case "ctrl+a":
+		// Close overlay before executing approve command
+		if actions != nil {
+			actions.ClearOverlay()
+		}
 		return true, s.onApprove
 	case "tab":
 		s.handleToggleSelection()
 		return true, nil
 	case "enter":
+		// Close overlay before executing selected command
+		if actions != nil {
+			actions.ClearOverlay()
+		}
 		if s.selected == ApprovalChoiceAccept {
 			return true, s.onApprove
 		}

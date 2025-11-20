@@ -44,11 +44,11 @@ func NewToolResultOverlay(toolName, result string, width, height int) *ToolResul
 			}
 			return nil
 		},
-		OnCustomKey: func(msg tea.KeyMsg) (bool, tea.Cmd) {
+		OnCustomKey: func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
 			// Allow 'q' and 'v' to close the overlay
 			if msg.String() == "q" || msg.String() == "v" {
 				if overlay.BaseOverlay != nil {
-					return true, overlay.BaseOverlay.close(nil)
+					return true, overlay.BaseOverlay.close(actions)
 				}
 			}
 			return false, nil
