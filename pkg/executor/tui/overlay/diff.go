@@ -167,10 +167,3 @@ func (d *DiffViewer) View() string {
 	// BaseOverlay.View() already wraps in CreateOverlayContainerStyle, so just call it directly
 	return d.BaseOverlay.View(d.Width())
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
