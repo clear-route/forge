@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/types"
@@ -12,11 +11,8 @@ import (
 
 // ToolResultOverlay displays the full result of a tool call
 type ToolResultOverlay struct {
+	*BaseOverlay
 	toolName string
-	result   string
-	viewport viewport.Model
-	width    int
-	height   int
 }
 
 // NewToolResultOverlay creates a new tool result overlay
@@ -32,87 +28,82 @@ func NewToolResultOverlay(toolName, result string, width, height int) *ToolResul
 		overlayHeight = 20
 	}
 
-	// Create viewport for scrolling
-	vp := viewport.New(overlayWidth-4, overlayHeight-6) // Account for border and header
-	vp.SetContent(result)
-
-	return &ToolResultOverlay{
+	overlay := &ToolResultOverlay{
 		toolName: toolName,
-		result:   result,
-		viewport: vp,
-		width:    overlayWidth,
-		height:   overlayHeight,
 	}
+
+	// Configure base overlay
+	baseConfig := BaseOverlayConfig{
+		Width:          overlayWidth,
+		Height:         overlayHeight,
+		ViewportWidth:  overlayWidth - 4,
+		ViewportHeight: overlayHeight - 6,
+		Content:        result,
+		OnClose: func(actions types.ActionHandler) tea.Cmd {
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+			return nil
+		},
+		OnCustomKey: func(msg tea.KeyMsg) (bool, tea.Cmd) {
+			// Allow 'q' and 'v' to close the overlay
+			if msg.String() == "q" || msg.String() == "v" {
+				if overlay.BaseOverlay != nil {
+					return true, overlay.BaseOverlay.close(nil)
+				}
+			}
+			return false, nil
+		},
+		RenderHeader: overlay.renderHeader,
+		RenderFooter: overlay.renderFooter,
+	}
+
+	overlay.BaseOverlay = NewBaseOverlay(baseConfig)
+	return overlay
 }
 
 // Update handles messages
 func (o *ToolResultOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "q", "esc", "v":
-			if actions != nil {
-				actions.ClearOverlay()
-			}
-			return nil, nil // Signal to close
-		}
+	handled, updatedBase, cmd := o.BaseOverlay.Update(msg, actions)
+	o.BaseOverlay = updatedBase
+
+	if handled {
+		return o, cmd
 	}
 
-	// Forward to viewport for scrolling
-	var cmd tea.Cmd
-	o.viewport, cmd = o.viewport.Update(msg)
-	return o, cmd
+	return o, nil
 }
 
-// View renders the overlay
-func (o *ToolResultOverlay) View() string {
-	// Create header
+// renderHeader renders the tool result header
+func (o *ToolResultOverlay) renderHeader() string {
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(types.DiffHunkColor). // Cyan/Sky blue
 		Render(fmt.Sprintf("Tool Result: %s", o.toolName))
 
-	// Create help text
-	help := lipgloss.NewStyle().
+	return header
+}
+
+// renderFooter renders the tool result footer
+func (o *ToolResultOverlay) renderFooter() string {
+	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		Render("↑/↓: scroll • q/esc/v: close")
+}
 
-	// Combine header and help
-	headerSection := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		help,
-		"",
-	)
-
-	// Create the content area with viewport
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		headerSection,
-		o.viewport.View(),
-	)
+// View renders the overlay
+func (o *ToolResultOverlay) View() string {
+	content := o.BaseOverlay.View(o.Width())
 
 	// Create bordered box
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(types.DiffHunkColor). // Cyan/Sky blue
 		Padding(1, 2).
-		Width(o.width).
-		Height(o.height)
+		Width(o.Width()).
+		Height(o.Height())
 
-	return centerOverlay(boxStyle.Render(content), o.width, o.height)
-}
-
-// Focused returns whether this overlay should handle input
-func (o *ToolResultOverlay) Focused() bool {
-	return true
-}
-
-// Width returns the overlay width
-func (o *ToolResultOverlay) Width() int {
-	return o.width
-}
-
-// Height returns the overlay height
-func (o *ToolResultOverlay) Height() int {
-	return o.height
+	return centerOverlay(boxStyle.Render(content), o.Width(), o.Height())
 }
 
 // centerOverlay centers an overlay on the screen

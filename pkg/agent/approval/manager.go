@@ -23,11 +23,11 @@ type Manager struct {
 
 // pendingApproval tracks an approval request that is waiting for user response
 type pendingApproval struct {
-	approvalID  string
-	toolName    string
-	toolCall    tools.ToolCall
-	response    chan *types.ApprovalResponse
-	closeOnce   sync.Once // Ensures channel is closed exactly once
+	approvalID string
+	toolName   string
+	toolCall   tools.ToolCall
+	response   chan *types.ApprovalResponse
+	closeOnce  sync.Once // Ensures channel is closed exactly once
 }
 
 // NewManager creates a new approval manager

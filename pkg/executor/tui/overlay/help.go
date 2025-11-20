@@ -1,87 +1,82 @@
 package overlay
 
 import (
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/entrhq/forge/pkg/executor/tui/types"
 )
 
 // HelpOverlay displays help information in a modal dialog
 type HelpOverlay struct {
-	viewport viewport.Model
-	title    string
-	content  string
+	*BaseOverlay
+	title string
 }
 
 // NewHelpOverlay creates a new help overlay
 func NewHelpOverlay(title, content string) *HelpOverlay {
-	vp := viewport.New(76, 20)
-	vp.Style = lipgloss.NewStyle()
-	vp.SetContent(content)
+	const (
+		viewportWidth  = 76
+		viewportHeight = 20
+		overlayWidth   = 80
+		overlayHeight  = 25
+	)
 
-	return &HelpOverlay{
-		viewport: vp,
-		title:    title,
-		content:  content,
+	overlay := &HelpOverlay{
+		title: title,
 	}
+
+	// Configure base overlay with custom key handler
+	baseConfig := BaseOverlayConfig{
+		Width:          overlayWidth,
+		Height:         overlayHeight,
+		ViewportWidth:  viewportWidth,
+		ViewportHeight: viewportHeight,
+		Content:        content,
+		OnClose: func(actions types.ActionHandler) tea.Cmd {
+			if actions != nil {
+				actions.ClearOverlay()
+			}
+			return nil
+		},
+		OnCustomKey: func(msg tea.KeyMsg) (bool, tea.Cmd) {
+			// Allow Enter to close help overlay
+			if msg.Type == tea.KeyEnter {
+				if overlay.BaseOverlay != nil {
+					return true, overlay.BaseOverlay.close(nil)
+				}
+			}
+			return false, nil
+		},
+		RenderHeader: overlay.renderHeader,
+		RenderFooter: overlay.renderFooter,
+	}
+
+	overlay.BaseOverlay = NewBaseOverlay(baseConfig)
+	return overlay
 }
 
 // Update handles messages for the help overlay
 func (h *HelpOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
-	var cmd tea.Cmd
+	handled, updatedBase, cmd := h.BaseOverlay.Update(msg, actions)
+	h.BaseOverlay = updatedBase
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEsc, tea.KeyCtrlC, tea.KeyEnter:
-			// Instead of returning nil, nil which meant "close" in the old system,
-			// we explicitly ask to clear the overlay.
-			// However, the interface contract says we return the updated *Overlay*.
-			// If we want to close, we should return nil or have actions.ClearOverlay().
-			// In the old system: "return nil, nil" meant "I am done, remove me".
-			return nil, nil
-		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
-			h.viewport, cmd = h.viewport.Update(msg)
-			return h, cmd
-		}
-
-	case tea.WindowSizeMsg:
-		// Adjust viewport height if screen is too small, but width is fixed.
-		h.viewport.Height = min(20, msg.Height-10)
+	if handled {
+		return h, cmd
 	}
 
 	return h, nil
 }
 
+// renderHeader renders the help overlay header
+func (h *HelpOverlay) renderHeader() string {
+	return types.OverlayTitleStyle.Render(h.title)
+}
+
+// renderFooter renders the help overlay footer
+func (h *HelpOverlay) renderFooter() string {
+	return types.OverlayHelpStyle.Render("Press ESC or Enter to close")
+}
+
 // View renders the help overlay
 func (h *HelpOverlay) View() string {
-	header := types.OverlayTitleStyle.Render(h.title)
-	viewportContent := h.viewport.View()
-	footer := types.OverlayHelpStyle.Render("Press ESC or Enter to close")
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		viewportContent,
-		footer,
-	)
-
-	// Use the viewport's width to determine the container width
-	return types.CreateOverlayContainerStyle(h.viewport.Width).Render(content)
-}
-
-// Focused returns whether this overlay should handle input
-func (h *HelpOverlay) Focused() bool {
-	return true
-}
-
-// Width returns the overlay width.
-func (h *HelpOverlay) Width() int {
-	return h.viewport.Width
-}
-
-// Height returns the overlay height.
-func (h *HelpOverlay) Height() int {
-	return h.viewport.Height
+	return h.BaseOverlay.View(h.BaseOverlay.Viewport().Width)
 }

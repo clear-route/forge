@@ -42,7 +42,7 @@ func TestApprovalSystem_ConcurrentCleanupRace(t *testing.T) {
 	// Very short timeout to trigger cleanup quickly
 	agent := &DefaultAgent{
 		channels:        channels,
-		approvalManager: approval.NewManager(10 * time.Millisecond, emitEvent),
+		approvalManager: approval.NewManager(10*time.Millisecond, emitEvent),
 	}
 
 	toolCall := tools.ToolCall{
