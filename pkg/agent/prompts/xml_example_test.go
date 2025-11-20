@@ -27,7 +27,7 @@ func TestGenerateXMLExample(t *testing.T) {
 		}
 	})
 
-	t.Run("CDATAForContentFields", func(t *testing.T) {
+	t.Run("EntityEscapingForContentFields", func(t *testing.T) {
 		schema := map[string]interface{}{
 			"properties": map[string]interface{}{
 				"content": map[string]interface{}{
@@ -40,8 +40,9 @@ func TestGenerateXMLExample(t *testing.T) {
 
 		result := GenerateXMLExample(schema, "write_file")
 
-		if !strings.Contains(result, "<![CDATA[") {
-			t.Error("Expected CDATA for content field")
+		// Per ADR-0024, we prefer XML entity escaping over CDATA
+		if !strings.Contains(result, "&amp;") {
+			t.Error("Expected entity escaping for content field (per ADR-0024)")
 		}
 	})
 
