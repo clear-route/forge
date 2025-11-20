@@ -46,7 +46,7 @@ Before providing an answer or executing a tool, you MUST outline your thought pr
 const ToolCallingPrompt = `<tool_calling>
 You have access to a set of tools that you can execute. You use one tool per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish tasks, with each tool use informed by the result of the previous tool use.
 
-Tool use is formatted in pure XML with CDATA for complex content:
+Tool use is formatted in pure XML:
 
 <tool>
 <server_name>local</server_name>
@@ -56,19 +56,7 @@ Tool use is formatted in pure XML with CDATA for complex content:
 </arguments>
 </tool>
 
-For content with code, diffs, or special characters, use CDATA sections:
-
-<tool>
-<tool_name>write_to_file</tool_name>
-<arguments>
-  <path>file.go</path>
-  <content><![CDATA[package main
-
-func main() {
-	fmt.Println("No escaping needed!")
-}]]></content>
-</arguments>
-</tool>
+For content with special characters, use XML entity escaping (PREFERRED) or CDATA (fallback).
 
 Parameters:
 - server_name: (required) Always "local" for built-in tools
@@ -82,32 +70,46 @@ Parameters:
 4. Before calling each tool, explain to the USER why you are taking this action (in your thinking)
 5. **MANDATORY:** You MUST always include the server_name field. Omitting it will cause execution failure
 
-**CDATA USAGE RULES - CRITICAL:**
-✅ ALWAYS USE CDATA for ALL CODE/CONTENT fields:
-  - **REQUIRED:** ALL code content (Go, Python, JavaScript, TypeScript, etc.)
-  - **REQUIRED:** File content, diffs, search/replace patterns
-  - **REQUIRED:** Any text with special XML characters: &, <, >, ", '
-  - **REQUIRED:** JSON, HTML, XML content, regex patterns
-  - **REQUIRED:** Multi-line text, formatted output
+**CONTENT ENCODING RULES - CRITICAL:**
 
-🚨 **MANDATORY FOR CODE:** All programming language code MUST be wrapped in CDATA
-  - Go code with pointers (&Type), references, operators
-  - Any code with operators: &, |, <, >, &&, ||, <<, >>
-  - String literals with quotes, escape sequences
-  - Template strings, HTML/JSX in code
+🚨 MANDATORY: ALL content inside tool call XML MUST use proper encoding!
 
-✅ CORRECT - CDATA for ALL code content:
+PRIMARY METHOD - XML Entity Escaping (PREFERRED):
+You MUST escape special XML characters in ALL content fields to prevent parse errors.
+
+**Required escaping for ALL content inside <arguments>. Common XML entities include:**
+  & (ampersand) → &amp;
+  < (less than) → &lt;
+  > (greater than) → &gt;
+  " (quote) → &quot;
+  ' (apostrophe) → &apos;
+
+**This applies to ALL text content including:**
+- Result messages in task_completion
+- Question text in ask_question
+- File content in write_to_file
+- Search/replace patterns in diffs
+- Any other text content
+
+Examples using entity escaping:
+  <result>Created file with &lt;special&gt; chars &amp; symbols</result>
+  <search>const x = a &amp;&amp; b</search>
+  <replace>if (x &lt; 10 &amp;&amp; y &gt; 5)</replace>
+  <content>func example() { return &amp;Config{} }</content>
+
+FALLBACK METHOD - CDATA Sections:
+Use CDATA if escaping becomes too complex or for very large content blocks.
+CDATA allows content without escaping but is more verbose.
+
+Examples using CDATA:
+  <result><![CDATA[Created file with <special> chars & symbols]]></result>
   <content><![CDATA[package main
 
 func example() *Config {
 	return &Config{name: "test"}
 }]]></content>
-  <search><![CDATA[const x = a && b || c]]></search>
-  <replace><![CDATA[const x = (a && b) || c]]></replace>
 
-❌ WRONG - Code WITHOUT CDATA (will cause XML parse errors):
-  <content>func example() *Config { return &Config{} }</content>
-  <search>const x = a && b</search>
+⚠️ IMPORTANT: Choose ONE method per field - either escape ALL special chars OR wrap in CDATA.
 
 ❌ DO NOT use CDATA for STRUCTURE (arrays, objects):
   - NEVER wrap arrays or objects in CDATA
@@ -119,8 +121,8 @@ func example() *Config {
 ✅ CORRECT - Nested XML for arrays/objects:
   <edits>
     <edit>
-      <search><![CDATA[old code]]></search>
-      <replace><![CDATA[new code]]></replace>
+      <search>old &amp; code</search>
+      <replace>new &amp; code</replace>
     </edit>
   </edits>
 

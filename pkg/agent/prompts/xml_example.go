@@ -77,8 +77,8 @@ func generatePropertyExample(name string, propSchema map[string]interface{}, ind
 
 // generateStringExample creates example for string properties
 func generateStringExample(name string, propSchema map[string]interface{}, description string, indent string) string {
-	// Check if this might need CDATA based on common patterns
-	needsCDATA := strings.Contains(description, "code") ||
+	// Check if this is a code/content field that might have special characters
+	isCodeField := strings.Contains(description, "code") ||
 		strings.Contains(description, "content") ||
 		strings.Contains(description, "diff") ||
 		strings.Contains(description, "search") ||
@@ -87,8 +87,10 @@ func generateStringExample(name string, propSchema map[string]interface{}, descr
 		strings.Contains(name, "search") ||
 		strings.Contains(name, "replace")
 
-	if needsCDATA {
-		return fmt.Sprintf("%s<%s><![CDATA[example content]]></%s>\n", indent, name, name)
+	if isCodeField {
+		// Use XML entity escaping (preferred method per ADR-0024)
+		// Show example with escaped entities
+		return fmt.Sprintf("%s<%s>example &amp; content</%s>\n", indent, name, name)
 	}
 
 	// Simple string

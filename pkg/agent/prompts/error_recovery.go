@@ -53,32 +53,69 @@ func buildNoToolCallError() string {
 You MUST use a tool in every response. Available tools include task_completion, ask_question, converse, and any registered custom tools.
 
 CORRECT FORMAT:
-<tool>{"tool_name": "tool_name_here", "arguments": {...}}</tool>
+<tool>
+<server_name>local</server_name>
+<tool_name>tool_name_here</tool_name>
+<arguments>
+  <param>value</param>
+</arguments>
+</tool>
 
 Example:
-<tool>{"tool_name": "task_completion", "arguments": {"result": "Task completed successfully"}}</tool>
+<tool>
+<server_name>local</server_name>
+<tool_name>task_completion</tool_name>
+<arguments>
+  <result>Task completed successfully</result>
+</arguments>
+</tool>
 
 Please try again with a valid tool call.`
 }
 
-// buildParseError creates an error message with recovery instructions for JSON parsing errors
+// buildParseError creates an error message with recovery instructions for XML parsing errors
 func buildParseError(err error, content string) string {
-	return fmt.Sprintf(`ERROR: Invalid tool call JSON.
+	snippet := content
+	if len(snippet) > 300 {
+		snippet = snippet[:300] + "..."
+	}
+
+	return fmt.Sprintf(`ERROR: Invalid XML in tool call.
 
 Parse error: %v
 
 Your tool call content: %s
 
-CORRECT FORMAT:
-<tool>{"tool_name": "calculator", "arguments": {"a": 10, "b": 20, "operation": "add"}}</tool>
+SOLUTION 1 - Use XML Entity Escaping (PREFERRED):
+Escape special characters using standard XML entities:
+  & becomes &amp;
+  < becomes &lt;
+  > becomes &gt;
+  " becomes &quot;
+  ' becomes &apos;
 
-Common JSON issues:
-- Missing quotes around property names
-- Trailing commas in objects or arrays
-- Unescaped quotes inside strings
-- Missing closing braces
+Example:
+<tool>
+<server_name>local</server_name>
+<tool_name>write_to_file</tool_name>
+<arguments>
+  <content>func test() { x := a &amp;&amp; b }</content>
+</arguments>
+</tool>
 
-Please fix the JSON syntax and try again.`, err, content)
+SOLUTION 2 - Use CDATA (if escaping is complex or fails):
+Wrap complex content in CDATA sections (no escaping needed):
+
+Example:
+<tool>
+<server_name>local</server_name>
+<tool_name>write_to_file</tool_name>
+<arguments>
+  <content><![CDATA[func test() { x := a && b }]]></content>
+</arguments>
+</tool>
+
+Both methods are supported. Try the approach that works best for your content.`, err, snippet)
 }
 
 // buildMissingToolNameError creates an error message for missing tool_name field
@@ -88,7 +125,13 @@ func buildMissingToolNameError() string {
 The tool_name field is required and must specify which tool to execute.
 
 CORRECT FORMAT:
-<tool>{"tool_name": "your_tool_here", "arguments": {...}}</tool>
+<tool>
+<server_name>local</server_name>
+<tool_name>your_tool_here</tool_name>
+<arguments>
+  <param>value</param>
+</arguments>
+</tool>
 
 Please include the tool_name field and try again.`
 }

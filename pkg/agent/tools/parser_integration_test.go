@@ -251,3 +251,123 @@ func TestXMLParserWithArrayArguments(t *testing.T) {
 		}
 	}
 }
+
+// TestXMLParserWithEntityEscaping tests the parser with XML entity-escaped content
+// This verifies ADR-0024: XML entity escaping as primary method
+func TestXMLParserWithEntityEscaping(t *testing.T) {
+	xmlInput := `<tool>
+<server_name>local</server_name>
+<tool_name>write_to_file</tool_name>
+<arguments>
+  <path>test.go</path>
+  <content>func example() *Config {
+	return &amp;Config{name: &quot;test&quot;}
+}
+if x &lt; 10 &amp;&amp; y &gt; 5 {
+	process()
+}</content>
+</arguments>
+</tool>`
+
+	toolCall, _, err := ParseToolCall(xmlInput)
+	if err != nil {
+		t.Fatalf("ParseToolCall failed: %v", err)
+	}
+
+	var args struct {
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Content string   `xml:"content"`
+	}
+
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
+		t.Fatalf("Failed to unmarshal arguments: %v", err)
+	}
+
+	if args.Path != "test.go" {
+		t.Errorf("Expected path='test.go', got %q", args.Path)
+	}
+
+	// Verify escaped entities are correctly decoded
+	expectedContent := `func example() *Config {
+	return &Config{name: "test"}
+}
+if x < 10 && y > 5 {
+	process()
+}`
+
+	if args.Content != expectedContent {
+		t.Errorf("Content mismatch.\nExpected:\n%s\n\nGot:\n%s", expectedContent, args.Content)
+	}
+}
+
+// TestXMLParserWithMixedEscapingAndCDATA tests using both escaping and CDATA in same tool call
+// This verifies both methods work together (ADR-0024)
+func TestXMLParserWithMixedEscapingAndCDATA(t *testing.T) {
+	xmlInput := `<tool>
+<server_name>local</server_name>
+<tool_name>apply_diff</tool_name>
+<arguments>
+  <path>test.go</path>
+  <search>old &amp; code</search>
+  <replace><![CDATA[new & improved code]]></replace>
+</arguments>
+</tool>`
+
+	toolCall, _, err := ParseToolCall(xmlInput)
+	if err != nil {
+		t.Fatalf("ParseToolCall failed: %v", err)
+	}
+
+	var args struct {
+		XMLName xml.Name `xml:"arguments"`
+		Path    string   `xml:"path"`
+		Search  string   `xml:"search"`
+		Replace string   `xml:"replace"`
+	}
+
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
+		t.Fatalf("Failed to unmarshal arguments: %v", err)
+	}
+
+	// Verify entity-escaped field
+	if args.Search != "old & code" {
+		t.Errorf("Expected search='old & code', got %q", args.Search)
+	}
+
+	// Verify CDATA field
+	if args.Replace != "new & improved code" {
+		t.Errorf("Expected replace='new & improved code', got %q", args.Replace)
+	}
+}
+
+// TestXMLParserWithEntityEscaping tests the parser with XML entity-escaped content
+// This verifies ADR-0024: XML entity escaping as primary method
+func TestXMLParserWithAllStandardEntities(t *testing.T) {
+	xmlInput := `<tool>
+<server_name>local</server_name>
+<tool_name>test_tool</tool_name>
+<arguments>
+  <content>Test &amp; &lt; &gt; &quot; &apos; entities</content>
+</arguments>
+</tool>`
+
+	toolCall, _, err := ParseToolCall(xmlInput)
+	if err != nil {
+		t.Fatalf("ParseToolCall failed: %v", err)
+	}
+
+	var args struct {
+		XMLName xml.Name `xml:"arguments"`
+		Content string   `xml:"content"`
+	}
+
+	if err := xml.Unmarshal(toolCall.GetArgumentsXML(), &args); err != nil {
+		t.Fatalf("Failed to unmarshal arguments: %v", err)
+	}
+
+	expected := `Test & < > " ' entities`
+	if args.Content != expected {
+		t.Errorf("Expected content=%q, got %q", expected, args.Content)
+	}
+}
