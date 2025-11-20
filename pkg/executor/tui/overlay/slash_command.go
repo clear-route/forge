@@ -56,6 +56,8 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 	content := buildPreviewContent(commandName, files, message, diff, prTitle, prDesc)
 
 	// Configure base overlay
+	// Note: We don't use OnCustomKey here because we handle keys directly in Update()
+	// to ensure the overlay clears immediately before executing commands
 	baseConfig := BaseOverlayConfig{
 		Width:          overlayWidth,
 		Height:         overlayHeight,
@@ -67,9 +69,6 @@ func NewSlashCommandPreview(commandName, title string, files []string, message, 
 				actions.ClearOverlay()
 			}
 			return overlay.onReject
-		},
-		OnCustomKey: func(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
-			return overlay.handleCustomKeys(msg, actions)
 		},
 		RenderHeader: overlay.renderHeader,
 		RenderFooter: overlay.renderFooter,
@@ -168,53 +167,7 @@ func (s *SlashCommandPreview) Update(msg tea.Msg, state types.StateProvider, act
 	return s, nil
 }
 
-// handleCustomKeys processes slash command-specific key presses
-func (s *SlashCommandPreview) handleCustomKeys(msg tea.KeyMsg, actions types.ActionHandler) (bool, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "esc", "ctrl+r":
-		// Return batched command: close overlay first, then execute reject
-		return true, s.closeAndExecute(actions, s.onReject)
-	case "ctrl+a":
-		// Return batched command: close overlay first, then execute approve
-		return true, s.closeAndExecute(actions, s.onApprove)
-	case "tab":
-		s.handleToggleSelection()
-		return true, nil
-	case "enter":
-		// Return batched command: close overlay first, then execute selected action
-		if s.selected == ApprovalChoiceAccept {
-			return true, s.closeAndExecute(actions, s.onApprove)
-		}
-		return true, s.closeAndExecute(actions, s.onReject)
-	case "left", "h":
-		s.selected = ApprovalChoiceAccept
-		return true, nil
-	case "right", "l":
-		s.selected = ApprovalChoiceReject
-		return true, nil
-	}
-	return false, nil
-}
-
-// closeAndExecute returns a command that closes the overlay and then executes the action
-func (s *SlashCommandPreview) closeAndExecute(actions types.ActionHandler, actionCmd tea.Cmd) tea.Cmd {
-	if actions == nil {
-		return actionCmd
-	}
-	
-	// Create a command that clears the overlay
-	clearCmd := func() tea.Msg {
-		actions.ClearOverlay()
-		return nil
-	}
-	
-	// Batch the clear command first, then the action command
-	// This ensures the overlay is cleared before the action executes
-	if actionCmd == nil {
-		return clearCmd
-	}
-	return tea.Batch(clearCmd, actionCmd)
-}
+// handleCustomKeys is no longer used - key handling is done in Update() to ensure immediate overlay closing
 
 func (s *SlashCommandPreview) handleToggleSelection() {
 	if s.selected == ApprovalChoiceAccept {

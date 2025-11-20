@@ -70,6 +70,25 @@ func NewGenericApprovalOverlay(request approval.ApprovalRequest, width, height i
 
 // Update handles messages for the approval overlay
 func (a *GenericApprovalOverlay) Update(msg tea.Msg, state types.StateProvider, actions types.ActionHandler) (types.Overlay, tea.Cmd) {
+	// Check if this is an approval/rejection key before delegating to base
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case keyCtrlA:
+			// Ctrl+A always approves, return nil to close overlay immediately
+			return nil, a.request.OnApprove()
+		case keyCtrlR, keyCtrlC, keyEsc:
+			// These always reject, return nil to close overlay immediately
+			return nil, a.request.OnReject()
+		case keyEnter:
+			// Enter submits the currently selected choice
+			if a.ApprovalOverlayBase.Selected() == ApprovalChoiceAccept {
+				return nil, a.request.OnApprove()
+			}
+			return nil, a.request.OnReject()
+		}
+	}
+	
+	// Let base handle other keys (tab, arrows, scrolling, etc.)
 	updatedApproval, cmd := a.ApprovalOverlayBase.Update(msg, state, actions)
 	a.ApprovalOverlayBase = updatedApproval
 	return a, cmd
