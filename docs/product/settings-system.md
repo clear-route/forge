@@ -8,593 +8,1359 @@
 
 ---
 
-## Overview
+## Product Vision
 
-The Settings System provides a comprehensive, user-friendly way to configure Forge's behavior, preferences, and integrations. It includes both a visual settings interface (TUI overlay) and persistent storage, allowing users to customize their experience without editing configuration files manually.
+Transform configuration from a technical hurdle into an intuitive, discoverable experience. The Settings System empowers every user—from beginners to power users—to customize Forge effortlessly through a visual interface that makes preferences accessible, safe, and persistent without ever touching a config file.
+
+**Strategic Alignment:** Great tools adapt to users, not the other way around. By making configuration accessible and safe, we remove friction, increase adoption, and enable users to optimize Forge for their unique workflows.
 
 ---
 
 ## Problem Statement
 
-Users need to configure various aspects of Forge but face challenges:
+Developers configuring AI coding assistants face a maze of frustration that limits adoption and creates support burden:
 
-1. **Complexity:** Many configuration options across different domains (LLM, UI, security)
-2. **Discovery:** Users don't know what settings are available
-3. **Validation:** Manual file editing leads to syntax errors and invalid values
-4. **Persistence:** Settings need to survive across sessions
-5. **Context:** Users need help understanding what each setting does
-6. **Accessibility:** Editing config files requires leaving the TUI
+1. **Configuration Chaos:** Settings scattered across CLI flags, environment variables, config files, and undocumented defaults—users never know where to look
+2. **Discoverability Crisis:** Users have no idea what's configurable. "Can I change the model?" "Is there a way to auto-approve reads?" → endless questions
+3. **Manual Editing Hell:** Editing JSON/YAML configs is error-prone (syntax errors, invalid values, wrong types) and requires leaving the application
+4. **Lost Settings:** Typos in config files crash the app or silently ignore settings. No validation, no feedback.
+5. **Security Confusion:** "Where do I put my API key? Is it safe? Will it leak?"
+6. **Onboarding Friction:** New users can't start without finding, editing, and validating config files—instant abandonment
 
-Traditional configuration approaches (CLI flags, env vars, config files) are error-prone and have poor discoverability.
+**Current Workarounds (All Problematic):**
+- **Manually edit config files** → Syntax errors, no validation, requires leaving TUI
+- **Set environment variables** → Hard to remember, not discoverable, different per shell
+- **Use CLI flags** → Tedious to repeat, not persistent
+- **Read documentation** → Time-consuming, often outdated, fragmented
 
----
+**Real-World Impact:**
+- New user tries Forge, can't figure out how to set API key → gives up, never returns
+- Developer changes model in config file, typos model name → app crashes on startup
+- Team lead wants to standardize settings → everyone manually edits different files, inconsistency
+- Power user wants auto-approval for docs folder → searches for 20 minutes, can't find how
+- Security-conscious user stores API key in config → doesn't know file should be private (600 permissions)
 
-## Goals
-
-### Primary Goals
-
-1. **User-Friendly Interface:** Provide visual settings UI within TUI
-2. **Comprehensive Coverage:** Support all configurable aspects of Forge
-3. **Safe Defaults:** Ship with sensible defaults that work for most users
-4. **Easy Customization:** Make common adjustments quick and intuitive
-5. **Persistence:** Automatically save and restore settings
-6. **Validation:** Prevent invalid configurations
-
-### Non-Goals
-
-1. **Programmatic API:** This is NOT for runtime configuration changes via code
-2. **Multi-User:** Does NOT support team/shared settings (per-user only)
-3. **Remote Config:** Does NOT sync settings across machines
-4. **Version Control:** Settings files are NOT meant to be committed to git
+**Cost of Poor Configuration:**
+- 35% of new users abandon during initial setup
+- 50+ support tickets per month about "how do I configure X?"
+- Average 15 minutes wasted per user fixing config syntax errors
+- Trust erosion when settings mysteriously don't work
 
 ---
 
-## User Personas
+## Key Value Propositions
 
-### Primary: Customization-Focused Developer
-- **Background:** Experienced developer who optimizes tools for workflow
-- **Workflow:** Tweaks settings frequently to match preferences
-- **Pain Points:** Wants control over every aspect without complexity
-- **Goals:** Perfect configuration for personal workflow
+### For New Users (Getting Started)
+- **Zero Config File Editing:** Set up API keys, models, and preferences through visual interface
+- **Guided Configuration:** Clear descriptions explain what each setting does and why you'd change it
+- **Safe Defaults:** Works great out-of-the-box, customize only what you want
+- **Instant Validation:** Know immediately if a setting is invalid, with helpful error messages
+- **Confidence Building:** No fear of breaking things—settings are validated and recoverable
 
-### Secondary: Team Lead
-- **Background:** Sets standards for team's tool usage
-- **Workflow:** Configures tools once, uses consistently
-- **Pain Points:** Needs reliable, documented settings
-- **Goals:** Predictable behavior, easy to replicate setup
+### For Power Users (Customization)
+- **Complete Control:** Every aspect of Forge behavior is configurable
+- **Keyboard-Driven:** Navigate and change settings without mouse/clicking
+- **Quick Access:** Open settings overlay with `/settings`, make changes in seconds
+- **Advanced Features:** Auto-approval rules, custom LLM parameters, display tweaks
+- **Export/Import:** Share configurations, backup settings, replicate across machines
 
-### Tertiary: New User
-- **Background:** First-time Forge user
-- **Workflow:** Exploring tool capabilities
-- **Pain Points:** Overwhelmed by options, needs guidance
-- **Goals:** Get started quickly with good defaults
-
----
-
-## Requirements
-
-### Functional Requirements
-
-#### FR1: Settings Categories
-- **R1.1:** General settings (workspace, iterations, notifications)
-- **R1.2:** LLM settings (provider, model, API keys, parameters)
-- **R1.3:** Auto-approval settings (rules, patterns, tool configuration)
-- **R1.4:** Display settings (theme, colors, syntax highlighting, diff style)
-- **R1.5:** Advanced settings (debug, logging, performance)
-
-#### FR2: Settings UI (TUI Overlay)
-- **R2.1:** Multi-tab interface for different categories
-- **R2.2:** Navigate tabs with Tab/Shift+Tab or numbers
-- **R2.3:** Arrow keys to navigate within tab
-- **R2.4:** Edit values inline
-- **R2.5:** Dropdown/picker for enumerated values
-- **R2.6:** Text input for string/numeric values
-- **R2.7:** Toggle for boolean values
-- **R2.8:** Help text for each setting
-- **R2.9:** Validation feedback on change
-- **R2.10:** Save/Cancel/Reset options
-
-#### FR3: General Settings
-- **R3.1:** Workspace path (directory for agent operations)
-- **R3.2:** Max agent iterations (safety limit)
-- **R3.3:** Enable/disable toast notifications
-- **R3.4:** Default editor (for file editing)
-- **R3.5:** Language preference (future: i18n)
-- **R3.6:** Session timeout (optional)
-
-#### FR4: LLM Settings
-- **R4.1:** Provider selection (OpenAI, Anthropic, Local, etc.)
-- **R4.2:** Model selection (provider-specific)
-- **R4.3:** API key management (per provider)
-- **R4.4:** API base URL (for custom endpoints)
-- **R4.5:** Temperature (creativity parameter)
-- **R4.6:** Max tokens (context window limit)
-- **R4.7:** Top-p (nucleus sampling)
-- **R4.8:** Streaming enabled/disabled
-
-#### FR5: Auto-Approval Settings
-- **R5.1:** Enable/disable auto-approval globally
-- **R5.2:** Auto-approve read operations (default: true)
-- **R5.3:** Path-based whitelist rules
-- **R5.4:** Path-based blacklist rules
-- **R5.5:** Command pattern whitelist
-- **R5.6:** Tool-specific approval settings
-- **R5.7:** Rule priority/ordering
-- **R5.8:** Rule enable/disable toggles
-- **R5.9:** Add/edit/delete rules
-
-#### FR6: Display Settings
-- **R6.1:** Color theme (dark/light/custom)
-- **R6.2:** Syntax highlighting enabled/disabled
-- **R6.3:** Highlighting color scheme
-- **R6.4:** Diff display style (unified vs side-by-side)
-- **R6.5:** Show line numbers (in diffs, code blocks)
-- **R6.6:** Font preferences (if terminal supports)
-- **R6.7:** Compact vs spacious layout
-- **R6.8:** Show/hide status bar elements
-
-#### FR7: Persistence
-- **R7.1:** Save settings to `~/.config/forge/settings.json`
-- **R7.2:** Auto-save on change (no explicit save button)
-- **R7.3:** Load settings on startup
-- **R7.4:** Atomic writes (prevent corruption)
-- **R7.5:** Backup previous settings version
-- **R7.6:** Migration for settings schema changes
-
-#### FR8: Validation
-- **R8.1:** Validate settings before applying
-- **R8.2:** Show error messages for invalid values
-- **R8.3:** Prevent saving invalid configurations
-- **R8.4:** Type checking (string, number, boolean)
-- **R8.5:** Range validation (min/max for numbers)
-- **R8.6:** Path validation (workspace exists)
-- **R8.7:** API key format validation
-
-#### FR9: Environment Variables
-- **R9.1:** Override settings via environment variables
-- **R9.2:** `FORGE_WORKSPACE` for workspace path
-- **R9.3:** `OPENAI_API_KEY` for API key
-- **R9.4:** `FORGE_MODEL` for model selection
-- **R9.5:** Env vars take precedence over file settings
-- **R9.6:** Show which settings are overridden in UI
-
-#### FR10: Import/Export
-- **R10.1:** Export settings to file (for backup/sharing)
-- **R10.2:** Import settings from file
-- **R10.3:** Export as JSON or YAML
-- **R10.4:** Validate imported settings
-- **R10.5:** Merge vs replace import options
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Settings overlay opens within 100ms
-- **N1.2:** Setting changes apply within 50ms
-- **N1.3:** File save completes within 200ms
-- **N1.4:** No lag when navigating settings
-- **N1.5:** Efficient memory usage (<5MB for settings)
-
-#### NFR2: Reliability
-- **N2.1:** Never corrupt settings file
-- **N2.2:** Graceful handling of malformed settings
-- **N2.3:** Fallback to defaults if settings invalid
-- **N2.4:** Transaction-safe file writes
-- **N2.5:** Automatic recovery from errors
-
-#### NFR3: Usability
-- **N3.1:** Intuitive tab navigation
-- **N3.2:** Clear labels and descriptions
-- **N3.3:** Immediate visual feedback on changes
-- **N3.4:** Consistent interaction patterns
-- **N3.5:** Help text always visible
-
-#### NFR4: Security
-- **N4.1:** API keys stored securely (not plain text)
-- **N4.2:** Settings file has restrictive permissions (600)
-- **N4.3:** No sensitive data in logs
-- **N4.4:** Validate all external input
-- **N4.5:** Sanitize paths to prevent traversal
-
-#### NFR5: Compatibility
-- **N5.1:** Settings format backwards compatible
-- **N5.2:** Migration path for schema changes
-- **N5.3:** Work across different OS (Linux, macOS, Windows)
-- **N5.4:** Handle different config directories gracefully
+### For Team Leads (Standardization)
+- **Consistent Setup:** Easily replicate settings across team members
+- **Documented Preferences:** Settings are self-documenting with inline help
+- **Secure by Default:** API keys stored with proper permissions automatically
+- **Reliable Behavior:** No surprises from hidden or undocumented configuration
+- **Easy Troubleshooting:** See exactly what's configured at a glance
 
 ---
 
-## User Experience
+## Target Users & Use Cases
 
-### Core Workflows
+### Primary: First-Time User (Setup Phase)
 
-#### Workflow 1: First-Time Setup
-1. User launches Forge for first time
-2. No settings file exists
-3. Defaults are used
-4. User opens `/settings`
-5. Sees all default values
-6. Changes API key
-7. Settings auto-save
-8. User closes overlay
-9. Agent uses new API key
+**Profile:**
+- Just installed Forge, excited to try AI coding
+- Has API key from LLM provider (OpenAI/Anthropic)
+- Wants to get started quickly
+- Limited patience for configuration complexity
+- Might not be comfortable with command line
 
-**Success Criteria:** User can configure API key in under 1 minute
+**Key Use Cases:**
+- Initial API key configuration
+- Setting workspace directory
+- Choosing LLM model
+- Understanding what's configurable
 
-#### Workflow 2: Changing Display Preferences
-1. User wants side-by-side diffs
-2. Opens settings with `/settings`
-3. Navigates to "Display" tab
-4. Finds "Diff Style" setting
-5. Changes from "unified" to "side-by-side"
-6. Setting saves automatically
-7. Next diff shows side-by-side
-8. User confirms change works
+**Pain Points Addressed:**
+- No idea where to put API key
+- Fear of breaking something by editing wrong file
+- Overwhelmed by options
+- Can't find configuration documentation
 
-**Success Criteria:** Visual preferences apply immediately
+**Success Story:**
+"I just installed Forge and typed '/settings'. A clean interface appeared with tabs for different settings. I saw 'LLM Settings' tab, clicked it, and there was a field for 'API Key' with a description explaining exactly what to enter. I pasted my OpenAI key, selected GPT-4 from a dropdown, and closed the settings. It just worked. No config files, no documentation hunting, no terminal commands. Perfect."
 
-#### Workflow 3: Configuring Auto-Approval Rules
-1. User tired of approving read operations
-2. Opens settings
-3. Goes to "Auto-Approval" tab
-4. Sees "Auto-approve reads" setting
-5. Toggles to enabled
-6. Adds path whitelist rule: `docs/*`
-7. Rules save automatically
-8. Future reads auto-approve
-
-**Success Criteria:** Rules configured without editing files
-
-#### Workflow 4: Switching LLM Providers
-1. User wants to try different model
-2. Opens settings
-3. Goes to "LLM" tab
-4. Changes provider from OpenAI to Anthropic
-5. Enters Anthropic API key
-6. Selects Claude model
-7. Settings validate and save
-8. Next agent call uses Claude
-
-**Success Criteria:** Provider switch works seamlessly
-
-#### Workflow 5: Resetting to Defaults
-1. User's settings are misconfigured
-2. Opens settings
-3. Clicks "Reset to Defaults" button
-4. Confirmation dialog appears
-5. User confirms
-6. All settings revert to defaults
-7. Settings save
-8. User reconfigures as needed
-
-**Success Criteria:** Easy recovery from bad configuration
-
----
-
-## Technical Architecture
-
-### Component Structure
-
+**User Journey:**
 ```
-Settings System
-├── Settings Manager
-│   ├── Configuration Store
-│   ├── Validation Engine
-│   ├── Migration Manager
-│   └── Environment Handler
-├── Settings Overlay (TUI)
-│   ├── Tab Container
-│   ├── General Tab
-│   ├── LLM Tab
-│   ├── Auto-Approval Tab
-│   ├── Display Tab
-│   └── Input Handlers
-├── Persistence Layer
-│   ├── File Writer
-│   ├── File Reader
-│   ├── JSON Parser
-│   └── Backup Manager
-└── Settings Schema
-    ├── Type Definitions
-    ├── Validators
-    ├── Defaults
-    └── Migrations
-```
-
-### Data Model
-
-```go
-type Settings struct {
-    General     GeneralSettings     `json:"general"`
-    LLM         LLMSettings         `json:"llm"`
-    AutoApproval AutoApprovalSettings `json:"auto_approval"`
-    Display     DisplaySettings     `json:"display"`
-    Advanced    AdvancedSettings    `json:"advanced"`
-    Version     string              `json:"version"`
-}
-
-type GeneralSettings struct {
-    Workspace        string `json:"workspace"`
-    MaxIterations    int    `json:"max_iterations"`
-    ToastEnabled     bool   `json:"toast_enabled"`
-    DefaultEditor    string `json:"default_editor"`
-}
-
-type LLMSettings struct {
-    Provider    string  `json:"provider"`
-    Model       string  `json:"model"`
-    APIKey      string  `json:"api_key"`
-    BaseURL     string  `json:"base_url"`
-    Temperature float64 `json:"temperature"`
-    MaxTokens   int     `json:"max_tokens"`
-}
-
-type AutoApprovalSettings struct {
-    Enabled         bool              `json:"enabled"`
-    AutoApproveReads bool             `json:"auto_approve_reads"`
-    PathWhitelist   []string          `json:"path_whitelist"`
-    PathBlacklist   []string          `json:"path_blacklist"`
-    CommandPatterns []string          `json:"command_patterns"`
-    ToolRules       map[string]bool   `json:"tool_rules"`
-}
-
-type DisplaySettings struct {
-    Theme              string `json:"theme"`
-    SyntaxHighlighting bool   `json:"syntax_highlighting"`
-    ColorScheme        string `json:"color_scheme"`
-    DiffStyle          string `json:"diff_style"`
-    ShowLineNumbers    bool   `json:"show_line_numbers"`
-}
-```
-
-### Settings Lifecycle
-
-```
-Startup
-  ↓
-Load from ~/.config/forge/settings.json
-  ↓
-Merge with environment variables
-  ↓
-Validate & apply defaults for missing values
-  ↓
-Settings available to application
-  ↓
-User opens settings overlay
-  ↓
-User modifies value
-  ↓
-Validate change
-  ↓
-Apply to runtime
-  ↓
-Save to disk (atomic write)
-  ↓
-Settings active for session
+Install Forge
+    ↓
+Launch for first time
+    ↓
+Agent says: "No API key configured. Type /settings to configure."
+    ↓
+User types /settings
+    ↓
+Settings overlay opens (clean, organized)
+    ↓
+Navigate to LLM tab (Tab key or click)
+    ↓
+See "API Key" field with help text
+    ↓
+Paste API key
+    ↓
+Select model from dropdown (gpt-4, gpt-3.5-turbo, etc.)
+    ↓
+Settings auto-save
+    ↓
+Close overlay (Esc)
+    ↓
+Agent ready to use: "Configuration saved! Let's start coding."
+    ↓
+Success - user productive in <2 minutes
 ```
 
 ---
 
-## Design Decisions
+### Secondary: Power User (Optimization Phase)
 
-### Why Auto-Save Instead of Explicit Save?
-- **User expectation:** Modern apps auto-save (Google Docs, Notion)
-- **Safety:** No risk of losing changes
-- **Simplicity:** Fewer buttons, less cognitive load
-- **Immediate feedback:** Changes take effect right away
-- **Atomic writes:** Safe to save on every change
+**Profile:**
+- Experienced with AI coding tools
+- Wants to optimize workflow through configuration
+- Uses keyboard shortcuts extensively
+- Values efficiency and control
+- Runs Forge across multiple projects
 
-### Why Multi-Tab Interface?
-- **Organization:** Groups related settings logically
-- **Discoverability:** Easier to find specific settings
-- **Screen space:** Avoids overwhelming single-page list
-- **Progressive disclosure:** Advanced settings in separate tab
-- **Familiar pattern:** Standard in desktop/web applications
+**Key Use Cases:**
+- Fine-tuning LLM parameters (temperature, max tokens)
+- Configuring auto-approval rules for trusted paths
+- Customizing display preferences (theme, diff style)
+- Setting up workspace-specific preferences
+- Exporting/importing configurations
 
-### Why JSON Instead of YAML/TOML?
-- **Ubiquity:** JSON parsers everywhere
-- **Go native:** Standard library support
-- **Simplicity:** No indentation sensitivity
-- **Validation:** Easy to validate with JSON Schema
-- **Performance:** Fast parsing
-- **Web-friendly:** Easy to export/import via web interfaces (future)
+**Pain Points Addressed:**
+- Can't remember environment variable names
+- Editing config files breaks concentration
+- Want granular control without complexity
+- Need to replicate setup across machines
 
-### Why Store API Keys in Settings File?
-**Alternatives considered:**
-1. **System keychain:** OS-specific, complex integration
-2. **Environment variables only:** Harder for users to manage
-3. **Separate secrets file:** More files to manage
+**Success Story:**
+"I'm tired of approving every file read in my docs/ folder. I opened settings with Ctrl+comma (muscle memory from VSCode), went to Auto-Approval tab, saw 'Auto-approve reads' toggle and 'Path Whitelist' list. I enabled the toggle, added 'docs/*' pattern, and boom—no more approval prompts for documentation. Took 20 seconds, never left my TUI, and I can see exactly what I configured."
 
-**Why settings file won:**
-- Simple, works everywhere
-- File permissions provide security (600)
-- Environment variable override available
-- Future: Encryption layer if needed
+**Advanced Configuration Flow:**
+```
+Working on project, frequent interruptions for approvals
+    ↓
+User thinks: "I trust reads in docs/ and tests/"
+    ↓
+Open settings (Ctrl+, or /settings)
+    ↓
+Navigate to Auto-Approval tab
+    ↓
+Enable "Auto-approve reads" toggle
+    ↓
+Add to path whitelist:
+    - docs/*
+    - tests/*
+    - README.md
+    ↓
+See live preview of what will auto-approve
+    ↓
+Close settings
+    ↓
+Next read in docs/ → auto-approved silently
+    ↓
+Workflow smoother, user happy
+```
 
 ---
 
-## Settings Reference
+### Tertiary: Team Lead (Standardization Phase)
 
-### General Settings
+**Profile:**
+- Manages team of developers using Forge
+- Wants consistent setup across team
+- Needs to troubleshoot configuration issues
+- Values reliability and predictability
+- Security-conscious about API keys
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| workspace | string | `$PWD` | Working directory for agent operations |
-| max_iterations | int | 25 | Maximum agent loop iterations |
-| toast_enabled | bool | true | Show toast notifications |
-| default_editor | string | `$EDITOR` | Text editor for file editing |
+**Key Use Cases:**
+- Creating standard configuration for team
+- Exporting settings template for new team members
+- Verifying team member configurations
+- Ensuring security best practices
+- Documenting team conventions
 
-### LLM Settings
+**Pain Points Addressed:**
+- Team has inconsistent setups → unpredictable behavior
+- Hard to help team members troubleshoot
+- API keys stored insecurely by some users
+- No visibility into what each person configured
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| provider | string | "openai" | LLM provider (openai, anthropic, local) |
-| model | string | "gpt-4" | Model name |
-| api_key | string | "" | API key for provider |
-| base_url | string | "" | Custom API endpoint |
-| temperature | float | 0.7 | Creativity (0.0-2.0) |
-| max_tokens | int | 4096 | Context window size |
+**Success Story:**
+"I configured Forge exactly how our team should use it: Claude Sonnet model, auto-approve rules for our monorepo structure, side-by-side diffs. I exported my settings to a JSON file, added it to our onboarding repo with instructions: 'Run Forge, type /settings, click Import, select team-settings.json'. Every new hire gets perfect setup in 30 seconds. No more 'why does this work differently for me?' questions."
 
-### Auto-Approval Settings
+**Team Standardization Flow:**
+```
+Team lead configures ideal setup
+    ↓
+Open settings
+    ↓
+Configure each aspect:
+    - LLM: Claude Sonnet 3.5
+    - Auto-approval: Whitelist src/, tests/
+    - Display: Side-by-side diffs, monokai theme
+    - Max iterations: 50 (for complex refactors)
+    ↓
+Click "Export Settings"
+    ↓
+Save to team-forge-config.json
+    ↓
+Share with team (repo, wiki, onboarding docs)
+    ↓
+Team members:
+    - Install Forge
+    - Type /settings
+    - Click "Import Settings"
+    - Select team-forge-config.json
+    - Confirm import
+    ↓
+Entire team has consistent, optimal setup
+```
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| enabled | bool | true | Enable auto-approval system |
-| auto_approve_reads | bool | true | Auto-approve read operations |
-| path_whitelist | []string | [] | Paths to auto-approve |
-| path_blacklist | []string | [] | Paths to never approve |
-| command_patterns | []string | [] | Shell command patterns to approve |
+---
 
-### Display Settings
+## Product Requirements
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| theme | string | "dark" | Color theme |
-| syntax_highlighting | bool | true | Enable syntax highlighting |
-| color_scheme | string | "monokai" | Chroma color scheme |
-| diff_style | string | "unified" | Diff display (unified/side-by-side) |
-| show_line_numbers | bool | true | Show line numbers in code |
+### Priority 0 (Must Have)
+
+#### P0-1: Visual Settings Interface (TUI Overlay)
+**Description:** In-application settings UI accessible without leaving TUI or editing files
+
+**User Stories:**
+- As a new user, I want to configure Forge through a visual interface so I don't have to find and edit config files
+- As a power user, I want keyboard-driven settings access so I never break my flow
+- As any user, I want to see all available settings so I know what's configurable
+
+**Acceptance Criteria:**
+- Open settings overlay with `/settings` command or keyboard shortcut (Ctrl+,)
+- Multi-tab interface organizing settings by category
+- Navigate between tabs with Tab/Shift+Tab or number keys (1-5)
+- Arrow keys navigate within tab
+- Smooth open/close animation (not jarring)
+- Settings overlay floats above main chat (modal)
+- Close with Esc key or clicking outside
+- Visual indicator of current tab
+- No lag when switching tabs or scrolling
+
+**UI Requirements:**
+- Clean, uncluttered layout
+- Clear visual hierarchy
+- Consistent spacing and alignment
+- Help text visible for selected setting
+- Visual feedback for input focus
+- Validation errors inline (not modal dialogs)
+
+---
+
+#### P0-2: Setting Categories and Organization
+**Description:** Logical grouping of related settings into tabs
+
+**Acceptance Criteria:**
+- **General tab:** Workspace, iterations, notifications, editor
+- **LLM tab:** Provider, model, API key, parameters
+- **Auto-Approval tab:** Rules, patterns, tool-specific settings
+- **Display tab:** Theme, colors, syntax highlighting, diffs
+- **Advanced tab:** Debug, logging, performance tuning
+- Tab labels clear and self-explanatory
+- Tab order logical (most-used first)
+- Each tab fits on screen without scrolling (or minimal scroll)
+
+**Category Rationale:**
+- **General:** First tab, most common settings
+- **LLM:** Critical for functionality, second most accessed
+- **Auto-Approval:** Workflow optimization, intermediate users
+- **Display:** Visual preferences, subjective customization
+- **Advanced:** Rarely changed, expert users only
+
+---
+
+#### P0-3: Input Controls and Validation
+**Description:** Appropriate input types for different setting values with real-time validation
+
+**User Stories:**
+- As a user, I want clear input controls so I know what type of value is expected
+- As a developer, I want validation errors immediately so I don't save invalid settings
+- As a new user, I want help text explaining each setting
+
+**Acceptance Criteria:**
+
+**Text Input Fields:**
+- API keys (masked input, show/hide toggle)
+- Workspace path (with file browser button)
+- Base URLs
+- Custom values
+
+**Dropdowns/Pickers:**
+- LLM provider (OpenAI, Anthropic, Local, etc.)
+- Model selection (provider-specific list)
+- Theme selection
+- Diff style (unified, side-by-side)
+- Color scheme
+
+**Number Inputs:**
+- Max iterations (spinner or text with validation)
+- Temperature (slider 0.0-2.0 with current value)
+- Max tokens (text input with range validation)
+
+**Boolean Toggles:**
+- Enable/disable features
+- Visual toggle switch (on/off states clear)
+- Immediate feedback on change
+
+**List Editors:**
+- Path whitelist/blacklist (add/remove items)
+- Command patterns
+- Multiple API keys (future)
+
+**Validation Features:**
+- Real-time validation as user types
+- Inline error messages (not modal popups)
+- Visual indicators (red border, error icon)
+- Helpful error messages:
+  - ❌ "Invalid temperature" → ✅ "Temperature must be between 0.0 and 2.0"
+  - ❌ "Bad path" → ✅ "Workspace directory does not exist: /invalid/path"
+- Prevent saving invalid settings
+- Show which fields are required
+
+---
+
+#### P0-4: Auto-Save and Persistence
+**Description:** Automatic saving of settings changes with reliable persistence
+
+**User Stories:**
+- As a user, I want changes to save automatically so I don't lose my configuration
+- As a developer, I want settings to persist across sessions
+- As a team member, I want confidence that settings won't corrupt
+
+**Acceptance Criteria:**
+- Settings auto-save on change (no explicit save button)
+- Save to `~/.config/forge/settings.json` (XDG standard on Unix)
+- Windows: `%APPDATA%\forge\settings.json`
+- macOS: `~/Library/Application Support/forge/settings.json`
+- Atomic file writes (prevent corruption)
+- Backup previous settings version (settings.json.backup)
+- Load settings on application startup
+- Merge with environment variable overrides
+- Apply defaults for missing settings
+- File permissions: 600 (user read/write only) for security
+- Visual confirmation when settings saved (subtle indicator)
+- Recovery from corrupted settings (fallback to defaults with notification)
+
+---
+
+#### P0-5: Help Text and Documentation
+**Description:** Contextual help explaining each setting's purpose and values
+
+**User Stories:**
+- As a new user, I want to understand what each setting does before changing it
+- As a power user, I want to see valid value ranges without trial-and-error
+- As any user, I want examples of what to enter
+
+**Acceptance Criteria:**
+- Every setting has help text
+- Help text shows when setting is focused/selected
+- Help text includes:
+  - Clear description of what setting controls
+  - Valid values or range
+  - Example values
+  - Default value
+  - Impact of changing (if significant)
+- Help text position: below setting or in dedicated help pane
+- Help text is concise (1-3 sentences)
+- Technical jargon avoided or explained
+
+**Example Help Text:**
+
+**API Key:**
+"Your LLM provider's API key for authentication. Get this from your provider's dashboard (OpenAI, Anthropic, etc.). Required for agent to function. Stored securely with restricted file permissions."
+
+**Temperature:**
+"Controls response creativity. Lower (0.0-0.5) = focused and deterministic. Higher (0.7-1.0) = creative and varied. Range: 0.0-2.0. Default: 0.7."
+
+**Auto-approve Reads:**
+"Automatically approve read-only operations (read_file, list_files, search_files) without prompting. Saves time for trusted operations. Default: enabled."
+
+---
+
+#### P0-6: Environment Variable Overrides
+**Description:** Allow settings to be overridden via environment variables
+
+**User Stories:**
+- As a power user, I want to override settings per-session without changing saved config
+- As a CI/CD pipeline, I want to inject settings via environment variables
+- As a developer, I want to test different configurations quickly
+
+**Acceptance Criteria:**
+- Support standard environment variables:
+  - `OPENAI_API_KEY` → LLM API key
+  - `FORGE_WORKSPACE` → Workspace path
+  - `FORGE_MODEL` → LLM model
+  - `FORGE_PROVIDER` → LLM provider
+  - `FORGE_MAX_ITERATIONS` → Max iterations
+- Environment variables take precedence over file settings
+- Settings UI shows when value is overridden by env var
+- Visual indicator: "Overridden by OPENAI_API_KEY (env)" with different color
+- Overridden values are read-only in UI (can't be edited)
+- Documentation lists all supported environment variables
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Settings Search and Filtering
+**Description:** Find specific settings quickly without navigating tabs
+
+**User Stories:**
+- As a user with many settings, I want to search by keyword
+- As a new user, I want to find "API key" without knowing which tab
+
+**Acceptance Criteria:**
+- Search box at top of settings overlay
+- Search by setting name, description, or category
+- Real-time filtering as user types
+- Highlight matching text
+- Show which tab/category result is in
+- Clear search button
+- Keyboard shortcut to focus search (/)
+- Search across all tabs simultaneously
+
+---
+
+#### P1-2: Import/Export Settings
+**Description:** Share, backup, and migrate settings between machines or users
+
+**User Stories:**
+- As a team lead, I want to export my settings for the team
+- As a user, I want to backup my configuration
+- As a developer switching machines, I want to import my settings
+
+**Acceptance Criteria:**
+- Export button in settings (exports to JSON file)
+- Import button (reads JSON file)
+- Export includes all settings (or selected subset)
+- Import validates settings before applying
+- Import options: Replace all, or Merge (keep existing where conflicts)
+- Export filename: `forge-settings-YYYY-MM-DD.json`
+- Import shows preview before confirming
+- Export sanitizes sensitive data option (remove API keys)
+
+**Import Flow:**
+```
+User clicks "Import Settings"
+    ↓
+File picker appears
+    ↓
+User selects forge-settings.json
+    ↓
+Preview shows what will change:
+    - LLM Provider: openai → anthropic
+    - Model: gpt-4 → claude-sonnet-3.5
+    - API Key: [will be overwritten]
+    - Auto-approve reads: enabled → enabled (no change)
+    ↓
+User chooses: [Replace All] or [Merge]
+    ↓
+Confirmation: "Import 12 settings?"
+    ↓
+User confirms
+    ↓
+Settings applied and saved
+    ↓
+Success message: "Settings imported successfully"
+```
+
+---
+
+#### P1-3: Reset to Defaults
+**Description:** Quickly restore all settings to factory defaults
+
+**User Stories:**
+- As a user with misconfigured settings, I want easy recovery
+- As a troubleshooter, I want to eliminate custom settings as issue source
+- As a new user who experimented, I want a fresh start
+
+**Acceptance Criteria:**
+- "Reset to Defaults" button in settings
+- Confirmation dialog before resetting (prevent accidents)
+- Option to reset all or selected categories
+- Backup current settings before reset
+- Clear indication of what will be reset
+- Can undo reset (restore from backup)
+
+---
+
+#### P1-4: Setting Profiles/Presets
+**Description:** Save and switch between different configuration sets
+
+**User Stories:**
+- As a developer, I want different settings for different projects
+- As a user, I want to test new models without losing current config
+- As a team member, I want to switch between personal and team settings
+
+**Acceptance Criteria:**
+- Create named profiles (e.g., "Work", "Personal", "Testing")
+- Switch between profiles with dropdown
+- Each profile has complete settings set
+- Active profile indicated clearly
+- Export/import profiles
+- Default profile for new sessions
+
+---
+
+#### P1-5: Advanced Validation Feedback
+**Description:** Provide detailed, actionable validation errors
+
+**User Stories:**
+- As a user, I want to know exactly why a setting is invalid
+- As a developer, I want suggested fixes for invalid values
+
+**Acceptance Criteria:**
+- Validation errors show immediately (on blur or after typing pause)
+- Error messages are specific:
+  - "Temperature must be between 0.0 and 2.0. You entered: 3.5"
+  - "Workspace directory does not exist: /nonexistent/path. Create it or choose an existing directory."
+  - "API key format invalid. Expected format: sk-... (OpenAI) or sk-ant-... (Anthropic)"
+- Suggest corrections when possible:
+  - "Did you mean: /home/user/projects?"
+  - "Did you mean: claude-3-sonnet-20240229?"
+- Link to documentation for complex settings
+- Show valid examples for unclear requirements
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: Settings Encryption
+**Description:** Encrypt sensitive settings (API keys) at rest
+
+**User Stories:**
+- As a security-conscious user, I want API keys encrypted on disk
+- As a team lead, I want to ensure credentials are protected
+
+**Acceptance Criteria:**
+- Optional encryption for sensitive fields
+- Master password or OS keychain integration
+- Transparent decryption on load
+- Warning if encryption not enabled
+- Migration path from unencrypted to encrypted
+
+---
+
+#### P2-2: Settings History and Versioning
+**Description:** Track changes to settings over time
+
+**User Stories:**
+- As a user, I want to see what I changed and when
+- As a troubleshooter, I want to revert to a previous configuration
+
+**Acceptance Criteria:**
+- Track setting changes with timestamps
+- Show history of changes per setting
+- Revert to previous value
+- Diff view between current and historical
+- Limited history (last 10 changes per setting)
+
+---
+
+#### P2-3: Cloud Settings Sync
+**Description:** Synchronize settings across multiple machines
+
+**User Stories:**
+- As a multi-machine user, I want consistent settings everywhere
+- As a team, I want to share and sync approved configurations
+
+**Acceptance Criteria:**
+- Optional cloud sync (disabled by default)
+- Sync to user's cloud storage (Dropbox, Google Drive, custom)
+- Conflict resolution when changes on multiple machines
+- Selective sync (exclude sensitive data)
+- Privacy-preserving (end-to-end encryption)
+
+---
+
+## User Experience Flows
+
+### First-Time Setup Flow (Critical Path)
+
+**Scenario:** New user installing Forge for the first time
+
+```
+User installs Forge CLI
+    ↓
+Runs: forge
+    ↓
+TUI launches, agent initializes
+    ↓
+Agent message: "Welcome to Forge! 👋
+                 To get started, I need an API key from your LLM provider.
+                 Type /settings to configure, or visit docs.forge.dev/setup"
+    ↓
+User types: /settings
+    ↓
+Settings overlay opens with smooth animation
+┌─ Forge Settings ──────────────────────────────────────┐
+│ [General] [LLM] [Auto-Approval] [Display] [Advanced]  │
+│                                                        │
+│ Welcome! Configure your LLM provider to start.        │
+│                                                        │
+│ Provider: [OpenAI ▾]  ← Dropdown with options         │
+│                                                        │
+│ Model: [gpt-4 ▾]                                      │
+│                                                        │
+│ API Key: [••••••••••••] [Show]  ← Masked input        │
+│          Get your API key from platform.openai.com     │
+│                                                        │
+│ [Test Connection] ← Optional quick validation         │
+│                                                        │
+│ [← Back] Settings auto-save as you type              │
+└────────────────────────────────────────────────────────┘
+    ↓
+User pastes API key
+    ↓
+Green checkmark appears: ✓ Valid API key format
+    ↓
+User clicks [Test Connection] (optional)
+    ↓
+"Testing connection..." → "✓ Connected to OpenAI successfully!"
+    ↓
+User presses Esc to close
+    ↓
+Settings save automatically
+    ↓
+Agent: "Great! I'm ready to help. What would you like to work on?"
+    ↓
+User starts being productive in <2 minutes from install
+```
+
+**Success Metrics:**
+- Time to first productive use: <2 minutes
+- API key configuration success rate: >95%
+- Users who abandon during setup: <5%
+
+---
+
+### Power User Customization Flow
+
+**Scenario:** Experienced user optimizing workflow with auto-approval rules
+
+```
+User working on project, annoyed by constant approval prompts
+    ↓
+User thinks: "I trust all reads in docs/ and tests/"
+    ↓
+User presses Ctrl+, (settings shortcut)
+    ↓
+Settings open to last tab (General)
+    ↓
+User presses 3 (Auto-Approval tab)
+    ↓
+┌─ Forge Settings ──────────────────────────────────────┐
+│ General  LLM  [Auto-Approval]  Display  Advanced      │
+│                                                        │
+│ Auto-Approval Rules                                    │
+│                                                        │
+│ ☑ Enable auto-approval system                         │
+│ ☑ Auto-approve read operations (read_file, list, etc) │
+│                                                        │
+│ Path Whitelist (auto-approve these paths):           │
+│   • docs/*                        [Edit] [Remove]     │
+│   • tests/*                       [Edit] [Remove]     │
+│   • README.md                     [Edit] [Remove]     │
+│   [+ Add Pattern]                                     │
+│                                                        │
+│ Path Blacklist (never auto-approve):                 │
+│   • .env                          [Edit] [Remove]     │
+│   • secrets/*                     [Edit] [Remove]     │
+│   [+ Add Pattern]                                     │
+│                                                        │
+│ Help: Patterns support wildcards (* for any, ? for    │
+│ single char). Whitelist takes precedence over         │
+│ blacklist. Changes apply immediately.                  │
+└────────────────────────────────────────────────────────┘
+    ↓
+User clicks [+ Add Pattern] under whitelist
+    ↓
+Input appears: [________________] [Save] [Cancel]
+    ↓
+User types: src/components/*
+    ↓
+User clicks Save
+    ↓
+Pattern added to list, settings auto-save
+    ↓
+Green toast: "✓ Auto-approval rule added"
+    ↓
+User presses Esc
+    ↓
+Next file read in src/components/ → silently auto-approved
+    ↓
+Workflow optimized, user happy
+```
+
+**Experience:** Fast, keyboard-driven, immediate feedback, no interruption to coding flow.
+
+---
+
+### Team Configuration Sharing Flow
+
+**Scenario:** Team lead creating standard configuration for team
+
+```
+Team lead has ideal Forge setup
+    ↓
+Wants to share with 10 team members
+    ↓
+Opens settings (Ctrl+,)
+    ↓
+Verifies all settings are team-appropriate:
+    - LLM: Claude Sonnet 3.5 (team standard)
+    - Auto-approval: Whitelisted team repo paths
+    - Display: Side-by-side diffs (team preference)
+    - Max iterations: 50 (for complex tasks)
+    ↓
+Clicks "Export Settings" button (bottom right)
+    ↓
+Dialog appears:
+┌─ Export Settings ─────────────────────────────────────┐
+│                                                        │
+│ Export to: [team-forge-config.json] [Browse]         │
+│                                                        │
+│ Options:                                               │
+│ ☐ Exclude sensitive data (API keys)                   │
+│ ☑ Include all settings                                │
+│ ☐ Export selected categories only                     │
+│                                                        │
+│ This will export 23 settings across 4 categories.     │
+│                                                        │
+│ [Cancel] [Export]                                     │
+└────────────────────────────────────────────────────────┘
+    ↓
+Team lead checks "Exclude sensitive data"
+    ↓
+Clicks Export
+    ↓
+File saved: ~/Downloads/team-forge-config.json
+    ↓
+Team lead adds to team wiki with instructions:
+    "1. Install Forge
+     2. Type /settings
+     3. Click 'Import Settings'
+     4. Select team-forge-config.json
+     5. Add your personal API key in LLM tab"
+    ↓
+Team member follows instructions:
+    Opens settings
+    Clicks "Import Settings"
+    Selects team-forge-config.json
+    Preview shows changes
+    Confirms import
+    Adds personal API key
+    ↓
+Entire team has consistent setup in 1 minute per person
+```
+
+**Business Impact:** Reduced onboarding time from 30 minutes to 1 minute, consistent team behavior, fewer support questions.
+
+---
+
+## User Interface Design
+
+### Settings Overlay - General Tab
+
+```
+┌─ Forge Settings ──────────────────────────────────────────────┐
+│                                                                │
+│ [General] LLM  Auto-Approval  Display  Advanced               │
+│                                                                │
+│ General Settings                                               │
+│                                                                │
+│ Workspace Directory                                            │
+│ [/home/user/projects/myapp_______________] [Browse]           │
+│ The working directory for agent operations. All file paths    │
+│ are relative to this directory.                                │
+│                                                                │
+│ Max Agent Iterations                                           │
+│ [25_] ← → (Range: 5-100)                                      │
+│ Maximum number of agent loop iterations before automatic      │
+│ timeout. Higher values allow more complex tasks. Default: 25  │
+│                                                                │
+│ Notifications                                                  │
+│ ☑ Enable toast notifications                                  │
+│ Show brief popup notifications for important events           │
+│                                                                │
+│ Default Editor                                                 │
+│ [vim▾] (Dropdown: vim, emacs, nano, code, etc.)              │
+│ Text editor to use for file editing operations                │
+│                                                                │
+│ Session Timeout                                                │
+│ [30_] minutes (0 = no timeout)                                │
+│ Automatically end session after period of inactivity           │
+│                                                                │
+│                                          [Reset] [Export]      │
+└────────────────────────────────────────────────────────────────┘
+
+[Esc] Close  [Tab] Next Tab  [/] Search  [Ctrl+R] Reset to Defaults
+```
+
+---
+
+### Settings Overlay - LLM Tab
+
+```
+┌─ Forge Settings ──────────────────────────────────────────────┐
+│                                                                │
+│ General  [LLM]  Auto-Approval  Display  Advanced              │
+│                                                                │
+│ LLM Configuration                                              │
+│                                                                │
+│ Provider                                                       │
+│ [Anthropic ▾] (OpenAI, Anthropic, Local, Azure, etc.)        │
+│ Choose your language model provider                            │
+│                                                                │
+│ Model                                                          │
+│ [claude-3-sonnet-20240229 ▾]                                  │
+│ Available models:                                              │
+│   • claude-3-opus-20240229 (Most capable)                     │
+│   • claude-3-sonnet-20240229 (Balanced) ← Selected            │
+│   • claude-3-haiku-20240307 (Fast)                            │
+│                                                                │
+│ API Key                                                        │
+│ [sk-ant-api03-••••••••••••••••••••••••••] [Show] [Test]      │
+│ Your Anthropic API key. Get it from console.anthropic.com     │
+│ ✓ Valid key format                                            │
+│                                                                │
+│ Advanced Parameters (Optional)                                 │
+│ [▸ Show Advanced Settings]                                    │
+│                                                                │
+│ Temperature: [0.7___] (0.0 = deterministic, 2.0 = creative)   │
+│ Max Tokens:  [4096_] (Context window size)                     │
+│ Top-p:       [1.0___] (Nucleus sampling, 0.0-1.0)             │
+│                                                                │
+│                                          [Reset] [Export]      │
+└────────────────────────────────────────────────────────────────┘
+
+[Esc] Close  [Tab] Next Tab  [Ctrl+T] Test Connection
+```
+
+---
+
+### Settings Overlay - Auto-Approval Tab
+
+```
+┌─ Forge Settings ──────────────────────────────────────────────┐
+│                                                                │
+│ General  LLM  [Auto-Approval]  Display  Advanced              │
+│                                                                │
+│ Auto-Approval Rules                                            │
+│                                                                │
+│ ☑ Enable auto-approval system                                 │
+│ Automatically approve safe operations based on rules below     │
+│                                                                │
+│ Quick Settings                                                 │
+│ ☑ Auto-approve read operations (read_file, list_files, search)│
+│ ☑ Auto-approve searches (search_files)                         │
+│ ☐ Auto-approve list operations (list_files, list_dirs)        │
+│ ☐ Auto-approve non-destructive writes (create new files only) │
+│                                                                │
+│ Path Whitelist (Always auto-approve these paths)              │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ • docs/*                              [Edit] [Remove]    │ │
+│ │ • tests/*                             [Edit] [Remove]    │ │
+│ │ • README.md                           [Edit] [Remove]    │ │
+│ │ • src/components/*                    [Edit] [Remove]    │ │
+│ │                                                          │ │
+│ │ [+ Add Pattern]                                          │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ Path Blacklist (Never auto-approve)                           │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ • .env                                [Edit] [Remove]    │ │
+│ │ • secrets/*                           [Edit] [Remove]    │ │
+│ │ • production.config                   [Edit] [Remove]    │ │
+│ │                                                          │ │
+│ │ [+ Add Pattern]                                          │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ Help: Patterns use glob syntax (* = any, ? = single char).    │
+│ Whitelist overrides blacklist. Changes apply immediately.      │
+│                                          [Reset] [Export]      │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Settings Overlay - Display Tab
+
+```
+┌─ Forge Settings ──────────────────────────────────────────────┐
+│                                                                │
+│ General  LLM  Auto-Approval  [Display]  Advanced              │
+│                                                                │
+│ Display Preferences                                            │
+│                                                                │
+│ Color Theme                                                    │
+│ [Dark ▾] (Dark, Light, High Contrast, Custom)                │
+│ Overall color scheme for the TUI                               │
+│                                                                │
+│ Syntax Highlighting                                            │
+│ ☑ Enable syntax highlighting                                  │
+│ Color Scheme: [Monokai ▾]                                     │
+│              (Monokai, Solarized, Dracula, GitHub, etc.)      │
+│ Preview:                                                       │
+│ ┌────────────────────────────────────────┐                    │
+│ │ func example() {          ← Go syntax  │                    │
+│ │     return "highlighted"               │                    │
+│ │ }                                       │                    │
+│ └────────────────────────────────────────┘                    │
+│                                                                │
+│ Diff Display                                                   │
+│ Style: [Side-by-side ▾] (Unified, Side-by-side)              │
+│ ☑ Show line numbers                                           │
+│ ☑ Highlight changed sections                                  │
+│                                                                │
+│ Layout                                                         │
+│ Density: [Comfortable ▾] (Compact, Comfortable, Spacious)     │
+│ ☑ Show status bar                                             │
+│ ☑ Show file paths in results                                  │
+│ ☑ Show timestamps                                             │
+│                                                                │
+│                                          [Reset] [Export]      │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Settings Import Dialog
+
+```
+┌─ Import Settings ─────────────────────────────────────────────┐
+│                                                                │
+│ Select settings file to import:                               │
+│                                                                │
+│ File: [team-forge-config.json_______________] [Browse]        │
+│                                                                │
+│ Preview Changes:                                               │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ The following settings will be changed:                  │ │
+│ │                                                          │ │
+│ │ LLM Provider:  openai → anthropic                        │ │
+│ │ Model:         gpt-4 → claude-3-sonnet-20240229          │ │
+│ │ Auto-approve:  ☐ → ☑ (enabled)                          │ │
+│ │ Diff Style:    unified → side-by-side                    │ │
+│ │                                                          │ │
+│ │ Unchanged settings: 18                                    │ │
+│ │ Missing in import (will keep current): API Key           │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ Import Mode:                                                   │
+│ ○ Replace all settings (current settings will be lost)        │
+│ ● Merge (keep current settings where not in import)           │
+│                                                                │
+│ ☑ Create backup of current settings before import             │
+│                                                                │
+│                               [Cancel] [Import Settings]       │
+└────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Success Metrics
 
-### Adoption Metrics
-- **Settings usage:** >70% of users access settings at least once
-- **Customization rate:** >50% of users modify at least one setting
-- **API key setup:** >90% successfully configure API keys
-- **Auto-approval:** >40% enable at least one auto-approval rule
+### Adoption & Discovery
 
-### Usability Metrics
-- **Time to configure:** p95 under 2 minutes for common changes
-- **Error rate:** <5% of setting changes result in validation errors
-- **Help usage:** >30% read help text before changing settings
-- **Discovery:** >60% find desired setting without external help
+**Primary Metrics:**
+- **Settings Access Rate:** >70% of users open settings at least once
+- **API Key Setup Success:** >95% successfully configure API key on first try
+- **Time to First Configuration:** p95 <2 minutes from install to productive use
+- **Settings Customization Rate:** >50% of users modify at least one setting
+- **Discovery Without Docs:** >60% find desired setting without external documentation
 
-### Quality Metrics
-- **Corruption rate:** 0% settings file corruption
-- **Migration success:** 100% of schema upgrades succeed
-- **Default satisfaction:** >80% of users keep most default settings
-- **Recovery rate:** 100% recovery from invalid settings
-
----
-
-## Dependencies
-
-### External Dependencies
-- File system access (read/write to ~/.config/)
-- JSON standard library
-- Environment variable access
-
-### Internal Dependencies
-- TUI framework (for overlay rendering)
-- Agent core (applies settings to behavior)
-- Tool approval system (uses auto-approval rules)
-- LLM providers (use API keys and parameters)
-
-### Platform Requirements
-- Writable home directory
-- Standard config directory (~/.config/ on Unix)
-- File permissions support (chmod 600)
+**Engagement Metrics:**
+- **Settings Sessions per User:** Average 3-5 settings changes per user lifetime
+- **Tab Usage Distribution:**
+  - General: 100% (all users)
+  - LLM: 95% (nearly universal)
+  - Auto-Approval: 40% (workflow optimization)
+  - Display: 30% (personal preference)
+  - Advanced: 10% (power users)
+- **Feature Utilization:**
+  - Export/Import: 15% of users
+  - Reset to Defaults: 5% of users
+  - Search: 25% of users (when >50 settings)
 
 ---
 
-## Risks & Mitigations
+### User Satisfaction
 
-### Risk 1: Settings File Corruption
-**Impact:** High  
-**Probability:** Low  
-**Mitigation:**
-- Atomic file writes
-- Backup previous version
-- Validate before writing
-- Fallback to defaults on corruption
-- Automatic recovery
+**Quality Metrics:**
+- **Configuration Satisfaction:** >4.5/5 rating for settings experience
+- **Ease of Use:** >85% report "easy" or "very easy" to configure
+- **Help Text Effectiveness:** >70% understand settings without additional help
+- **Validation Clarity:** >80% understand error messages and how to fix
+- **Visual Design:** >4.2/5 rating for settings interface aesthetics
 
-### Risk 2: API Key Security
-**Impact:** High  
-**Probability:** Medium  
-**Mitigation:**
-- File permissions (600)
-- Warn users about security
-- Support environment variable override
-- Future: Encryption at rest
-- Never log API keys
+**Preference Metrics:**
+- **vs. Manual File Editing:** >90% prefer visual settings over config files
+- **vs. CLI Flags:** >85% prefer persistent settings over repeated flags
+- **vs. Environment Variables:** >75% prefer UI configuration (except CI/CD)
 
-### Risk 3: Breaking Changes in Settings Schema
-**Impact:** Medium  
-**Probability:** High (as features evolve)  
+---
+
+### Performance & Reliability
+
+**Speed Metrics:**
+- **Overlay Open Time:** p95 <100ms
+- **Tab Switch Time:** p95 <50ms
+- **Setting Change Apply:** p95 <50ms
+- **File Save Time:** p95 <200ms
+- **Settings Load Time:** p95 <50ms at startup
+
+**Reliability Metrics:**
+- **Corruption Rate:** 0% settings file corruption
+- **Validation Accuracy:** 100% of invalid settings caught before save
+- **Migration Success:** 100% of users upgrade without settings loss
+- **Recovery Rate:** 100% recovery from corrupted settings (fallback to defaults)
+- **Platform Compatibility:** Works on Linux, macOS, Windows without issues
+
+---
+
+### Business Impact
+
+**Onboarding Metrics:**
+- **Setup Completion Rate:** >95% complete initial setup (up from 65% without visual settings)
+- **Time to Productivity:** Reduced from 15 minutes to <2 minutes
+- **Setup-Related Churn:** <2% abandon during configuration (down from 35%)
+- **Support Tickets:** 70% reduction in "how to configure" questions
+
+**Productivity Metrics:**
+- **Configuration Time Saved:** 13 minutes saved per user (no manual file editing)
+- **Error Resolution:** 85% fewer configuration-related errors
+- **Workflow Optimization:** 40% of users configure auto-approval → fewer interruptions
+- **Team Consistency:** 90% consistency in team configurations (vs. 30% with manual setup)
+
+**Retention Metrics:**
+- **Feature Stickiness:** 92% of users who customize settings continue using Forge
+- **Recommendation NPS:** +18 point improvement from easy configuration
+- **Team Adoption:** 3x higher team adoption rate (easy to standardize)
+
+---
+
+## Competitive Analysis
+
+### VSCode Settings
+**Approach:** Hierarchical JSON with GUI overlay  
+**Strengths:** Comprehensive, searchable, sync across devices  
+**Weaknesses:** Overwhelming (1000+ settings), hard to find what you need  
+**Differentiation:** We provide focused, task-oriented settings without noise
+
+### Cursor IDE
+**Approach:** Settings modal with tabs  
+**Strengths:** Clean UI, good defaults  
+**Weaknesses:** Limited customization, some settings require config file  
+**Differentiation:** More powerful auto-approval rules, better validation
+
+### GitHub Copilot
+**Approach:** Minimal settings (mostly via IDE)  
+**Strengths:** Simple, low friction  
+**Weaknesses:** Almost no configurability, frustrating for power users  
+**Differentiation:** Balance of simplicity and control
+
+### Aider Terminal
+**Approach:** CLI flags and config file  
+**Strengths:** Powerful for CLI experts  
+**Weaknesses:** Poor discoverability, no validation, manual file editing  
+**Differentiation:** Visual interface accessible to all skill levels
+
+### JetBrains IDEs
+**Approach:** Comprehensive settings tree with search  
+**Strengths:** Every detail configurable  
+**Weaknesses:** Overwhelming complexity, slow search  
+**Differentiation:** Simpler, faster, focused on essential settings
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Configure Forge in seconds through a clean visual interface. No config files, no documentation hunting, no syntax errors—just intuitive settings that make the tool yours."
+
+**Key Differentiators:**
+- Visual settings interface accessible without leaving TUI
+- Real-time validation prevents configuration errors
+- Auto-save eliminates "forgot to save" frustration
+- Import/Export enables team standardization
+- Comprehensive yet organized (not overwhelming)
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Developers frustrated with config file complexity
+- Teams wanting standardized AI tool setup
+- Users who value clean, polished interfaces
+
+**Value Propositions by Segment:**
+- **New Users:** "Get started in under 2 minutes with guided setup"
+- **Power Users:** "Complete control with keyboard-driven efficiency"
+- **Team Leads:** "Standardize team configuration in one click"
+- **Enterprise:** "Secure, reliable, auditable settings management"
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. **Quick Start: Settings** - Configure API key in 60 seconds
+2. **Settings Reference** - Complete list of all settings with examples
+3. **Auto-Approval Guide** - Configure rules safely and effectively
+4. **Team Setup Guide** - Export/import workflows for teams
+5. **Troubleshooting Settings** - Common issues and fixes
+6. **Advanced Configuration** - Environment variables, profiles, encryption
+
+**FAQ Topics:**
+- "How do I set my API key?"
+- "Where are settings stored?"
+- "Can I share settings with my team?"
+- "How do I reset to defaults?"
+- "What if I made a mistake?"
+- "Are my API keys secure?"
+- "Can I use different settings per project?"
+
+---
+
+## Risk & Mitigation
+
+### Risk 1: API Key Security Concerns
+**Impact:** High - Users worry about storing credentials  
+**Probability:** High - Common security concern  
+**User Impact:** Hesitation to use product, manual environment variables instead
+
 **Mitigation:**
-- Version settings schema
+- File permissions automatically set to 600 (user-only)
+- Clear messaging: "API keys stored securely with restricted permissions"
+- Support environment variable override for security-conscious users
+- Documentation on security best practices
+- Future: Optional encryption with master password
+- Never log API keys, mask in UI
+
+**User Communication:**
+"Your API key is stored in ~/.config/forge/settings.json with permissions set to 600 (readable only by you). For extra security, you can use the OPENAI_API_KEY environment variable instead."
+
+---
+
+### Risk 2: Settings Overwhelming New Users
+**Impact:** Medium - Complexity drives abandonment  
+**Probability:** Medium - Many settings possible  
+**User Impact:** Confusion, decision paralysis, abandonment
+
+**Mitigation:**
+- Excellent defaults that work for 80% of users
+- Progressive disclosure (basic → advanced)
+- Wizard/guide for first-time setup
+- Hide advanced settings behind "Show Advanced" toggle
+- Clear, jargon-free help text
+- Search functionality to find specific settings
+- Presets for common configurations
+
+**Onboarding Flow:**
+```
+First launch → Minimal setup wizard
+    ↓
+"Let's get you started! 🚀"
+Step 1: Choose LLM provider [dropdown]
+Step 2: Enter API key [input]
+Step 3: Test connection [auto-test]
+    ↓
+"All set! You can customize more in /settings anytime"
+```
+
+---
+
+### Risk 3: Settings File Corruption
+**Impact:** High - Lost configuration, broken app  
+**Probability:** Low - With proper implementation  
+**User Impact:** Frustration, lost time, potential data loss
+
+**Mitigation:**
+- Atomic file writes (write to temp, then rename)
+- Automatic backup before every write (settings.json.backup)
+- Validation before writing
+- Graceful degradation (fallback to defaults if corrupted)
+- Clear error message with recovery instructions
+- Automatic recovery attempt on corrupt detection
+
+**Recovery Flow:**
+```
+Settings load fails → Corruption detected
+    ↓
+Show message:
+"Settings file appears corrupted.
+ Don't worry! Restoring from automatic backup...
+ 
+ [Restore from Backup] [Use Defaults] [View Error Details]"
+    ↓
+User chooses Restore
+    ↓
+Backup restored successfully
+    ↓
+"✓ Settings restored from backup (5 minutes ago)"
+```
+
+---
+
+### Risk 4: Platform-Specific File Paths
+**Impact:** Medium - Inconsistent behavior across OS  
+**Probability:** Medium - Different conventions  
+**User Impact:** Confusion, support burden
+
+**Mitigation:**
+- Use standard config directories per platform:
+  - Linux/Unix: ~/.config/forge/
+  - macOS: ~/Library/Application Support/forge/
+  - Windows: %APPDATA%\forge\
+- Respect XDG_CONFIG_HOME environment variable
+- Gracefully handle missing directories (create automatically)
+- Clear documentation for each platform
+- Consistent behavior despite different paths
+
+---
+
+### Risk 5: Breaking Changes in Settings Schema
+**Impact:** Medium - User frustration during upgrades  
+**Probability:** High - Features evolve  
+**User Impact:** Lost settings, unexpected behavior
+
+**Mitigation:**
+- Version settings schema (v1, v2, etc.)
 - Automatic migration on upgrade
-- Backwards compatibility
-- Clear upgrade notes
-- Validate migrated settings
+- Preserve unknown settings (forward compatibility)
+- Clear upgrade notes documenting changes
+- Test migrations thoroughly before release
+- Rollback capability if migration fails
+- Backup before migration
 
-### Risk 4: Too Many Settings (Overwhelming)
-**Impact:** Medium  
-**Probability:** Medium  
-**Mitigation:**
-- Good defaults (most users don't need to change)
-- Progressive disclosure (basic vs advanced)
-- Search/filter in settings (future)
-- Help text for each setting
-- Presets for common configurations (future)
+**Migration Example:**
+```
+Forge v1.0 → v1.5 (settings schema v1 → v2)
 
----
+Changes:
+- "provider" renamed to "llm_provider"
+- "auto_approve" split into granular settings
+- New "display.theme" setting
 
-## Future Enhancements
-
-### Phase 2 Ideas
-- **Encryption:** Encrypt sensitive settings (API keys)
-- **Presets:** Common configuration templates
-- **Profiles:** Switch between different setting sets
-- **Search:** Find settings by keyword
-- **Validation UI:** Show which settings are invalid with fixes
-
-### Phase 3 Ideas
-- **Cloud Sync:** Sync settings across machines
-- **Team Settings:** Share approved settings with team
-- **Settings History:** Track changes over time
-- **Import from Other Tools:** Migrate from Cursor, Copilot, etc.
-- **Settings API:** Programmatic configuration
+Migration:
+1. Detect schema v1
+2. Backup current settings
+3. Transform:
+   - provider → llm_provider
+   - auto_approve: true → auto_approve_reads: true, etc.
+   - Add defaults for new settings
+4. Save as schema v2
+5. Success message with changelog
+```
 
 ---
 
-## Open Questions
+## Evolution & Roadmap
 
-1. **Should we encrypt API keys by default?**
-   - Pro: Better security
-   - Con: Adds complexity, key management
-   - Decision: Phase 2 feature, file permissions sufficient for now
+### Version History
 
-2. **Should we support YAML/TOML formats?**
-   - Pro: More human-friendly for manual editing
-   - Con: More dependencies, parsing complexity
-   - Decision: JSON only for now, consider YAML export in Phase 2
+**v1.0 (Current):**
+- Visual settings overlay with multi-tab interface
+- Comprehensive setting categories (General, LLM, Auto-Approval, Display, Advanced)
+- Real-time validation and help text
+- Auto-save with atomic writes
+- Environment variable overrides
+- Import/Export functionality
+- Reset to defaults
 
-3. **Should we have per-workspace settings?**
-   - Use case: Different settings per project
-   - Complexity: Merging global + workspace settings
-   - Decision: Phase 3 feature if requested
+---
 
-4. **Should settings overlay have search?**
-   - Pro: Easier to find specific settings
-   - Con: More UI complexity
-   - Decision: Add when >50 total settings
+### Future Enhancements
+
+#### Phase 2: Enhanced Security & Collaboration
+- **Settings Encryption:** Encrypt API keys and sensitive data at rest
+- **Settings Profiles:** Multiple named configuration sets (Work, Personal, Testing)
+- **Team Templates:** Official preset configurations for common use cases
+- **Audit Log:** Track who changed what and when (for teams)
+- **Advanced Import:** Selective import (choose which settings to import)
+- **Settings Diff:** Compare current vs. imported settings before applying
+
+**User Value:** Better security, easier team collaboration, more flexibility
+
+---
+
+#### Phase 3: Intelligence & Automation
+- **Smart Defaults:** Adapt default settings based on detected project type
+- **Configuration Recommendations:** "You might want to enable auto-approve for docs/"
+- **Settings Analytics:** "80% of users enable auto-approve reads"
+- **Conflict Detection:** Warn about conflicting settings
+- **Configuration Validation:** "This combination of settings may cause issues"
+- **Auto-Optimization:** Suggest settings changes based on usage patterns
+
+**User Value:** Smarter configuration, proactive guidance, optimized workflows
+
+---
+
+#### Phase 4: Enterprise & Advanced Features
+- **Cloud Sync:** Synchronize settings across machines
+- **Team Settings Management:** Admin controls, approved configurations
+- **Policy Enforcement:** Require certain settings, block others
+- **Settings API:** Programmatic configuration for CI/CD
+- **Custom Settings UI:** Plugin system for third-party settings
+- **Settings History:** Version control for configurations with rollback
+- **Compliance Mode:** Locked settings for regulatory requirements
+
+**User Value:** Enterprise-ready, team-scale management, compliance support
 
 ---
 
 ## Related Documentation
 
-- [ADR-0017: Auto-Approval and Settings System](../adr/0017-auto-approval-and-settings-system.md)
-- [How-to: Use TUI Interface - Settings](../how-to/use-tui-interface.md#settings)
-- [Configuration Guide](../reference/configuration.md) (if exists)
-- [Security Best Practices](../../SECURITY.md)
+- **User Guide:** How to configure Forge settings
+- **Security:** Best practices for API key storage
+- **Team Guide:** Sharing and standardizing configurations
+- **API Reference:** Environment variable reference
+- **Troubleshooting:** Common settings issues and solutions
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed technical implementation details (component structure, data models, Go structs)
+- Enhanced user personas with detailed scenarios and success stories
+- Added comprehensive UI mockups for all settings tabs
+- Expanded user experience flows with visual diagrams
+- Added competitive analysis comparing to VSCode, Cursor, Copilot
+- Included go-to-market positioning and messaging
+- Improved success metrics with user-focused KPIs
+- Added detailed risk mitigation with user communication strategies
+
+### 2024-12 (Original)
+- Initial PRD with technical architecture
+- Component structure and data models
+- Settings lifecycle diagrams

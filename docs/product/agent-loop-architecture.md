@@ -8,9 +8,11 @@
 
 ---
 
-## Overview
+## Product Vision
 
-The Agent Loop Architecture is the heart of Forge's AI capabilities, implementing an iterative reasoning-action cycle where the agent analyzes user requests, plans solutions, executes tools, and learns from results. This loop enables the agent to break down complex tasks, use tools effectively, and adapt its approach based on outcomes.
+Enable developers to delegate complex, multi-step coding tasks to an AI agent that thinks through problems, adapts its approach based on results, and persists until completion or user intervention. The agent should feel like an intelligent collaborator that breaks down tasks, learns from mistakes, and communicates its reasoning transparently.
+
+**Strategic Alignment:** Forge's core differentiator is autonomous task execution with transparent reasoning—the agent loop is the engine that makes this possible.
 
 ---
 
@@ -33,592 +35,956 @@ Without a robust execution loop, AI assistants either:
 
 ---
 
-## Goals
+## Key Value Propositions
 
-### Primary Goals
+### For Task-Oriented Developers
+- **Autonomous Execution:** Describe goals once, let agent handle multi-step implementation
+- **Hands-Free Workflow:** Agent works through tasks without constant supervision
+- **Reliable Completion:** Tasks finish successfully or agent clearly explains why not
 
-1. **Autonomous Execution:** Enable agent to complete multi-step tasks independently
-2. **Intelligent Planning:** Use chain-of-thought reasoning to plan before acting
-3. **Efficient Tool Use:** Select and execute tools appropriately
-4. **Graceful Failure:** Handle errors and adapt strategies
-5. **Resource Management:** Stay within token and iteration limits
-6. **User Control:** Allow users to interrupt or guide execution
+### For Exploratory Developers
+- **Persistent Problem-Solving:** Agent tries alternative approaches when first attempt fails
+- **Adaptive Strategy:** Agent adjusts based on intermediate results
+- **Iterative Refinement:** Agent builds on previous attempts instead of giving up
 
-### Non-Goals
-
-1. **General AI:** This is NOT trying to create AGI
-2. **Unlimited Autonomy:** Agent has clear boundaries and safety limits
-3. **Self-Modification:** Agent does NOT modify its own code or prompts
-4. **Multi-Agent Coordination:** Single agent only (no agent-to-agent communication)
+### For Quality-Focused Developers
+- **Transparent Reasoning:** See exactly what the agent is thinking before it acts
+- **Verifiable Steps:** Review each action in the chain leading to results
+- **Controlled Execution:** Stop agent anytime, review progress, redirect approach
 
 ---
 
-## User Personas
+## Target Users & Use Cases
 
 ### Primary: Task-Oriented Developer
-- **Background:** Developer with specific coding tasks to complete
-- **Workflow:** Describes goal, lets agent work, reviews results
-- **Pain Points:** Manual multi-step workflows are tedious
-- **Goals:** Delegate complex tasks to AI assistant
+**Profile:**
+- Has specific coding tasks to complete
+- Prefers describing goals over implementing details
+- Values efficiency and automation
+
+**Key Use Cases:**
+- Delegating file refactoring across multiple files
+- Automating repetitive code changes
+- Running tests, analyzing failures, fixing issues autonomously
+
+**Pain Points Addressed:**
+- Manual multi-step workflows are tedious
+- Context switching between planning and execution
+- Repeating similar changes across many files
+
+---
 
 ### Secondary: Exploratory Developer
-- **Background:** Developer experimenting with ideas
-- **Workflow:** Iterative refinement with agent
-- **Pain Points:** Agent gives up too easily or tries wrong approaches
-- **Goals:** Agent that persists and adapts
+**Profile:**
+- Experimenting with new ideas or approaches
+- Iterative problem-solving workflow
+- Values agent that persists through challenges
+
+**Key Use Cases:**
+- Trying different implementation approaches
+- Debugging complex issues through experimentation
+- Exploring codebase structure and dependencies
+
+**Pain Points Addressed:**
+- Agent gives up too easily on first failure
+- Lack of adaptive problem-solving
+- Agent tries wrong approach without adjustment
+
+---
 
 ### Tertiary: Quality-Focused Developer
-- **Background:** Developer who values correctness over speed
-- **Workflow:** Reviews each step carefully
-- **Pain Points:** Agent makes assumptions or skips validation
-- **Goals:** Transparent, verifiable agent reasoning
+**Profile:**
+- Values correctness and verification over speed
+- Reviews each change carefully before acceptance
+- Needs transparency into agent decision-making
+
+**Key Use Cases:**
+- Critical bug fixes requiring careful validation
+- Production code changes with approval workflow
+- Understanding why agent chose specific approach
+
+**Pain Points Addressed:**
+- Agent makes assumptions without explaining
+- Black-box execution without visibility
+- Difficulty debugging unexpected agent behavior
 
 ---
 
-## Requirements
+## Product Requirements
 
-### Functional Requirements
+### Priority 0 (Must Have)
 
-#### FR1: Agent Loop Cycle
-- **R1.1:** Receive and analyze user message
-- **R1.2:** Generate chain-of-thought reasoning
-- **R1.3:** Select appropriate tool or response action
-- **R1.4:** Execute tool call (if needed)
-- **R1.5:** Receive and process tool result
-- **R1.6:** Update context with new information
-- **R1.7:** Decide whether to continue or complete
-- **R1.8:** Iterate or present final result
+#### P0-1: Autonomous Multi-Step Execution
+**Description:** Agent autonomously executes complex tasks requiring multiple tool calls without user intervention
 
-#### FR2: Chain-of-Thought Reasoning
-- **R2.1:** Think through problem before acting
-- **R2.2:** Break down complex tasks into sub-tasks
-- **R2.3:** Identify required information or tools
-- **R2.4:** Consider multiple approaches
-- **R2.5:** Explain reasoning in thinking tags
-- **R2.6:** Reason about tool selection and parameters
+**User Stories:**
+- As a developer, I want to describe a high-level goal and have the agent break it down into steps
+- As a user, I want the agent to complete multi-step tasks without asking for guidance at each step
 
-#### FR3: Tool Call Detection & Parsing
-- **R3.1:** Detect tool calls in LLM response (XML format)
-- **R3.2:** Parse tool name and parameters
-- **R3.3:** Validate tool call structure
-- **R3.4:** Handle malformed tool calls gracefully
-- **R3.5:** Support early detection (before full response)
-- **R3.6:** Extract multiple tool calls if present (error case)
+**Acceptance Criteria:**
+- Agent executes sequences of 5-10+ tool calls to complete tasks
+- User describes goal once at beginning, not at each step
+- Agent decides which tools to use and in what order
 
-#### FR4: Tool Execution
-- **R4.1:** Request approval for dangerous tools
-- **R4.2:** Execute approved tools
-- **R4.3:** Capture tool results (stdout, stderr, return value)
-- **R4.4:** Handle tool execution errors
-- **R4.5:** Time out long-running tools
-- **R4.6:** Format results for agent consumption
-
-#### FR5: Iteration Management
-- **R5.1:** Track iteration count per agent loop
-- **R5.2:** Enforce maximum iteration limit (default: 25)
-- **R5.3:** Warn agent when approaching limit
-- **R5.4:** Gracefully terminate at limit
-- **R5.5:** Allow user to extend limit if needed
-- **R5.6:** Reset count for new user messages
-
-#### FR6: Loop-Breaking Tools
-- **R6.1:** Detect loop-breaking tool calls
-  - `task_completion` - Finish task
-  - `ask_question` - Ask user for input
-  - `converse` - Casual conversation
-- **R6.2:** Stop iteration immediately on loop-breaker
-- **R6.3:** Present result to user
-- **R6.4:** Wait for user response before continuing
-
-#### FR7: Error Handling
-- **R7.1:** Catch tool execution errors
-- **R7.2:** Present errors to agent for recovery
-- **R7.3:** Allow agent to try alternative approaches
-- **R7.4:** Track repeated errors (avoid infinite retry)
-- **R7.5:** Escalate to user if unrecoverable
-- **R7.6:** Maintain conversation context on error
-
-#### FR8: Context Management
-- **R8.1:** Build conversation context for each iteration
-- **R8.2:** Include system prompt with instructions
-- **R8.3:** Add conversation history (pruned if needed)
-- **R8.4:** Include tool definitions and schemas
-- **R8.5:** Track token usage per request
-- **R8.6:** Prune old messages when approaching limits
-
-#### FR9: User Interruption
-- **R9.1:** Allow user to stop execution mid-loop
-- **R9.2:** Handle Ctrl+C gracefully
-- **R9.3:** Support `/stop` slash command
-- **R9.4:** Save conversation state on interrupt
-- **R9.5:** Allow resumption after interrupt
-- **R9.6:** Clean up resources on forced stop
-
-#### FR10: Progress Visibility
-- **R10.1:** Show agent thinking in real-time
-- **R10.2:** Display tool execution status
-- **R10.3:** Stream tool results as they arrive
-- **R10.4:** Update iteration count
-- **R10.5:** Show "working" indicators during pauses
-- **R10.6:** Display errors and warnings prominently
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Iteration cycle overhead under 100ms
-- **N1.2:** Tool call detection within 50ms
-- **N1.3:** Context building under 200ms
-- **N1.4:** Minimal latency between iterations
-- **N1.5:** Efficient memory usage during long loops
-
-#### NFR2: Reliability
-- **N2.1:** Never lose conversation context
-- **N2.2:** Recover from LLM API errors
-- **N2.3:** Handle unexpected tool failures
-- **N2.4:** Graceful degradation on resource limits
-- **N2.5:** 99.9% loop completion rate (non-error cases)
-
-#### NFR3: Safety
-- **N3.1:** Hard limit on max iterations (prevent runaway)
-- **N3.2:** Timeout on individual tool executions
-- **N3.3:** Sandbox tool execution to workspace
-- **N3.4:** Validate all tool parameters
-- **N3.5:** Audit trail of all actions
-
-#### NFR4: Transparency
-- **N4.1:** All reasoning visible to user
-- **N4.2:** Tool calls and results logged
-- **N4.3:** Clear indication of agent state
-- **N4.4:** Decision points explained
-- **N4.5:** Easy to debug unexpected behavior
+**Example:**
+- User: "Refactor authentication to use middleware"
+- Agent: reads files → analyzes code → creates middleware → updates imports → completes task
 
 ---
 
-## User Experience
+#### P0-2: Transparent Chain-of-Thought Reasoning
+**Description:** Agent shows its thinking process before taking actions
 
-### Core Workflows
+**User Stories:**
+- As a developer, I want to see what the agent is thinking before it acts
+- As a user, I want to understand why the agent chose a specific approach
 
-#### Workflow 1: Simple Single-Iteration Task
-1. User: "What files are in the src directory?"
-2. Agent thinks: "I need to list files in src/"
-3. Agent calls: `list_files` with path="src"
-4. Tool executes, returns file list
-5. Agent thinks: "Got the results, task complete"
-6. Agent calls: `task_completion` with formatted list
-7. User sees result
+**Acceptance Criteria:**
+- Agent displays reasoning before each tool call
+- Thinking explains: what it learned, what it plans, why this approach
+- Reasoning visible in real-time as agent thinks
 
-**Success Criteria:** Task completed in 1 iteration, under 5 seconds
-
-#### Workflow 2: Multi-Step Refactoring Task
-1. User: "Refactor the authentication code to use middleware"
-2. Agent thinks: "Need to understand current auth implementation"
-3. Iteration 1: `read_file` auth.go
-4. Agent analyzes code, plans refactoring
-5. Iteration 2: `read_file` middleware.go (to see patterns)
-6. Agent designs new middleware structure
-7. Iteration 3: `write_file` auth_middleware.go (new file)
-8. Iteration 4: `apply_diff` to modify existing files
-9. Iteration 5: `apply_diff` to update imports
-10. Agent calls: `task_completion` with summary
-11. User reviews changes
-
-**Success Criteria:** Multi-step task completed autonomously in 5-10 iterations
-
-#### Workflow 3: Error Recovery
-1. User: "Run the tests"
-2. Agent: `execute_command` "npm test"
-3. Tool result: Exit code 1, tests failed
-4. Agent thinks: "Tests failed, need to investigate"
-5. Agent: `read_file` on failing test
-6. Agent identifies issue in code
-7. Agent: `apply_diff` to fix code
-8. Agent: `execute_command` "npm test" again
-9. Tool result: Exit code 0, tests pass
-10. Agent: `task_completion` "Fixed issue, tests passing"
-
-**Success Criteria:** Agent recovers from failure and completes task
-
-#### Workflow 4: Information Gathering
-1. User: "Should we upgrade to React 19?"
-2. Agent thinks: "Need to check current version and dependencies"
-3. Iteration 1: `read_file` package.json
-4. Agent sees React 18.2.0
-5. Agent calls: `ask_question` "Would you like me to check for breaking changes in React 19?"
-6. User: "Yes"
-7. Agent resumes, researches breaking changes
-8. Agent: `task_completion` with upgrade recommendation
-
-**Success Criteria:** Agent gathers needed info before making recommendations
-
-#### Workflow 5: User Interruption
-1. User: "Refactor all components to TypeScript"
-2. Agent starts working (10+ files to modify)
-3. After 3 files converted, user presses Ctrl+C
-4. Agent stops immediately
-5. Conversation state preserved
-6. User: "Actually, just do the header component"
-7. Agent adjusts and completes focused task
-
-**Success Criteria:** User can interrupt and redirect agent anytime
-
----
-
-## Technical Architecture
-
-### Component Structure
-
+**Example:**
 ```
-Agent Loop System
-├── Loop Controller
-│   ├── Iteration Manager
-│   ├── State Tracker
-│   └── Termination Detector
-├── Reasoning Engine
-│   ├── LLM Provider Interface
-│   ├── Prompt Builder
-│   └── Response Parser
-├── Tool System
-│   ├── Tool Registry
-│   ├── Tool Executor
-│   └── Result Formatter
-├── Context Manager
-│   ├── Message History
-│   ├── Token Counter
-│   └── Memory Pruner
-└── Event System
-    ├── Event Emitter
-    ├── Progress Reporter
-    └── Error Handler
-```
-
-### Agent Loop Flow
-
-```
-User Message Received
-    ↓
-Initialize Loop Context
-    ↓
-┌─────────────────────────────────────┐
-│ AGENT LOOP (max 25 iterations)      │
-│                                     │
-│  1. Build Conversation Context      │
-│     - System prompt                 │
-│     - Message history               │
-│     - Tool definitions              │
-│                                     │
-│  2. Call LLM (streaming)            │
-│     - Send context                  │
-│     - Receive response              │
-│     - Emit thinking events          │
-│                                     │
-│  3. Parse Response                  │
-│     - Extract thinking              │
-│     - Detect tool call              │
-│     - Validate structure            │
-│                                     │
-│  4. Check Loop Breaking             │
-│     ├─ task_completion → DONE       │
-│     ├─ ask_question → DONE          │
-│     └─ converse → DONE              │
-│                                     │
-│  5. Execute Tool (if needed)        │
-│     - Request approval              │
-│     - Execute tool                  │
-│     - Capture result                │
-│     - Add to context                │
-│                                     │
-│  6. Check Termination               │
-│     - Max iterations reached?       │
-│     - User interrupted?             │
-│     - Error threshold exceeded?     │
-│                                     │
-│  7. Continue or Exit                │
-│     └─ Loop back to step 1          │
-└─────────────────────────────────────┘
-    ↓
-Present Final Result
-```
-
-### Data Model
-
-```go
-type AgentLoop struct {
-    Context        *ConversationContext
-    IterationCount int
-    MaxIterations  int
-    State          LoopState
-    ErrorCount     int
-    StartTime      time.Time
-}
-
-type LoopState int
-const (
-    StateInitializing LoopState = iota
-    StateThinking
-    StateExecutingTool
-    StateWaitingApproval
-    StateCompleted
-    StateError
-    StateInterrupted
-)
-
-type ToolCall struct {
-    ServerName string
-    ToolName   string
-    Arguments  map[string]interface{}
-}
-
-type ToolResult struct {
-    ToolName   string
-    Success    bool
-    Result     string
-    Error      error
-    Duration   time.Duration
-}
+Agent thinking: "I need to understand the current auth 
+implementation before refactoring. Let me read auth.go first."
+→ Calls read_file on auth.go
 ```
 
 ---
 
-## Design Decisions
+#### P0-3: Adaptive Error Recovery
+**Description:** Agent detects failures, analyzes causes, and tries alternative approaches
 
-### Why 25 Max Iterations?
-**Rationale:**
-- **Safety:** Prevents infinite loops from consuming resources
-- **Cost control:** Limits API usage for runaway sessions
-- **Sufficient:** 95% of tasks complete in under 10 iterations
-- **Configurable:** Users can adjust if needed
+**User Stories:**
+- As a developer, I want the agent to recover from errors without my help
+- As a user, I want the agent to learn from failures and adjust its strategy
 
-**Alternatives considered:**
-- Unlimited: Too risky, could drain API credits
-- Token-based limit: Harder to predict behavior
-- Time-based: Doesn't account for task complexity
+**Acceptance Criteria:**
+- Agent detects when tool execution fails
+- Agent analyzes error message and adjusts approach
+- Agent tries alternative solutions before giving up
+- Maximum 5 identical errors before stopping (circuit breaker)
 
-### Why Chain-of-Thought Required?
-**Rationale:**
-- **Better reasoning:** LLMs perform better with explicit thinking
-- **Transparency:** Users see agent's thought process
-- **Debugging:** Easier to understand unexpected behavior
-- **Quality:** Reduces impulsive, poorly-planned actions
-
-**Evidence:** Research shows CoT improves task completion by 15-30%
-
-### Why XML for Tool Calls?
-**Rationale:**
-- **Structure:** Enforces clear parameter structure
-- **Validation:** Easy to validate before execution
-- **LLM-friendly:** Models trained on XML formatting
-- **Extensible:** Easy to add new parameters/tools
-- **Unambiguous:** Clear start/end markers
-
-**Alternatives considered:**
-- JSON: LLMs struggle with nested structures
-- Natural language: Too ambiguous, hard to parse
-- Custom DSL: Learning curve, less familiar
-
-### Why Loop-Breaking Tools?
-**Rationale:**
-- **Clear intent:** Explicit signal that task is complete
-- **User control:** Allows agent to ask questions
-- **Conversation flow:** Maintains natural dialog
-- **Efficiency:** Avoids unnecessary iterations
-
-**Without loop-breakers:** Agent might keep iterating needlessly
+**Example:**
+```
+Tool fails: "File not found: auth.go"
+Agent thinking: "The file doesn't exist. Let me search 
+for authentication-related files instead."
+→ Calls search_files with pattern "auth"
+```
 
 ---
 
-## Agent Loop States
+#### P0-4: User Interruption Control
+**Description:** Users can stop agent execution at any time and redirect or resume
 
-### State Transitions
+**User Stories:**
+- As a developer, I want to stop the agent when I see it going in wrong direction
+- As a user, I want to interrupt long-running tasks to provide guidance
+
+**Acceptance Criteria:**
+- Ctrl+C stops agent immediately
+- Conversation state preserved when stopped
+- User can resume or redirect after interruption
+- No corrupted state from interruption
+
+**Example:**
+```
+Agent working on 10 files...
+User presses Ctrl+C after 3 files
+Agent stops gracefully
+User: "Actually, just do the header component"
+Agent adjusts and continues
+```
+
+---
+
+#### P0-5: Task Completion Signaling
+**Description:** Agent clearly signals when task is complete and presents results
+
+**User Stories:**
+- As a developer, I want clear indication that the task is finished
+- As a user, I want summary of what was accomplished
+
+**Acceptance Criteria:**
+- Agent explicitly marks task as complete
+- Final result includes summary of changes made
+- User knows conversation turn has ended
+- Agent doesn't continue unnecessarily after completion
+
+**Example:**
+```
+Agent: "Task complete. Refactored authentication to use 
+middleware pattern across 3 files: auth.go, server.go, routes.go."
+```
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Iteration Visibility
+**Description:** Users can see agent progress through multi-step tasks
+
+**User Stories:**
+- As a developer, I want to monitor agent progress on long tasks
+- As a user, I want to know what step the agent is currently executing
+
+**Acceptance Criteria:**
+- Each tool call clearly displayed in chat
+- Progress indicators for multi-step operations
+- Real-time updates as agent works
+- Clear separation between thinking and acting
+
+---
+
+#### P1-2: Clarifying Questions
+**Description:** Agent can ask user for clarification when needed
+
+**User Stories:**
+- As a developer, I want the agent to ask for input when it's uncertain
+- As a user, I want to provide guidance at decision points
+
+**Acceptance Criteria:**
+- Agent pauses execution to ask questions
+- User response incorporated into agent's plan
+- Agent resumes execution after receiving answer
+- Questions are specific and actionable
+
+**Example:**
+```
+Agent: "Should I use JWT tokens or session cookies for auth?"
+User: "Use JWT"
+Agent: "Got it, implementing JWT-based authentication..."
+```
+
+---
+
+#### P1-3: Safety Guardrails
+**Description:** System prevents runaway execution through automatic limits
+
+**User Stories:**
+- As a developer, I want protection against infinite loops
+- As a user, I want confidence the agent won't execute endlessly
+
+**Acceptance Criteria:**
+- Circuit breaker stops after 5 identical consecutive errors
+- Clear error message explaining why agent stopped
+- Preserved conversation state for user review
+- Option to retry with different approach
+
+---
+
+#### P1-4: Context Awareness
+**Description:** Agent maintains awareness of previous actions in current task
+
+**User Stories:**
+- As a developer, I want the agent to remember what it already tried
+- As a user, I want coherent execution that builds on previous steps
+
+**Acceptance Criteria:**
+- Agent references earlier actions in reasoning
+- Agent doesn't repeat failed approaches
+- Agent builds on successful intermediate results
+- Full conversation history available to agent
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: Performance Metrics
+**Description:** Display execution speed and efficiency metrics
+
+**User Stories:**
+- As a developer, I want to see how long tasks take
+- As a user, I want visibility into iteration count and token usage
+
+**Acceptance Criteria:**
+- Display iteration count for multi-step tasks
+- Show elapsed time per tool execution
+- Token usage tracking per task
+- Performance comparison between approaches
+
+---
+
+#### P2-2: Execution Replay
+**Description:** Review step-by-step playback of agent's execution
+
+**User Stories:**
+- As a developer, I want to replay agent's actions to understand its approach
+- As a user, I want to learn from agent's problem-solving process
+
+**Acceptance Criteria:**
+- Complete log of thinking + actions
+- Step-through interface to review execution
+- Ability to export execution trace
+- Annotate steps with learnings
+
+---
+
+## User Experience Flow
+
+### Simple Task Flow
 
 ```
-Initializing → Thinking
+User describes goal
     ↓
-Thinking → ExecutingTool (if tool call detected)
+Agent thinks through approach
     ↓
-ExecutingTool → WaitingApproval (if approval needed)
+Agent executes single tool call
     ↓
-WaitingApproval → ExecutingTool (if approved)
+Agent reviews result
     ↓
-ExecutingTool → Thinking (result received)
+Agent marks task complete
     ↓
-Thinking → Completed (loop-breaking tool)
-    ↓
-Thinking → Error (unrecoverable error)
-    ↓
-Thinking → Interrupted (user stopped)
+User sees result
 ```
 
-### State Behaviors
+**Experience:** Fast, straightforward—feels like asking colleague
 
-| State | Behavior | User Visible |
-|-------|----------|--------------|
-| Initializing | Setting up context | "Starting..." |
-| Thinking | LLM generating response | Agent message streaming |
-| ExecutingTool | Running tool | "Agent is using [tool]" |
-| WaitingApproval | Awaiting user approval | Approval overlay |
-| Completed | Task done | Final result |
-| Error | Unrecoverable error | Error message |
-| Interrupted | User stopped | "Stopped by user" |
+---
+
+### Multi-Step Task Flow
+
+```
+User describes complex goal
+    ↓
+Agent analyzes requirements
+    ↓
+┌─────────────────────────────┐
+│ Agent Loop (per step):      │
+│                             │
+│ 1. Think: What's next?      │
+│ 2. Execute: Use tool        │
+│ 3. Review: Check result     │
+│ 4. Decide: Continue or done?│
+└─────────────────────────────┘
+    ↓ (repeats 5-10 times)
+Agent synthesizes all results
+    ↓
+Agent marks task complete
+    ↓
+User reviews comprehensive changes
+```
+
+**Experience:** Watching expert work through problem autonomously
+
+---
+
+### Error Recovery Flow
+
+```
+Agent executes tool
+    ↓
+Tool fails with error
+    ↓
+Agent analyzes error message
+    ↓
+Agent adjusts strategy
+    ↓
+Agent tries alternative approach
+    ↓
+Success → continue task
+    OR
+Multiple failures → ask user for help
+```
+
+**Experience:** Agent persists through challenges intelligently
+
+---
+
+### User Interruption Flow
+
+```
+Agent working through multi-step task
+    ↓
+User sees agent going wrong direction
+    ↓
+User presses Ctrl+C
+    ↓
+Agent stops immediately
+    ↓
+User provides correction or new direction
+    ↓
+Agent acknowledges and adjusts
+    ↓
+Agent resumes with new approach
+```
+
+**Experience:** User remains in control, can course-correct anytime
+
+---
+
+### Clarification Flow
+
+```
+Agent working on task
+    ↓
+Agent encounters ambiguity
+    ↓
+Agent pauses and asks user
+    ↓
+User provides answer
+    ↓
+Agent incorporates answer into plan
+    ↓
+Agent continues execution
+```
+
+**Experience:** Collaborative problem-solving when needed
+
+---
+
+## User Interface & Interaction Design
+
+### Agent Thinking Display
+
+**Visual Treatment:**
+```
+┌─ Agent Thinking ──────────────────────────┐
+│                                           │
+│ 💭 I need to understand the current auth  │
+│    implementation before refactoring.     │
+│    Let me read auth.go first.             │
+│                                           │
+└───────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clearly distinguished from normal messages (icon, styling)
+- Real-time streaming as agent thinks
+- Conversational tone, not technical jargon
+- Shows reasoning before action
+
+---
+
+### Tool Execution Display
+
+**Visual Treatment:**
+```
+┌─ Tool Call ───────────────────────────────┐
+│ 🔧 read_file                              │
+│    path: src/auth.go                      │
+│                                           │
+│ ✅ Result:                                │
+│    [File content displayed...]            │
+└───────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clear tool name and parameters
+- Visual distinction between call and result
+- Success/error indication with icons
+- Collapsible for long results
+
+---
+
+### Progress Indicators
+
+**Multi-Step Task:**
+```
+┌─ Task Progress ───────────────────────────┐
+│ Refactoring authentication...             │
+│                                           │
+│ ✅ Read current implementation            │
+│ ✅ Analyzed middleware patterns           │
+│ ⏳ Creating auth middleware...            │
+│ ⬜ Updating imports                       │
+│ ⬜ Running tests                          │
+└───────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Checklist shows completed and pending steps
+- Current step highlighted
+- Updates in real-time
+- Gives user confidence in progress
+
+---
+
+### Error Recovery Display
+
+**Visual Treatment:**
+```
+┌─ Error & Recovery ──────────────────────┐
+│ ⚠️  Tool Error:                           │
+│    File not found: auth.go                │
+│                                           │
+│ 💭 The file doesn't exist. Let me search  │
+│    for authentication-related files.      │
+│                                           │
+│ 🔧 search_files (pattern: "auth")         │
+└───────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Error clearly highlighted
+- Agent's recovery reasoning visible
+- Shows adaptation in real-time
+- Maintains user confidence
+
+---
+
+### Task Completion Display
+
+**Visual Treatment:**
+```
+┌─ Task Complete ───────────────────────────┐
+│ ✅ Refactored authentication to use       │
+│    middleware pattern                     │
+│                                           │
+│ Changes made:                             │
+│ • Created: src/middleware/auth.go         │
+│ • Modified: src/server.go                 │
+│ • Modified: src/routes.go                 │
+│                                           │
+│ All tests passing ✓                       │
+└───────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clear completion signal
+- Summary of accomplishments
+- Actionable results
+- Professional closure
 
 ---
 
 ## Success Metrics
 
 ### Effectiveness Metrics
-- **Task completion rate:** >90% of valid requests completed successfully
-- **Average iterations:** <7 iterations per task
-- **Error recovery rate:** >80% of errors recovered without user intervention
-- **Token efficiency:** <10% wasted tokens on dead ends
 
-### Performance Metrics
-- **Time to first tool:** <5 seconds from user message
-- **Iteration latency:** <2 seconds average (LLM + tool execution)
-- **Loop overhead:** <5% of total execution time
-- **Context building:** <200ms per iteration
+**Task Completion Rate:**
+- Target: >90% of multi-step tasks complete successfully
+- Measure: Track completion vs. failures requiring user intervention
 
-### Quality Metrics
-- **Reasoning quality:** >85% of thinking sections are logical and relevant
-- **Tool selection accuracy:** >95% of tool calls are appropriate
-- **Parameter correctness:** >98% of tool parameters are valid
-- **Plan adherence:** >80% of multi-step plans executed as intended
+**Average Iterations per Task:**
+- Target: 3-7 iterations for typical tasks
+- Measure: Log iteration counts, analyze efficiency
+
+**Error Recovery Success:**
+- Target: >75% of errors recovered autonomously
+- Measure: Track errors vs. successful recoveries
+
+---
+
+### Efficiency Metrics
+
+**Time to Completion:**
+- Target: <5 seconds per iteration on average
+- Measure: Track latency from thinking → execution → next step
+
+**Token Efficiency:**
+- Target: <20% wasted tokens on failed attempts
+- Measure: Compare successful vs. failed tool calls
+
+**Circuit Breaker Activation:**
+- Target: <5% of tasks trigger circuit breaker
+- Measure: Count circuit breaker stops vs. total tasks
+
+---
 
 ### User Experience Metrics
-- **Interruption handling:** 100% of interrupts handled gracefully
-- **Transparency:** >90% of users understand agent reasoning
-- **Trust:** >85% of users confident in agent decisions
-- **Surprise rate:** <10% of actions are unexpected to users
+
+**User Interruptions:**
+- Target: <15% of tasks interrupted by user
+- Measure: Track Ctrl+C usage relative to completions
+
+**Clarification Requests:**
+- Target: 10-20% of tasks require user clarification
+- Measure: Count ask_question calls
+
+**User Satisfaction:**
+- Target: >85% satisfaction with agent autonomy
+- Measure: Post-task surveys on agent performance
 
 ---
 
-## Dependencies
+## User Enablement
 
-### External Dependencies
-- LLM provider API (OpenAI, Anthropic, etc.)
-- Tool execution environment
-- Token counting library
+### Discoverability
 
-### Internal Dependencies
-- Tool system (registry, execution)
-- Memory system (history, pruning)
-- Event system (progress updates)
-- Settings system (max iterations, timeouts)
-- TUI (for progress display)
+**First-Time Experience:**
+- Tutorial task demonstrating multi-step execution
+- Tooltip: "Watch the agent think through problems"
+- Example gallery showing complex task completions
 
-### Platform Requirements
-- Network access (for LLM API)
-- Sufficient memory (conversation context)
-- Tool execution permissions
+**Progressive Disclosure:**
+- Beginner: Simple tasks, agent handles everything
+- Intermediate: Multi-step tasks with optional monitoring
+- Advanced: Complex workflows with strategic interruptions
 
 ---
 
-## Risks & Mitigations
+### Learning Path
 
-### Risk 1: Infinite Loops
-**Impact:** Critical  
+**Beginner:**
+1. Give agent simple single-step tasks
+2. Watch thinking process to understand reasoning
+3. Let agent complete without intervention
+
+**Intermediate:**
+1. Delegate multi-step tasks
+2. Monitor progress through tool executions
+3. Learn when to interrupt vs. let agent continue
+
+**Advanced:**
+1. Craft complex multi-file refactoring tasks
+2. Interrupt strategically to guide approach
+3. Optimize task descriptions for agent efficiency
+
+---
+
+### Support Materials
+
+**Documentation:**
+- "How the Agent Thinks" - Explaining reasoning loop
+- "Delegating Complex Tasks" - Best practices guide
+- "When to Interrupt" - Control strategies
+
+**In-App Help:**
+- Tooltips on thinking display explaining reasoning
+- Help text on Ctrl+C functionality
+- Examples of effective task descriptions
+
+**Video Tutorials:**
+- "Watch the Agent Work" - Multi-step task demo
+- "Error Recovery in Action" - Showing adaptive problem-solving
+- "Mastering Agent Control" - Interruption and redirection
+
+---
+
+## Risk & Mitigation
+
+### Risk 1: Runaway Execution
+**Impact:** High - Agent loops infinitely, wastes resources  
 **Probability:** Low  
-**Mitigation:**
-- Hard limit on max iterations (25)
-- Detect repeated identical tool calls
-- Warn agent when approaching limit
-- User interrupt capability
-- Automatic termination at limit
+**User Impact:** Frustration, cost overruns, system unresponsive
 
-### Risk 2: Context Overflow
-**Impact:** High  
+**Mitigation:**
+- Circuit breaker stops after 5 identical consecutive errors
+- User can interrupt anytime with Ctrl+C
+- No automatic retry without user approval
+- Clear error messages explaining why agent stopped
+
+---
+
+### Risk 2: Poor Task Decomposition
+**Impact:** Medium - Agent chooses inefficient approach  
 **Probability:** Medium  
-**Mitigation:**
-- Token counting per request
-- Automatic message pruning
-- Warn at 80% context usage
-- Suggest starting fresh session
-- Efficient summarization of old context
+**User Impact:** Slow task completion, wasted tokens
 
-### Risk 3: Poor Tool Selection
-**Impact:** Medium  
-**Probability:** Medium  
 **Mitigation:**
-- Clear tool documentation in prompt
-- Examples of tool usage
-- Validation before execution
-- Error feedback to agent
-- User approval for dangerous tools
+- Chain-of-thought reasoning shows planning
+- User can interrupt and redirect
+- Agent learns from tool results to adjust
+- Thinking transparency allows early detection
 
-### Risk 4: LLM API Failures
-**Impact:** High  
+---
+
+### Risk 3: Black Box Execution
+**Impact:** Medium - User doesn't understand agent actions  
+**Probability:** Medium without transparency  
+**User Impact:** Low trust, difficulty debugging
+
+**Mitigation:**
+- Required thinking before every action
+- All tool calls and results visible
+- Execution trace available for review
+- Clear documentation of reasoning process
+
+---
+
+### Risk 4: Excessive Clarification Requests
+**Impact:** Medium - Agent interrupts too often  
 **Probability:** Low  
+**User Impact:** Reduced autonomy, user frustration
+
 **Mitigation:**
-- Retry logic with exponential backoff
-- Fallback to alternative provider (if configured)
-- Graceful error messages
-- Preserve conversation state
-- Allow manual retry
+- Agent taught to make reasonable assumptions
+- Clarification only for critical decisions
+- User can configure autonomy level (future)
+- Balance between asking and acting
 
-### Risk 5: Runaway Costs
-**Impact:** High  
-**Probability:** Low  
+---
+
+### Risk 5: Context Loss During Long Tasks
+**Impact:** High - Agent forgets earlier steps  
+**Probability:** Low with memory management  
+**User Impact:** Incoherent execution, repeated mistakes
+
 **Mitigation:**
-- Iteration limits
-- Token budgets per session
-- Cost warnings in context overlay
-- Auto-stop at spending thresholds
-- Local model option (no API cost)
+- Full conversation history available to agent
+- Context management preserves relevant history
+- Agent explicitly references earlier actions
+- Memory system prevents context overflow
 
 ---
 
-## Future Enhancements
+## Dependencies & Integration Points
 
-### Phase 2 Ideas
-- **Parallel Tool Execution:** Execute independent tools concurrently
-- **Sub-Agent Spawning:** Delegate sub-tasks to specialized agents
-- **Plan Caching:** Reuse plans for similar tasks
-- **Learning from Feedback:** Improve planning based on success/failure
-- **Dynamic Iteration Limits:** Adjust max iterations based on task complexity
+### Feature Dependencies
 
-### Phase 3 Ideas
-- **Multi-Agent Collaboration:** Multiple agents working together
-- **Hierarchical Planning:** High-level planning with detailed sub-plans
-- **Reinforcement Learning:** Optimize tool selection over time
-- **Verification Loop:** Automatic validation of agent outputs
-- **Rollback/Undo:** Revert to previous agent state if needed
+**Memory System:**
+- Agent loop depends on conversation history
+- Error context requires memory persistence
+- Recovery attempts need access to failed executions
 
----
+**Tool System:**
+- Agent loop orchestrates tool execution
+- Tool registry provides available actions
+- Tool approval integrates with execution flow
 
-## Open Questions
+**Context Management:**
+- Token counting for each iteration
+- Automatic summarization during long tasks
+- Context limits enforcement
 
-1. **Should we support parallel tool execution?**
-   - Pro: Faster completion for independent tasks
-   - Con: More complex error handling, approval flow
-   - Decision: Phase 2 feature if performance gains justify complexity
-
-2. **Should agent learn from past successes/failures?**
-   - Pro: Improves over time
-   - Con: Requires persistence, complexity
-   - Decision: Phase 3 research project
-
-3. **Should we support agent-defined tools?**
-   - Use case: Agent creates custom functions
-   - Risk: Security, validation complexity
-   - Decision: No - too risky for current version
-
-4. **Should iteration limit be dynamic?**
-   - Pro: Complex tasks get more iterations
-   - Con: Harder to predict resource usage
-   - Decision: Static limit for now, revisit in Phase 2
+**Event System:**
+- Real-time progress updates to UI
+- Thinking and execution visibility
+- Error and completion notifications
 
 ---
 
-## Related Documentation
+### User-Facing Integrations
 
-- [ADR-0003: Agent Core Loop Design](../adr/0003-agent-core-loop-design.md)
-- [ADR-0021: Early Tool Call Detection](../adr/0021-early-tool-call-detection.md)
-- [Architecture: Agent Loop](../architecture/agent-loop.md)
-- [Architecture: Event System](../architecture/events.md)
-- [Built-in Tools Reference](../reference/built-in-tools.md)
+**TUI Display:**
+- Thinking section shows reasoning
+- Chat displays tool calls and results
+- Progress indicators for multi-step tasks
+
+**Keyboard Controls:**
+- Ctrl+C for immediate interruption
+- /stop command for graceful halt
+- Resume through normal message input
+
+**Settings:**
+- Approval rules affect execution flow
+- Timeout configuration for tool approval
+- Display preferences for thinking/results
+
+---
+
+## Constraints & Trade-offs
+
+### Product Constraints
+
+**Autonomous vs. Controlled:**
+- **Trade-off:** Full autonomy vs. user oversight
+- **Decision:** Autonomous by default, interruption available
+- **Rationale:** Most users want hands-free, power users need control
+
+**Speed vs. Thoroughness:**
+- **Trade-off:** Fast completion vs. careful validation
+- **Decision:** Balanced approach with thinking requirement
+- **Rationale:** Transparency more valuable than raw speed
+
+**Simplicity vs. Power:**
+- **Trade-off:** Simple single-step vs. complex multi-step
+- **Decision:** Support both, optimize for multi-step
+- **Rationale:** Multi-step is core differentiator
+
+---
+
+### Technical Constraints
+
+**Iteration Limits:**
+- **Constraint:** Need bounds to prevent infinite loops
+- **Trade-off:** Fixed iteration count vs. circuit breaker
+- **Decision:** Circuit breaker (5 identical errors)
+- **Rationale:** More intelligent than arbitrary limit
+
+**Context Window:**
+- **Constraint:** LLM token limits
+- **Trade-off:** Full history vs. summarization
+- **Decision:** Automatic summarization when needed
+- **Rationale:** Preserve recent context, summarize old
+
+**Thinking Overhead:**
+- **Constraint:** Thinking adds latency to each step
+- **Trade-off:** Speed vs. transparency
+- **Decision:** Required thinking for all actions
+- **Rationale:** Transparency worth the cost
+
+---
+
+## Competitive Analysis
+
+### GitHub Copilot
+**Approach:** Single-shot completions, no iteration  
+**Strengths:** Fast, simple, familiar  
+**Weaknesses:** Can't handle multi-step tasks  
+**Differentiation:** We enable complex autonomous workflows
+
+### Cursor
+**Approach:** Limited iteration with approval steps  
+**Strengths:** Some multi-step capability  
+**Weaknesses:** Requires user guidance at each step  
+**Differentiation:** True autonomy with optional oversight
+
+### Aider
+**Approach:** Iterative execution in terminal  
+**Strengths:** Good at multi-file changes  
+**Weaknesses:** No thinking transparency, less adaptive  
+**Differentiation:** Visible reasoning, better error recovery
+
+### ChatGPT Code Interpreter
+**Approach:** Full autonomy in sandboxed environment  
+**Strengths:** Highly autonomous  
+**Weaknesses:** Black box execution, can't stop  
+**Differentiation:** Transparency + control + code focus
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Forge thinks through complex coding tasks like an expert developer—breaking down problems, adapting to challenges, and persisting until completion. Watch the agent work or step in anytime to guide."
+
+**Key Differentiators:**
+- Transparent chain-of-thought reasoning
+- Autonomous multi-step execution
+- Adaptive error recovery
+- User control through interruption
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Developers tired of micromanaging AI assistants
+- Teams doing repetitive multi-file refactoring
+- Users who value AI transparency
+
+**Value Propositions by Segment:**
+- **Solo Developers:** Automation without constant babysitting
+- **Teams:** Consistent execution across complex changes
+- **Enterprise:** Auditability through execution transparency
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. "Understanding Agent Reasoning" - How the loop works
+2. "Delegating Complex Tasks" - Task description best practices
+3. "Controlling Agent Execution" - Interruption and redirection
+4. "Debugging Agent Behavior" - Using execution traces
+
+**FAQ Topics:**
+- "How does the agent decide what to do next?"
+- "Why did the agent stop executing?"
+- "Can I trust the agent to work autonomously?"
+- "How do I interrupt long-running tasks?"
+
+---
+
+### Support Considerations
+
+**Common Support Requests:**
+1. Agent stops unexpectedly (circuit breaker)
+2. Understanding why agent chose specific approach
+3. Agent not recovering from errors
+4. Tasks taking too long to complete
+
+**Support Resources:**
+- Execution trace viewer for debugging
+- Circuit breaker explanation in help
+- Error recovery guide
+- Best practices for task descriptions
+
+---
+
+## Evolution & Roadmap
+
+### Version History
+
+**v1.0 (Current):**
+- Multi-step autonomous execution
+- Chain-of-thought reasoning
+- Error recovery with circuit breaker
+- User interruption control
+
+---
+
+### Future Enhancements
+
+#### Phase 2: Learning & Optimization
+- Track successful vs. failed approaches
+- Learn preferred patterns per user
+- Suggest optimized task decomposition
+- Adaptive iteration strategies
+
+**User Value:** Agent gets smarter about individual user's codebase and preferences
+
+---
+
+#### Phase 3: Collaborative Execution
+- Multiple agents working in parallel
+- Agent-to-agent coordination
+- Divide-and-conquer complex tasks
+- Peer review between agents
+
+**User Value:** Faster completion of large-scale changes through parallelization
+
+---
+
+#### Phase 4: Proactive Assistance
+- Agent suggests tasks based on code analysis
+- Anticipates next steps in workflows
+- Offers to continue after manual changes
+- Background execution of maintenance tasks
+
+**User Value:** Agent becomes proactive partner, not just reactive tool
+
+---
+
+### Open Questions
+
+**Question 1: Should agent have iteration count limit?**
+- **Pro:** Hard safety bound, predictable behavior
+- **Con:** Artificial constraint, may stop before completion
+- **Current Direction:** Circuit breaker only, no iteration limit
+
+**Question 2: Should thinking be optional?**
+- **Pro:** Faster execution without thinking overhead
+- **Con:** Loss of transparency, debugging harder
+- **Current Direction:** Always required for transparency
+
+**Question 3: Should agent self-correct errors?**
+- **Pro:** Learns from mistakes automatically
+- **Con:** May waste tokens on repeated failures
+- **Current Direction:** Circuit breaker stops identical errors
+
+**Question 4: Multi-agent coordination?**
+- **Pro:** Parallel execution, faster large tasks
+- **Con:** Complexity, coordination overhead
+- **Current Direction:** Phase 3 feature
+
+---
+
+## Technical References
+
+- **Architecture Documentation:** `docs/architecture/agent-loop.md`
+- **Implementation Details:** See ADR-0003 (Agent Loop Architecture)
+- **Error Recovery:** See ADR-0008 (Circuit Breaker Pattern)
+- **Related Features:** Tool Approval System PRD, Memory System PRD
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed implementation details and code references
+- Enhanced user experience sections
+- Added competitive analysis
+- Expanded go-to-market considerations
+
+### 2024-12 (Original)
+- Initial PRD with technical implementation details
+- Component architecture and data structures
+- Code examples and function references

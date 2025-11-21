@@ -8,9 +8,11 @@
 
 ---
 
-## Overview
+## Product Vision
 
-The Tool Approval System provides a security-first mechanism that requires explicit human approval before the AI agent can execute potentially dangerous operations. This ensures developers maintain full control over what the agent does to their system, files, and environment while still enabling powerful automation capabilities.
+Empower developers to use AI automation confidently by maintaining full control over what the agent can do to their system, files, and environment. Every potentially dangerous operation requires explicit human approval, ensuring safety without sacrificing the power of autonomous AI assistance.
+
+**Strategic Alignment:** Trust is foundational to AI adoption—developers must feel in control. The approval system makes Forge safe enough for production use while maintaining powerful automation capabilities.
 
 ---
 
@@ -30,484 +32,954 @@ Without approval mechanisms, users must choose between:
 
 ---
 
-## Goals
+## Key Value Propositions
 
-### Primary Goals
+### For Security-Conscious Developers
+- **Full Control:** Review every file change and command before execution
+- **Transparent Operations:** See exactly what agent wants to do before approving
+- **Safe Defaults:** Dangerous operations blocked by default, safe ones streamlined
 
-1. **Security by Default:** Require approval for all potentially dangerous operations
-2. **Informed Decisions:** Provide users with all information needed to approve/deny
-3. **Workflow Efficiency:** Make approval process quick and non-disruptive
-4. **Flexibility:** Allow users to configure auto-approval for trusted operations
-5. **Audit Trail:** Maintain clear record of what was approved/denied
+### For Productivity-Focused Developers
+- **Flexible Automation:** Auto-approve trusted operations to reduce friction
+- **Smart Workflows:** Create approval rules for repetitive safe tasks
+- **Fast Decisions:** Keyboard-driven approval process, no context switching
 
-### Non-Goals
-
-1. **AI-Based Approval:** System does NOT use AI to decide what's safe
-2. **Automated Learning:** Does NOT learn from user approval patterns (explicitly configured only)
-3. **Multi-User Workflows:** Does NOT support approval delegation or team approvals
-4. **Code Analysis:** Does NOT perform deep security analysis of proposed changes
+### For Team Leads & Managers
+- **Compliance Ready:** Complete audit trail of all agent actions
+- **Risk Management:** Organizational control over automation boundaries
+- **Educational Value:** Team learns safe AI usage through approval patterns
 
 ---
 
-## User Personas
+## Target Users & Use Cases
 
 ### Primary: Security-Conscious Developer
-- **Background:** Experienced developer who values security and control
-- **Workflow:** Reviews all code changes carefully before committing
-- **Pain Points:** Worried about AI making unintended changes
-- **Goals:** Use AI assistance without giving up control over system
+**Profile:**
+- Experienced developer who values security and control
+- Reviews all code changes carefully before committing
+- Works on production codebases or sensitive systems
+
+**Key Use Cases:**
+- Reviewing agent-proposed file changes before applying
+- Blocking dangerous shell commands
+- Maintaining audit trail for compliance
+
+**Pain Points Addressed:**
+- Worry about AI making unintended changes
+- Fear of accidental destructive operations
+- Lack of visibility into AI actions
+
+---
 
 ### Secondary: Productivity-Focused Developer
-- **Background:** Developer who wants automation with minimal friction
-- **Workflow:** Fast iteration, trusts tools with good defaults
-- **Pain Points:** Approval prompts slow down workflow
-- **Goals:** Automate trusted operations while maintaining safety net
+**Profile:**
+- Developer who wants automation with minimal friction
+- Fast iteration workflow, trusts tools with good defaults
+- Willing to configure for optimal productivity
+
+**Key Use Cases:**
+- Auto-approving safe read operations
+- Creating rules for trusted write patterns
+- Streamlining repetitive approval workflows
+
+**Pain Points Addressed:**
+- Approval prompts slowing down workflow
+- Repetitive approval of safe operations
+- Manual configuration overhead
+
+---
 
 ### Tertiary: Team Lead / Engineering Manager
-- **Background:** Responsible for team's code quality and security
-- **Workflow:** Establishes guidelines and best practices
-- **Pain Points:** Concerned about junior developers accepting dangerous operations
-- **Goals:** Enable AI usage with appropriate guardrails
+**Profile:**
+- Responsible for team's code quality and security
+- Establishes guidelines and best practices
+- Manages compliance and audit requirements
+
+**Key Use Cases:**
+- Reviewing team's AI usage patterns through audit logs
+- Setting organization-wide approval policies
+- Ensuring junior developers don't approve dangerous operations
+
+**Pain Points Addressed:**
+- Lack of visibility into team's AI tool usage
+- Compliance and security requirements
+- Training team on safe AI assistance
 
 ---
 
-## Requirements
+## Product Requirements
 
-### Functional Requirements
+### Priority 0 (Must Have)
 
-#### FR1: Approval Detection
-- **R1.1:** Identify which tools require approval
-- **R1.2:** Support tool-level approval configuration
-- **R1.3:** Allow operation-specific approval rules (e.g., write to certain paths)
-- **R1.4:** Detect approval requirements before tool execution
-- **R1.5:** Handle tools that sometimes need approval (conditional)
+#### P0-1: Visual Approval Interface
+**Description:** Clear, informative interface showing what agent wants to do before execution
 
-#### FR2: Approval Request UI
-- **R2.1:** Display clear approval dialog when needed
-- **R2.2:** Show tool name and purpose
-- **R2.3:** Display all tool parameters with values
-- **R2.4:** Highlight potentially dangerous values
-- **R2.5:** Provide approve/deny/always options
-- **R2.6:** Show preview of changes (especially for file operations)
+**User Stories:**
+- As a developer, I want to see exactly what changes the agent will make before approving
+- As a user, I want preview of file changes with syntax highlighting and diff view
 
-#### FR3: User Response Handling
-- **R3.1:** Accept keyboard input for approve/deny
-- **R3.2:** Support "approve once" for current operation
-- **R3.3:** Support "approve always" to create auto-approval rule
-- **R3.4:** Support "deny" to block operation
-- **R3.5:** Timeout option for approval requests (optional)
-- **R3.6:** Cancel/go back option
+**Acceptance Criteria:**
+- Approval overlay appears automatically when agent requests dangerous operation
+- File changes shown as side-by-side diff with syntax highlighting
+- Shell commands displayed with full context (working directory, parameters)
+- Tool parameters shown in readable format
+- Approve/Deny buttons with keyboard shortcuts
 
-#### FR4: Auto-Approval Rules
-- **R4.1:** Allow users to configure trusted operations
-- **R4.2:** Support path-based rules (e.g., "always approve reads from docs/")
-- **R4.3:** Support command pattern matching (e.g., "approve 'git status'")
-- **R4.4:** Support tool-specific rules (e.g., "auto-approve read_file")
-- **R4.5:** Allow rule disabling without deletion
-- **R4.6:** Provide rule management interface
-
-#### FR5: Audit Logging
-- **R5.1:** Log all approval requests
-- **R5.2:** Log user decisions (approve/deny)
-- **R5.3:** Record timestamp and context
-- **R5.4:** Store tool parameters for audit
-- **R5.5:** Support audit log export
-- **R5.6:** Configurable log retention
-
-#### FR6: Diff Preview (File Operations)
-- **R6.1:** Show side-by-side diff for file changes
-- **R6.2:** Syntax highlighting for code diffs
-- **R6.3:** Line numbers and change indicators (+/-)
-- **R6.4:** Support unified diff view option
-- **R6.5:** Navigate large diffs easily
-- **R6.6:** Show file path and operation type
-
-#### FR7: Command Preview (Shell Execution)
-- **R7.1:** Display full command to be executed
-- **R7.2:** Show working directory
-- **R7.3:** Highlight dangerous commands (rm, sudo, etc.)
-- **R7.4:** Show environment variables if modified
-- **R7.5:** Indicate timeout settings
-- **R7.6:** Show expected execution context
-
-#### FR8: Settings Integration
-- **R8.1:** Approval settings accessible via settings overlay
-- **R8.2:** Enable/disable approval system globally
-- **R8.3:** Configure auto-approval rules
-- **R8.4:** Set approval timeout (if enabled)
-- **R8.5:** Manage audit log settings
-- **R8.6:** Persist settings across sessions
-
-### Non-Functional Requirements
-
-#### NFR1: Security
-- **N1.1:** Deny by default for all new tools
-- **N1.2:** No bypass mechanisms (approval is mandatory)
-- **N1.3:** Secure storage of approval rules
-- **N1.4:** Validation of all tool parameters
-- **N1.5:** Protection against injection attacks in previews
-
-#### NFR2: Performance
-- **N2.1:** Approval UI appears within 100ms of request
-- **N2.2:** Diff generation under 500ms for typical files
-- **N2.3:** Auto-approval rule checking under 10ms
-- **N2.4:** No impact on agent loop when approval not needed
-- **N2.5:** Efficient storage of audit logs
-
-#### NFR3: Usability
-- **N3.1:** Clear visual distinction of dangerous operations
-- **N3.2:** Keyboard-accessible approval (no mouse required)
-- **N3.3:** Intuitive approve/deny controls
-- **N3.4:** Helpful error messages for denied operations
-- **N3.5:** Easy rule creation from approval dialogs
-
-#### NFR4: Reliability
-- **N4.1:** Graceful handling of approval timeouts
-- **N4.2:** Recovery from approval dialog crashes
-- **N4.3:** Consistent approval behavior across sessions
-- **N4.4:** Atomic audit log writes
-- **N4.5:** Corruption-resistant settings storage
+**Example:**
+```
+┌─ Agent Approval Required ─────────────────┐
+│ write_file                                │
+│                                           │
+│ File: src/auth.go                         │
+│                                           │
+│ Changes:                                  │
+│ - func authenticate(user string)         │
+│ + func authenticate(user string) error   │
+│                                           │
+│ [A] Approve  [D] Deny                     │
+└───────────────────────────────────────────┘
+```
 
 ---
 
-## User Experience
+#### P0-2: Keyboard-Driven Workflow
+**Description:** Fast, keyboard-accessible approval without requiring mouse
 
-### Core Workflows
+**User Stories:**
+- As a developer, I want to approve/deny without leaving the keyboard
+- As a user, I want common actions mapped to intuitive shortcuts
 
-#### Workflow 1: First Tool Execution (No Auto-Approval)
-1. Agent decides to use `write_file` tool
-2. TUI shows "Agent wants to write file" notification
-3. Approval overlay opens with:
-   - Tool name: "write_file"
-   - Parameters: path, content preview
-   - Diff view (if file exists)
-4. User reviews changes
-5. User presses 'a' to approve or 'd' to deny
-6. Tool executes (if approved)
-7. Result displayed in chat
-
-**Success Criteria:** User understands what will happen and makes informed decision
-
-#### Workflow 2: Creating Auto-Approval Rule
-1. Approval dialog appears for `read_file` on docs/ path
-2. User sees this is safe operation
-3. User presses 'A' for "Always approve"
-4. Dialog prompts: "Create rule for read_file on docs/*?"
-5. User confirms
-6. Rule saved to settings
-7. Future reads from docs/ auto-approve
-8. Toast notification: "Auto-approval rule created"
-
-**Success Criteria:** User can easily create rules for trusted operations
-
-#### Workflow 3: Denying Dangerous Operation
-1. Agent wants to execute `rm -rf /important/files`
-2. Command preview shows full command
-3. Red warning indicator for dangerous command
-4. User presses 'd' to deny
-5. Agent receives denial
-6. Agent asks user for clarification or alternative approach
-
-**Success Criteria:** User can easily block dangerous operations
-
-#### Workflow 4: Managing Approval Rules
-1. User opens settings with `/settings`
-2. Navigates to "Auto-Approval" tab
-3. Sees list of current rules
-4. Selects rule to edit/disable/delete
-5. Makes changes
-6. Settings saved automatically
-7. User closes settings
-
-**Success Criteria:** User can review and modify approval rules easily
+**Acceptance Criteria:**
+- Ctrl+A or Enter to approve
+- Ctrl+R, Ctrl+C, or ESC to deny
+- Tab to navigate between Approve/Deny buttons
+- No mouse required for any approval action
 
 ---
 
-## Technical Architecture
+#### P0-3: Automatic Safety Blocks
+**Description:** System automatically requires approval for dangerous operations
 
-### Component Structure
+**User Stories:**
+- As a developer, I want dangerous operations blocked by default
+- As a user, I want protection without manual configuration
+
+**Acceptance Criteria:**
+- File write operations (write_file, apply_diff) require approval
+- Shell command execution (execute_command) requires approval
+- Read-only operations (read_file, list_files, search_files) do not require approval by default
+- New tools require approval unless explicitly configured as safe
+
+---
+
+#### P0-4: Clear Denial Feedback
+**Description:** Agent receives clear feedback when operations are denied
+
+**User Stories:**
+- As a developer, I want the agent to understand when I reject an operation
+- As a user, I want the agent to explain alternatives after denial
+
+**Acceptance Criteria:**
+- Denied operations return error to agent
+- Agent acknowledges denial in conversation
+- Agent offers alternative approaches or asks for clarification
+- Conversation continues smoothly after denial
+
+**Example:**
+```
+User denies file write
+Agent: "I understand you don't want to modify that file. 
+Would you like me to show you the proposed changes instead?"
+```
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Auto-Approval Rules
+**Description:** Users can configure trusted operations to auto-approve without prompts
+
+**User Stories:**
+- As a developer, I want to auto-approve safe operations I do frequently
+- As a user, I want to reduce approval friction for trusted patterns
+
+**Acceptance Criteria:**
+- Settings interface to create auto-approval rules
+- Support tool-level rules (e.g., "auto-approve all read_file")
+- Support path-based rules (e.g., "auto-approve writes to test/ directory")
+- Support command whitelist for execute_command
+- Rules saved persistently across sessions
+- Clear indication when auto-approval rule used
+
+**Example Rules:**
+- Auto-approve: read_file, list_files, search_files (safe read operations)
+- Auto-approve: write_file to docs/ (documentation changes)
+- Auto-approve: execute_command "git status" (safe git commands)
+
+---
+
+#### P1-2: Approval Timeout
+**Description:** Configurable timeout for approval requests
+
+**User Stories:**
+- As a developer, I want control over how long approval waits
+- As a user, I want sessions to fail gracefully if I step away
+
+**Acceptance Criteria:**
+- Configurable timeout setting (default: disabled)
+- Timeout triggers automatic denial (safe default)
+- Clear notification when timeout occurs
+- Agent receives timeout feedback
+
+---
+
+#### P1-3: Audit Trail
+**Description:** Complete log of all approval requests and decisions
+
+**User Stories:**
+- As a team lead, I want to review what operations were approved/denied
+- As a developer, I want compliance-ready audit logs
+
+**Acceptance Criteria:**
+- Log all approval requests with timestamp
+- Record user decisions (approved/denied)
+- Include tool name and parameters
+- Support log export for compliance
+- Configurable log retention period
+
+---
+
+#### P1-4: Dangerous Command Warnings
+**Description:** Visual warnings for particularly risky operations
+
+**User Stories:**
+- As a developer, I want clear warnings for destructive commands
+- As a user, I want extra attention drawn to risky operations
+
+**Acceptance Criteria:**
+- Red/warning indicators for dangerous patterns (rm -rf, sudo, etc.)
+- Warning text explaining specific risk
+- Explicit confirmation required for most dangerous operations
+- Educational messaging about risks
+
+**Example:**
+```
+⚠️  WARNING: Destructive Command
+   This will permanently delete files!
+   
+   Command: rm -rf /important/files
+   
+   [A] I understand, approve  [D] Deny
+```
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: Rule Management Interface
+**Description:** Comprehensive interface for managing auto-approval rules
+
+**User Stories:**
+- As a power user, I want to review and edit all my approval rules
+- As a developer, I want to enable/disable rules temporarily
+
+**Acceptance Criteria:**
+- Settings tab showing all active rules
+- Enable/disable individual rules
+- Edit rule patterns
+- Delete unused rules
+- See last used timestamp for each rule
+
+---
+
+#### P2-2: Batch Approval
+**Description:** Approve multiple similar operations at once
+
+**User Stories:**
+- As a developer, I want to approve a batch of similar file changes
+- As a user, I want to reduce repetitive approval prompts
+
+**Acceptance Criteria:**
+- Detect multiple similar pending operations
+- Option to approve all at once
+- Clear preview of what will be approved in batch
+- Safety limit on batch size
+
+---
+
+#### P2-3: Approval Templates
+**Description:** Pre-configured rule sets for common scenarios
+
+**User Stories:**
+- As a new user, I want recommended approval rules for my workflow
+- As a developer, I want quick setup without manual configuration
+
+**Acceptance Criteria:**
+- Templates for common scenarios ("Documentation Work", "Testing", "Refactoring")
+- One-click activation of template rules
+- Clear explanation of what each template enables
+- Ability to customize after applying template
+
+---
+
+## User Experience Flow
+
+### First Approval Experience
 
 ```
-Tool Approval System
-├── Approval Manager
-│   ├── Request Queue
-│   ├── Rule Matcher
-│   ├── Decision Handler
-│   └── Audit Logger
-├── Approval Overlay (TUI)
-│   ├── Dialog Renderer
-│   ├── Diff Viewer
-│   ├── Command Preview
-│   └── Input Handler
-├── Rule Engine
-│   ├── Path Matcher
-│   ├── Command Pattern Matcher
-│   ├── Tool Matcher
-│   └── Rule Evaluator
-├── Settings Integration
-│   ├── Rule Manager
-│   ├── Settings Persistence
-│   └── UI Components
-└── Audit System
-    ├── Log Writer
-    ├── Log Storage
-    └── Log Query
-```
-
-### Approval Flow
-
-```
-Agent Loop → Tool Call
+Agent wants to write file
     ↓
-Approval Manager: Does tool need approval?
+Approval overlay appears
     ↓
-┌────────────────────────────────────┐
-│ Check Auto-Approval Rules          │
-│ - Tool-level rules                 │
-│ - Path-based rules                 │
-│ - Command pattern rules            │
-└────────────────┬───────────────────┘
-                 ↓
-         Rule Match Found?
-         ├─ Yes → Auto-Approve → Execute Tool
-         └─ No → Request User Approval
-                 ↓
-         Show Approval Overlay
-                 ↓
-         User Decision?
-         ├─ Approve → Execute Tool
-         ├─ Always → Create Rule + Execute
-         └─ Deny → Return Error to Agent
+User sees diff preview with changes
+    ↓
+User presses 'A' to approve
+    ↓
+File written, result shown in chat
+    ↓
+Agent continues task
 ```
 
-### Data Model
-
-```go
-type ApprovalRequest struct {
-    ID          string
-    ToolName    string
-    Parameters  map[string]interface{}
-    Context     ExecutionContext
-    Preview     *ChangePreview
-    Timestamp   time.Time
-}
-
-type ApprovalRule struct {
-    ID          string
-    Type        RuleType // Tool, Path, Command
-    Pattern     string
-    Enabled     bool
-    CreatedAt   time.Time
-    LastUsed    time.Time
-}
-
-type AuditEntry struct {
-    Timestamp   time.Time
-    RequestID   string
-    ToolName    string
-    Decision    Decision // Approved, Denied, AutoApproved
-    UserID      string
-    Parameters  map[string]interface{}
-}
-```
+**Experience:** Clear, informative—user feels in control
 
 ---
 
-## Design Decisions
+### Denial and Alternative Flow
 
-### Why Approval Required for Write Operations?
-- **Risk mitigation:** File writes can corrupt code or data
-- **Reversibility:** Write operations are harder to undo
-- **User control:** Developers want to review changes before applying
-- **Industry standard:** Other tools (git, package managers) require confirmation
+```
+Agent wants to execute dangerous command
+    ↓
+Approval overlay with red warning
+    ↓
+User reads command: "rm -rf node_modules"
+    ↓
+User presses 'D' to deny
+    ↓
+Agent: "Command denied. Would you like me to
+       move files to trash instead?"
+    ↓
+User: "Yes, move to trash"
+    ↓
+Agent uses safer alternative
+```
 
-### Why Auto-Approval Rules Instead of AI Learning?
-- **Predictability:** Explicit rules are clear and understandable
-- **Control:** Users know exactly what's automated
-- **Transparency:** No black box decision making
-- **Debugging:** Easy to understand why something was/wasn't approved
-- **Security:** No risk of AI learning wrong patterns
-
-### Why Show Full Diff Instead of Summary?
-- **Accuracy:** Summaries can miss important details
-- **Trust:** Developers want to see exact changes
-- **Learning:** Users learn what agent does by reviewing
-- **Debugging:** Full context helps identify issues
-- **Standard practice:** Developers are used to reviewing diffs
-
-### Why Timeout is Optional?
-- **Safety first:** Don't want to auto-approve by timeout
-- **User pace:** Some decisions require careful consideration
-- **Session integrity:** Long-running sessions shouldn't fail due to timeout
-- **Flexibility:** Power users can enable if they want speed
+**Experience:** Safety-first with intelligent alternatives
 
 ---
 
-## Security Considerations
+### Auto-Approval Rule Creation
 
-### Threat Model
+```
+Approval request for read_file on docs/
+    ↓
+User realizes this is always safe
+    ↓
+User opens settings (Ctrl+,)
+    ↓
+Navigates to Auto-Approval tab
+    ↓
+Adds rule: "read_file docs/**"
+    ↓
+Saves settings
+    ↓
+Future docs/ reads auto-approve
+```
 
-1. **Malicious Agent Behavior:**
-   - Mitigation: All destructive operations require approval
-   - Detection: Audit logs track all attempts
+**Experience:** Easy customization for trusted patterns
 
-2. **Social Engineering:**
-   - Mitigation: Clear previews show exact operations
-   - Detection: Highlight dangerous patterns
+---
 
-3. **Accidental Approval:**
-   - Mitigation: Different keys for approve vs always-approve
-   - Recovery: Audit log shows what was approved
+### Audit Review Flow
 
-4. **Rule Exploitation:**
-   - Mitigation: Strict pattern matching
-   - Detection: Audit log shows rule usage
+```
+Team lead wants to review AI usage
+    ↓
+Opens audit log from settings
+    ↓
+Sees chronological list of approvals
+    ↓
+Filters by team member or date range
+    ↓
+Reviews denied operations for training
+    ↓
+Exports log for compliance
+```
 
-### Security Best Practices
+**Experience:** Transparency for oversight and compliance
 
-1. **Deny by Default:** New tools require approval unless explicitly configured
-2. **Least Privilege:** Auto-approval rules should be as specific as possible
-3. **Audit Everything:** All approval decisions logged
-4. **No Bypass:** No way to disable approval system entirely for dangerous tools
-5. **Secure Defaults:** Default configuration prioritizes security over convenience
+---
+
+## User Interface & Interaction Design
+
+### Approval Overlay - File Write
+
+**Visual Layout:**
+```
+┌─ Tool Approval Required ──────────────────────────┐
+│ write_file                                        │
+│                                                   │
+│ File: src/components/Header.tsx                   │
+│                                                   │
+│ ┌─ Changes ───────────────────────────────────┐  │
+│ │  1 | import React from 'react';             │  │
+│ │  2 | import { Logo } from './Logo';         │  │
+│ │  3 |                                        │  │
+│ │  4 | export function Header() {             │  │
+│ │ -5 |   return <header><Logo /></header>;   │  │
+│ │ +5 |   return (                             │  │
+│ │ +6 |     <header className="app-header">   │  │
+│ │ +7 |       <Logo />                         │  │
+│ │ +8 |     </header>                          │  │
+│ │ +9 |   );                                   │  │
+│ │ 10 | }                                      │  │
+│ └─────────────────────────────────────────────┘  │
+│                                                   │
+│ ⌨  [Ctrl+A] Approve    [Ctrl+R] Reject           │
+└───────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Syntax-highlighted diff for code changes
+- Line numbers for easy reference
+- Clear +/- indicators for additions/deletions
+- Keyboard shortcuts visible
+- Scrollable for large changes
+
+---
+
+### Approval Overlay - Command Execution
+
+**Visual Layout:**
+```
+┌─ Tool Approval Required ──────────────────────────┐
+│ execute_command                                   │
+│                                                   │
+│ Command: npm run build                            │
+│ Working Directory: /workspace/my-project          │
+│ Timeout: 30 seconds                               │
+│                                                   │
+│ This command will:                                │
+│ • Compile TypeScript files                        │
+│ • Bundle assets                                   │
+│ • Generate build/ directory                       │
+│                                                   │
+│ ⌨  [Ctrl+A] Approve    [Ctrl+R] Reject           │
+└───────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clear command display
+- Context information (directory, timeout)
+- Human-readable explanation of effects
+- Safe, professional appearance
+
+---
+
+### Approval Overlay - Dangerous Command
+
+**Visual Layout:**
+```
+┌─ ⚠️  DANGEROUS OPERATION ─────────────────────────┐
+│ execute_command                                   │
+│                                                   │
+│ ⚠️  WARNING: This command will permanently        │
+│    delete files without recovery!                 │
+│                                                   │
+│ Command: rm -rf node_modules                      │
+│ Working Directory: /workspace/my-project          │
+│                                                   │
+│ Affected: ~15,000 files in node_modules/          │
+│                                                   │
+│ ⚠️  Consider: Use trash instead of permanent      │
+│    deletion, or run 'npm prune' for cleanup       │
+│                                                   │
+│ ⌨  [Ctrl+A] I understand, approve                │
+│    [Ctrl+R] Reject (recommended)                  │
+└───────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Red/warning color scheme
+- Explicit risk explanation
+- Impact assessment (file count)
+- Safer alternative suggestions
+- Bias toward rejection in button labels
+
+---
+
+### Auto-Approval Settings Panel
+
+**Visual Layout:**
+```
+┌─ Settings: Auto-Approval Rules ───────────────────┐
+│                                                   │
+│ ✅ Read Operations (recommended)                  │
+│    Auto-approve: read_file, list_files,           │
+│    search_files                                   │
+│    [Disable]                                      │
+│                                                   │
+│ ✅ Documentation Writes                           │
+│    Auto-approve: write_file docs/**               │
+│    Last used: 2 hours ago                         │
+│    [Disable] [Edit]                               │
+│                                                   │
+│ ✅ Safe Git Commands                              │
+│    Auto-approve: git status, git log, git diff    │
+│    Last used: 15 minutes ago                      │
+│    [Disable] [Edit]                               │
+│                                                   │
+│ [+ Add New Rule]                                  │
+│                                                   │
+└───────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Visual checkboxes show enabled/disabled
+- Last used timestamp shows rule activity
+- Quick enable/disable actions
+- Edit option for customization
+- Clear rule descriptions
 
 ---
 
 ## Success Metrics
 
 ### Security Metrics
-- **Prevention rate:** >99% of dangerous operations reviewed before execution
-- **Rule accuracy:** <1% false positives (safe operations blocked)
-- **Audit coverage:** 100% of tool executions logged
-- **Override rate:** <5% of denials later regretted (indicates good default rules)
+
+**Dangerous Operation Prevention:**
+- Target: >99% of dangerous operations reviewed before execution
+- Measure: Track approval requests vs. auto-approved operations
+
+**Denial Rate:**
+- Target: <10% of approvals denied (indicates agent making good suggestions)
+- Measure: Approved vs. denied requests
+
+**Audit Coverage:**
+- Target: 100% of tool executions logged
+- Measure: Compare tool executions to audit entries
+
+---
 
 ### Usability Metrics
-- **Approval time:** p50 under 5 seconds for typical approvals
-- **Rule creation rate:** >30% of users create at least one auto-approval rule
-- **Denial rate:** <10% of approval requests denied (indicates agent making good suggestions)
-- **Settings access:** >50% of users access approval settings within first week
+
+**Approval Speed:**
+- Target: p50 approval time under 5 seconds
+- Measure: Time from request to decision
+
+**Auto-Approval Adoption:**
+- Target: >30% of users create at least one auto-approval rule
+- Measure: User accounts with rules configured
+
+**Rule Effectiveness:**
+- Target: >50% reduction in approval prompts after rule creation
+- Measure: Approval requests before vs. after rule configuration
+
+---
 
 ### Trust Metrics
-- **User confidence:** >85% of users feel in control of agent actions
-- **Continued usage:** <5% of users disable agent due to approval friction
-- **Feature adoption:** >70% of users understand and use approval system effectively
+
+**User Confidence:**
+- Target: >85% of users feel in control of agent actions
+- Measure: Post-session surveys
+
+**Feature Satisfaction:**
+- Target: >80% satisfaction with approval system
+- Measure: User ratings of approval experience
+
+**Continued Usage:**
+- Target: <5% of users disable agent due to approval friction
+- Measure: Churn analysis with exit surveys
 
 ---
 
-## Dependencies
+## User Enablement
 
-### External Dependencies
-- TUI framework (for overlay rendering)
-- File system access (for diff generation)
-- Settings system (for rule persistence)
+### Discoverability
 
-### Internal Dependencies
-- Agent core (event system for approval requests)
-- Tool system (tool metadata and schemas)
-- Memory system (for context in audit logs)
-- Diff generation utilities
+**First-Time Experience:**
+- Tutorial on first approval: "This is how you control what the agent does"
+- Tooltip hints on keyboard shortcuts
+- Link to approval documentation in overlay
 
-### Platform Requirements
-- File system read access (for diff preview)
-- Terminal with ANSI colors (for diff highlighting)
-- Sufficient screen space (80x24 minimum for diff view)
+**Progressive Disclosure:**
+- Beginner: See approval overlays, learn the flow
+- Intermediate: Create first auto-approval rule
+- Advanced: Configure comprehensive rule sets
 
 ---
 
-## Risks & Mitigations
+### Learning Path
+
+**Beginner:**
+1. Experience first approval overlay
+2. Understand diff preview and command display
+3. Learn keyboard shortcuts (Ctrl+A, Ctrl+R)
+
+**Intermediate:**
+1. Identify repetitive safe approvals
+2. Create first auto-approval rule
+3. Monitor rule usage in settings
+
+**Advanced:**
+1. Configure comprehensive rule sets for workflow
+2. Use approval templates for quick setup
+3. Review audit logs for optimization
+
+---
+
+### Support Materials
+
+**Documentation:**
+- "Understanding Tool Approval" - System overview
+- "Creating Approval Rules" - Rule configuration guide
+- "Approval Best Practices" - Security recommendations
+
+**In-App Help:**
+- Tooltips in approval overlay explaining controls
+- Help text in settings for rule configuration
+- Examples of common approval rules
+
+**Video Tutorials:**
+- "Your First Approval" - Walkthrough
+- "Streamlining with Auto-Approval" - Rule creation
+- "Staying Safe with AI" - Security best practices
+
+---
+
+## Risk & Mitigation
 
 ### Risk 1: Approval Fatigue
-**Impact:** High  
+**Impact:** High - Users annoyed by excessive prompts  
 **Probability:** Medium  
+**User Impact:** Reduced productivity, frustration
+
 **Mitigation:**
 - Smart default auto-approval rules for safe operations
 - Easy rule creation from approval dialogs
-- Batch approval for similar operations (future)
-- Learn from usage patterns to suggest rules
+- Clear documentation on optimal rule configuration
+- Template rule sets for common workflows
+
+---
 
 ### Risk 2: Users Auto-Approving Everything
-**Impact:** High  
+**Impact:** High - Defeats purpose of security system  
 **Probability:** Low  
+**User Impact:** Security vulnerabilities, accidental damage
+
 **Mitigation:**
 - Warnings for overly broad rules
-- Require confirmation for "always approve" on dangerous tools
-- Audit log visibility to show rule usage
-- Educational content about security
+- Educational content about security risks
+- Audit log visibility showing rule usage
+- Require explicit confirmation for dangerous tool auto-approval
+- No "disable all approvals" option
+
+---
 
 ### Risk 3: Complex Rule Configuration
-**Impact:** Medium  
+**Impact:** Medium - Users struggle to create effective rules  
 **Probability:** Medium  
+**User Impact:** Either too restrictive or too permissive rules
+
 **Mitigation:**
 - Simple default rules that work for most users
-- Template rules for common scenarios
+- Template rule sets for common scenarios
 - Clear documentation with examples
 - In-app help for rule creation
+- Preview showing what rule will match
 
-### Risk 4: Performance Impact
-**Impact:** Low  
+---
+
+### Risk 4: Poor Denial Experience
+**Impact:** Medium - Agent confused by denials  
 **Probability:** Low  
+**User Impact:** Conversation breakdown, task failure
+
 **Mitigation:**
-- Efficient rule matching algorithms
-- Cache rule evaluation results
-- Async diff generation
-- Optimize preview rendering
+- Clear denial feedback to agent
+- Agent trained to offer alternatives after denial
+- User can explain denial reason in chat
+- Denial doesn't end conversation, just blocks operation
 
 ---
 
-## Future Enhancements
+### Risk 5: Compliance Gaps
+**Impact:** Low - Audit logs insufficient for compliance  
+**Probability:** Low  
+**User Impact:** Cannot meet regulatory requirements
 
-### Phase 2 Ideas
-- **Batch Approval:** Approve multiple similar operations at once
-- **Conditional Rules:** "Approve if file size < 1000 lines"
-- **Time-Based Rules:** "Auto-approve for next 1 hour"
-- **Workspace Rules:** Different rules per workspace
-- **Team Rules:** Share approved rules across team
-
-### Phase 3 Ideas
-- **AI-Assisted Review:** Highlight potentially problematic changes
-- **Change Impact Analysis:** Show files affected by operation
-- **Rollback Support:** Easy undo for approved operations
-- **Approval Templates:** Pre-configured rule sets for common scenarios
-- **Integration with Git:** Approve based on git diff/status
+**Mitigation:**
+- Complete logging of all operations
+- Export functionality for external audit systems
+- Configurable retention periods
+- Timestamp and parameter logging
+- Future: Encryption option for sensitive logs
 
 ---
 
-## Open Questions
+## Dependencies & Integration Points
 
-1. **Should we support approval delegation?**
-   - Use case: Junior dev gets approval from senior
-   - Complexity: Requires multi-user support
-   - Decision: Defer to future (Phase 3+)
+### Feature Dependencies
 
-2. **Should we limit auto-approval rule count?**
-   - Pro: Prevents overly permissive configurations
-   - Con: Power users may need many rules
-   - Decision: Warn at 20+ rules but don't enforce limit
+**Agent Loop:**
+- Approval system integrates with tool execution pipeline
+- Approval requests pause agent loop until decision
+- Denial feedback returns to agent as error
 
-3. **Should audit logs be encrypted?**
-   - Pro: Protects sensitive information
-   - Con: Makes logs harder to query/debug
-   - Decision: Start unencrypted, add encryption option in Phase 2
+**Tool System:**
+- Tools declare if they require approval
+- Tool metadata includes preview generation
+- Tool schemas used for parameter display
 
-4. **Should we support approval plugins?**
-   - Use case: Custom approval logic for specific tools
-   - Complexity: Security implications
-   - Decision: Research for Phase 3
+**Settings System:**
+- Auto-approval rules stored in user configuration
+- Settings UI for rule management
+- Persistent storage across sessions
+
+**Event System:**
+- Approval events communicated to UI
+- Real-time updates during approval flow
+- Audit events logged for all decisions
 
 ---
 
-## Related Documentation
+### User-Facing Integrations
 
-- [ADR-0010: Tool Approval Mechanism](../adr/0010-tool-approval-mechanism.md)
-- [ADR-0017: Auto-Approval and Settings System](../adr/0017-auto-approval-and-settings-system.md)
-- [How-to: Use TUI Interface - Tool Approval](../how-to/use-tui-interface.md#tool-approval)
-- [Architecture: Tool System](../architecture/tool-system.md)
-- [Security Policy](../../SECURITY.md)
+**TUI Display:**
+- Approval overlay rendering
+- Diff viewer for file changes
+- Command preview formatting
+
+**Keyboard Controls:**
+- Ctrl+A, Ctrl+R for approve/deny
+- Tab navigation in overlay
+- ESC to close and deny
+
+**Settings Interface:**
+- Auto-approval rule management
+- Timeout configuration
+- Audit log access
+
+---
+
+## Constraints & Trade-offs
+
+### Product Constraints
+
+**Security vs. Convenience:**
+- **Trade-off:** Full security vs. streamlined workflow
+- **Decision:** Secure by default, convenience through configuration
+- **Rationale:** Trust and safety are non-negotiable; users can optimize
+
+**Automatic vs. Explicit:**
+- **Trade-off:** AI-learned rules vs. explicit configuration
+- **Decision:** Explicit configuration only
+- **Rationale:** Predictability and transparency over convenience
+
+**Flexibility vs. Simplicity:**
+- **Trade-off:** Powerful rule patterns vs. simple configuration
+- **Decision:** Simple patterns with expansion path
+- **Rationale:** Most users need simple rules; power users can learn advanced
+
+---
+
+### Design Constraints
+
+**Screen Space:**
+- **Constraint:** Approval overlay must fit in terminal
+- **Trade-off:** Information density vs. readability
+- **Decision:** Scrollable viewport with 15-line limit
+- **Rationale:** Balance detail with terminal constraints
+
+**Keyboard-Only:**
+- **Constraint:** Must work without mouse
+- **Trade-off:** UI complexity vs. accessibility
+- **Decision:** All actions keyboard-accessible
+- **Rationale:** Terminal users expect keyboard workflow
+
+**Preview Generation:**
+- **Constraint:** Previews must generate quickly
+- **Trade-off:** Accuracy vs. speed
+- **Decision:** Fast approximation over perfect rendering
+- **Rationale:** Approval speed more important than perfect preview
+
+---
+
+## Competitive Analysis
+
+### GitHub Copilot
+**Approach:** No approval system - all suggestions applied manually  
+**Strengths:** Simple, no interruptions  
+**Weaknesses:** No autonomous execution, no file operations  
+**Differentiation:** We enable powerful automation with safety
+
+### Cursor
+**Approach:** Command palette for dangerous operations  
+**Strengths:** Clear command preview  
+**Weaknesses:** Binary yes/no, no rule system  
+**Differentiation:** Configurable auto-approval for trusted operations
+
+### Aider
+**Approach:** All file changes require git commit review  
+**Strengths:** Uses familiar git workflow  
+**Weaknesses:** No real-time approval, command execution unrestricted  
+**Differentiation:** Real-time approval with comprehensive coverage
+
+### Windsurf
+**Approach:** Approval for all tool calls  
+**Strengths:** Maximum control  
+**Weaknesses:** High friction, approval fatigue  
+**Differentiation:** Smart defaults and auto-approval reduce friction
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Use AI automation confidently—Forge keeps you in control with transparent approval for every dangerous operation. Start safe, streamline with auto-approval rules as you build trust."
+
+**Key Differentiators:**
+- Security-first with safe defaults
+- Transparent previews before execution
+- Flexible auto-approval for trusted operations
+- Complete audit trail for compliance
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Security-conscious developers
+- Organizations with compliance requirements
+- Teams managing production systems
+
+**Value Propositions by Segment:**
+- **Enterprise:** Compliance-ready audit logs, organizational control
+- **Indie Developers:** Safety without sacrificing automation
+- **Teams:** Educational tool for safe AI adoption
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. "Understanding Tool Approval" - How the system works
+2. "Creating Approval Rules" - Configuration guide
+3. "Approval Best Practices" - Security recommendations
+4. "Audit Trail Guide" - Compliance usage
+
+**FAQ Topics:**
+- "Why do I need to approve file writes?"
+- "How do I auto-approve safe operations?"
+- "What happens when I deny an operation?"
+- "Can I disable approval for certain tools?"
+
+---
+
+### Support Considerations
+
+**Common Support Requests:**
+1. Creating auto-approval rules
+2. Understanding why operation requires approval
+3. Configuring approval timeout
+4. Accessing audit logs
+
+**Support Resources:**
+- Approval overlay help text
+- Settings panel documentation
+- Template rule sets
+- Security best practices guide
+
+---
+
+## Evolution & Roadmap
+
+### Version History
+
+**v1.0 (Current):**
+- Visual approval overlay with diff preview
+- Keyboard-driven approval workflow
+- Basic auto-approval rule system
+- Audit logging
+
+---
+
+### Future Enhancements
+
+#### Phase 2: Enhanced Automation
+- Batch approval for similar operations
+- Conditional rules ("approve if file < 1000 lines")
+- Time-based rules ("auto-approve for next hour")
+- Workspace-specific rule sets
+
+**User Value:** More flexible automation without sacrificing control
+
+---
+
+#### Phase 3: Team & Compliance
+- Approval delegation (junior dev → senior approval)
+- Team-shared rule templates
+- Enhanced audit log encryption
+- Approval analytics dashboard
+
+**User Value:** Enterprise-ready compliance and team workflows
+
+---
+
+#### Phase 4: AI-Assisted Review
+- AI highlights potentially problematic changes
+- Change impact analysis (files affected)
+- Rollback support for approved operations
+- Smart rule suggestions based on usage
+
+**User Value:** Intelligent assistance in making approval decisions
+
+---
+
+### Open Questions
+
+**Question 1: Should we support approval delegation?**
+- **Pro:** Teams need senior review workflow
+- **Con:** Requires multi-user architecture
+- **Current Direction:** Phase 3 feature
+
+**Question 2: Should audit logs be encrypted by default?**
+- **Pro:** Protects sensitive information
+- **Con:** Makes debugging harder
+- **Current Direction:** Optional encryption in Phase 2
+
+**Question 3: Should we AI-learn approval patterns?**
+- **Pro:** Reduce configuration burden
+- **Con:** Unpredictable, security risk
+- **Current Direction:** Explicit rules only
+
+**Question 4: Maximum rule count limit?**
+- **Pro:** Prevents overly permissive configurations
+- **Con:** Power users may need many rules
+- **Current Direction:** Warn at 20+, no hard limit
+
+---
+
+## Technical References
+
+- **Architecture Documentation:** `docs/architecture/tool-approval.md`
+- **Implementation Details:** See ADR-0010 (Tool Approval Mechanism)
+- **Auto-Approval System:** See ADR-0017 (Auto-Approval and Settings)
+- **Related Features:** Tool System PRD, Settings System PRD
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed technical implementation details
+- Enhanced user experience sections
+- Added competitive analysis
+- Expanded go-to-market considerations
+
+### 2024-12 (Original)
+- Initial PRD with technical architecture
+- Component structure and data models
+- Code examples and flow diagrams

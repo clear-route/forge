@@ -8,9 +8,11 @@
 
 ---
 
-## Overview
+## Product Vision
 
-Auto-Approval Rules enable users to configure trusted operations that can execute without manual approval, balancing security with workflow efficiency. This system allows users to define granular rules for automatically approving specific tools, paths, commands, or patterns while maintaining comprehensive audit trails and safety guardrails.
+Enable developers to work at full speed with AI assistance by automating trusted operations while maintaining complete security and transparency. Auto-approval rules let users define exactly what the agent can do automatically, eliminating repetitive approval prompts without sacrificing control or safety.
+
+**Strategic Alignment:** Trust-building through transparency—users gain confidence by seeing what's automated and maintaining full audit visibility. This transforms Forge from an interrupted workflow to a seamless coding partner.
 
 ---
 
@@ -19,650 +21,1290 @@ Auto-Approval Rules enable users to configure trusted operations that can execut
 Users working with AI coding agents face a tension between security and productivity:
 
 1. **Approval Fatigue:** Repeatedly approving safe, repetitive operations slows workflow
-2. **Lost Context:** Constant interruptions for approval break developer flow
+2. **Lost Context:** Constant interruptions for approval break developer flow state
 3. **Inconsistent Trust:** No way to express "always trust this specific operation"
 4. **Workflow Friction:** Legitimate, safe operations require same scrutiny as risky ones
-5. **Time Waste:** Spending time approving obviously safe read operations
+5. **Time Waste:** Spending seconds approving obviously safe read operations adds up
 6. **Power User Frustration:** Experienced users want more control over automation
 
 Without auto-approval, users either:
-- Suffer constant interruptions (poor UX)
-- Disable approval entirely (dangerous)
+- Suffer constant interruptions (poor UX, broken flow)
+- Disable approval entirely (dangerous, defeats security purpose)
 - Avoid using agent for repetitive tasks (underutilization)
 
----
-
-## Goals
-
-### Primary Goals
-
-1. **Workflow Efficiency:** Enable automation of trusted operations
-2. **Granular Control:** Provide precise rule definition capabilities
-3. **Security First:** Maintain safety even with automation
-4. **Transparency:** Clear visibility into what's automated and why
-5. **Easy Management:** Simple rule creation, editing, and deletion
-6. **Audit Trail:** Complete logging of all auto-approved actions
-
-### Non-Goals
-
-1. **AI-Based Trust:** Does NOT use AI to decide what's safe
-2. **Learning System:** Does NOT automatically learn from user behavior
-3. **Shared Rules:** Does NOT sync rules across users/teams (yet)
-4. **Risk Analysis:** Does NOT perform deep security analysis of operations
-5. **External Policy:** Does NOT integrate with organizational policy engines
+**Real-World Impact:**
+- Developer reviewing 40 file reads per session wastes 3-4 minutes on approvals
+- Context switching from approval dialogs breaks coding flow
+- Teams hesitant to adopt because "it's too interruptive"
 
 ---
 
-## User Personas
+## Key Value Propositions
+
+### For Power User Developers
+- **Workflow Velocity:** Eliminate approval friction for known-safe operations
+- **Granular Control:** Precise rule definition—as specific or broad as needed
+- **Flow State Protection:** Fewer interruptions mean sustained concentration
+
+### For Team Leads
+- **Standardization:** Configure safe defaults for entire team
+- **Best Practices:** Pre-approved rule templates for common workflows
+- **Consistency:** Same automation patterns across team members
+
+### For New Users
+- **Smart Defaults:** Safe operations auto-approved out of the box
+- **Progressive Trust:** Start conservative, expand automation as comfort grows
+- **Learning Tool:** Observe what's automated to understand safe patterns
+
+---
+
+## Target Users & Use Cases
 
 ### Primary: Power User Developer
-- **Background:** Experienced developer who knows their workflow well
-- **Workflow:** Repetitive, predictable operations during development
-- **Pain Points:** Approval fatigue for known-safe operations
-- **Goals:** Automate trusted operations while maintaining security
+
+**Profile:**
+- Experienced developer who knows their workflow well
+- Works on repetitive, predictable operations during development
+- Values both security and efficiency
+
+**Key Use Cases:**
+- Auto-approving all file read operations to eliminate approval fatigue
+- Creating path-based rules for documentation changes (docs/*)
+- Whitelisting safe shell commands (git status, npm test)
+
+**Pain Points Addressed:**
+- Approval fatigue from repetitive safe operations
+- Workflow interruptions during focused coding
+- Time wasted on obviously safe approvals
+
+**Success Story:**
+"I configured auto-approval for reads and docs changes. Now I only see approval dialogs for actual writes to code, which is exactly what I want to review. My workflow is 10x smoother."
+
+---
 
 ### Secondary: Team Lead
-- **Background:** Sets up workflows for team members
-- **Workflow:** Configures safe defaults for common tasks
-- **Pain Points:** Needs consistency across team usage
-- **Goals:** Define standard auto-approval rules for team
+
+**Profile:**
+- Sets up workflows and standards for team members
+- Responsible for balancing productivity and security
+- Configures tooling for optimal team performance
+
+**Key Use Cases:**
+- Creating standard auto-approval rules for team
+- Defining safe patterns for junior developers
+- Monitoring auto-approval usage through audit logs
+
+**Pain Points Addressed:**
+- Need for consistency across team's AI usage
+- Junior developers unsure what's safe to auto-approve
+- Lack of visibility into automation patterns
+
+**Success Story:**
+"I created a standard rule set for the team: auto-approve reads, docs changes, and safe git commands. Now everyone has the same productive workflow without compromising security."
+
+---
 
 ### Tertiary: New User
-- **Background:** First-time Forge user, learning capabilities
-- **Workflow:** Exploring features, building trust
-- **Pain Points:** Overwhelmed by approval requests
-- **Goals:** Start with good defaults, add rules as comfort grows
+
+**Profile:**
+- First-time Forge user, learning capabilities
+- Building trust with AI agent gradually
+- Wants good defaults without complexity
+
+**Key Use Cases:**
+- Using default auto-approval rules (reads only)
+- Learning which operations are safe through observation
+- Gradually adding rules as comfort grows
+
+**Pain Points Addressed:**
+- Overwhelmed by constant approval requests
+- Uncertainty about what's safe to auto-approve
+- Configuration complexity as new user
+
+**Success Story:**
+"The default setup was perfect—reads are auto-approved but everything else requires my review. As I got comfortable, I added a rule for test file changes. Simple and safe."
 
 ---
 
-## Requirements
+## Product Requirements
 
-### Functional Requirements
+### Priority 0 (Must Have)
 
-#### FR1: Rule Types
-- **R1.1:** Tool-based rules (auto-approve specific tools)
-- **R1.2:** Path-based rules (auto-approve operations on specific paths)
-- **R1.3:** Command pattern rules (auto-approve matching shell commands)
-- **R1.4:** Composite rules (combine multiple conditions)
-- **R1.5:** Exclusion rules (blacklist patterns)
+#### P0-1: Tool-Based Auto-Approval
+**Description:** Allow users to auto-approve specific tools entirely
 
-#### FR2: Tool Rules
-- **R2.1:** Auto-approve specific tools by name
-  - Example: `read_file` always approved
-- **R2.2:** Tool rules apply to all parameters
-- **R2.3:** Can enable/disable per tool
-- **R2.4:** Blacklist overrides whitelist
-- **R2.5:** Default: No tools auto-approved except `read_file`
+**User Stories:**
+- As a developer, I want to auto-approve all read operations without reviewing each one
+- As a user, I want to enable/disable auto-approval for specific tools easily
 
-#### FR3: Path Rules
-- **R3.1:** Whitelist path patterns (glob syntax)
-  - Example: `docs/**` (all files under docs/)
-- **R3.2:** Blacklist path patterns
-  - Example: `!**/.env` (never auto-approve .env files)
-- **R3.3:** Support wildcards (*, **, ?)
-- **R3.4:** Path rules work with read/write/execute operations
-- **R3.5:** Most specific rule wins (longest match)
-- **R3.6:** Absolute and relative path support
-
-#### FR4: Command Pattern Rules
-- **R4.1:** Define regex patterns for shell commands
-  - Example: `^git status$` (exact match)
-  - Example: `^npm (test|build)` (multiple options)
-- **R4.2:** Case-sensitive and case-insensitive options
-- **R4.3:** Full regex support (capture groups, lookahead, etc.)
-- **R4.4:** Blacklist dangerous commands (rm -rf, sudo, etc.)
-- **R4.5:** Validate regex patterns before saving
-
-#### FR5: Rule Creation
-- **R5.1:** Create rules from approval dialog ("Always approve")
-- **R5.2:** Create rules in settings interface
-- **R5.3:** Create rules via slash command (future)
-- **R5.4:** Quick-create common rules (templates)
-- **R5.5:** Validate rules before activation
-- **R5.6:** Provide examples for each rule type
-
-#### FR6: Rule Management
-- **R6.1:** List all active rules
-- **R6.2:** Enable/disable rules without deletion
-- **R6.3:** Edit existing rules
-- **R6.4:** Delete rules
-- **R6.5:** Reorder rules (priority)
-- **R6.6:** Export/import rule sets
-- **R6.7:** Search/filter rules
-
-#### FR7: Rule Evaluation
-- **R7.1:** Evaluate rules on every tool call
-- **R7.2:** Check blacklist rules first
-- **R7.3:** Then check whitelist rules
-- **R7.4:** Default to manual approval if no match
-- **R7.5:** Log evaluation decision
-- **R7.6:** Performance: <10ms evaluation time
-
-#### FR8: Safety Features
-- **R8.1:** Maximum rule count (prevent overly permissive configs)
-- **R8.2:** Dangerous operation warnings (even with rules)
-- **R8.3:** Rule review prompt (every 30 days)
-- **R8.4:** Audit log of all auto-approvals
-- **R8.5:** Global kill switch (disable all auto-approval)
-- **R8.6:** Rule impact preview (show what would auto-approve)
-
-#### FR9: Default Rules
-- **R9.1:** Ship with safe defaults
-  - `read_file`: Always auto-approve reads
-- **R9.2:** Suggest common rules based on usage (optional)
-- **R9.3:** Project-specific rule templates
-- **R9.4:** Easy reset to defaults
-
-#### FR10: Audit & Logging
-- **R10.1:** Log every auto-approval with:
-  - Timestamp
-  - Rule that matched
-  - Tool/operation details
-  - Full parameters
-- **R10.2:** Searchable audit log
-- **R10.3:** Export audit log
-- **R10.4:** Retention policy (30 days default)
-- **R10.5:** Visual indicator when auto-approval used
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Rule evaluation under 10ms per tool call
-- **N1.2:** Rule creation/update under 100ms
-- **N1.3:** Settings UI loads in under 200ms
-- **N1.4:** No performance impact when no rules active
-- **N1.5:** Efficient pattern matching (compiled regex)
-
-#### NFR2: Security
-- **N2.1:** Rules stored with restricted file permissions (600)
-- **N2.2:** Rule validation prevents injection attacks
-- **N2.3:** Blacklist always overrides whitelist
-- **N2.4:** No way to bypass approval for truly dangerous operations
-- **N2.5:** Clear warnings for risky rule configurations
-
-#### NFR3: Usability
-- **N3.1:** Intuitive rule creation interface
-- **N3.2:** Clear preview of rule impact
-- **N3.3:** Helpful error messages for invalid rules
-- **N3.4:** Examples provided for each rule type
-- **N3.5:** Easy to understand which rule matched
-
-#### NFR4: Reliability
-- **N4.1:** Invalid rules don't crash system
-- **N4.2:** Graceful degradation (fall back to manual approval)
-- **N4.3:** Atomic rule updates (no partial states)
-- **N4.4:** Consistent evaluation across sessions
-- **N4.5:** Rule file corruption recovery
-
----
-
-## User Experience
-
-### Core Workflows
-
-#### Workflow 1: Auto-Approving Read Operations
-1. User tired of approving file reads
-2. Opens settings → Auto-Approval tab
-3. Sees toggle: "Auto-approve read operations"
-4. Enables toggle
-5. Rule created: `tool:read_file → auto-approve`
-6. Future file reads skip approval
-7. User sees toast: "Auto-approved: read_file (rule: 'read operations')"
-
-**Success Criteria:** No more interruptions for reads
-
-#### Workflow 2: Creating Path-Based Rule from Dialog
-1. Agent wants to read `docs/architecture.md`
-2. Approval dialog appears
-3. User sees "Always approve" option
-4. User checks "Always approve for docs/**"
-5. Dialog shows preview: "Will auto-approve all operations in docs/"
-6. User confirms
-7. Rule saved
-8. Current operation auto-approves
-9. Future docs/ operations auto-approve
-
-**Success Criteria:** Rule created in context, immediately active
-
-#### Workflow 3: Configuring Command Patterns
-1. User frequently runs `npm test` and `npm build`
-2. Opens settings → Auto-Approval tab
-3. Clicks "Add Command Pattern Rule"
-4. Enters regex: `^npm (test|build)$`
-5. Tests pattern with examples
-6. Saves rule
-7. Future matching commands auto-approve
-
-**Success Criteria:** Multiple related commands automated with one rule
-
-#### Workflow 4: Reviewing and Disabling Rules
-1. User concerned about security
-2. Opens settings → Auto-Approval tab
-3. Sees list of 5 active rules
-4. Selects "Auto-approve npm install" rule
-5. Clicks "Disable" (not delete)
-6. Rule grayed out
-7. Future npm install requires approval again
-
-**Success Criteria:** Easy to temporarily disable without losing rule
-
-#### Workflow 5: Audit Trail Review
-1. User wonders what agent auto-approved
-2. Opens settings → Auto-Approval tab
-3. Clicks "View Audit Log"
-4. Sees chronological list:
-   - "10:23 AM - Auto-approved read_file docs/api.md (rule: 'docs/** whitelist')"
-   - "10:24 AM - Auto-approved npm test (rule: 'npm commands')"
-5. Can export log for review
-
-**Success Criteria:** Complete transparency of auto-approvals
-
----
-
-## Technical Architecture
-
-### Component Structure
-
-```
-Auto-Approval System
-├── Rule Engine
-│   ├── Rule Store
-│   ├── Rule Evaluator
-│   ├── Pattern Matcher
-│   └── Priority Resolver
-├── Rule Manager
-│   ├── CRUD Operations
-│   ├── Validation Engine
-│   ├── Import/Export
-│   └── Migration Handler
-├── Audit System
-│   ├── Audit Logger
-│   ├── Log Storage
-│   ├── Query Engine
-│   └── Retention Manager
-├── Settings UI
-│   ├── Rule List View
-│   ├── Rule Editor
-│   ├── Audit Viewer
-│   └── Quick Actions
-└── Integration
-    ├── Approval System Hook
-    ├── Tool System Integration
-    └── Event Emitter
-```
-
-### Data Model
-
-```go
-type AutoApprovalRule struct {
-    ID          string
-    Type        RuleType
-    Pattern     string
-    Enabled     bool
-    Priority    int
-    CreatedAt   time.Time
-    LastUsed    time.Time
-    UseCount    int
-    Description string
-}
-
-type RuleType int
-const (
-    RuleTypeTool RuleType = iota
-    RuleTypePath
-    RuleTypeCommand
-    RuleTypeComposite
-)
-
-type RuleEvaluation struct {
-    ToolName    string
-    Parameters  map[string]interface{}
-    MatchedRule *AutoApprovalRule
-    Decision    ApprovalDecision
-    Timestamp   time.Time
-}
-
-type ApprovalDecision int
-const (
-    DecisionManual ApprovalDecision = iota
-    DecisionAutoApprove
-    DecisionAutoReject
-)
-
-type AuditEntry struct {
-    Timestamp   time.Time
-    ToolName    string
-    Decision    ApprovalDecision
-    RuleID      string
-    RuleName    string
-    Parameters  map[string]interface{}
-    UserID      string
-}
-```
-
-### Rule Evaluation Flow
-
-```
-Tool Call Received
-    ↓
-Extract Tool & Parameters
-    ↓
-Auto-Approval Enabled?
-    ├─ No → Manual Approval
-    └─ Yes → Continue
-        ↓
-Load All Active Rules
-        ↓
-Sort by Priority
-        ↓
-┌────────────────────────────────┐
-│ Evaluation Loop:               │
-│                                │
-│ For each rule:                 │
-│   1. Check if rule applies     │
-│   2. If blacklist → DENY       │
-│   3. If whitelist → APPROVE    │
-│   4. Continue to next rule     │
-│                                │
-│ No rule matched → Manual       │
-└────────────────────────────────┘
-        ↓
-Log Decision to Audit
-        ↓
-Return Decision
-        ↓
-Execute (if approved) or Show Approval Dialog
-```
-
----
-
-## Design Decisions
-
-### Why Whitelist + Blacklist Model?
-**Rationale:**
-- **Safety:** Blacklist always wins (can override broad whitelist)
-- **Flexibility:** Whitelist enables automation
-- **Security best practice:** Deny by default, explicit allows
-- **User control:** Can carve out exceptions
+**Acceptance Criteria:**
+- One-click toggle to auto-approve tool types (read_file, list_files, search_files)
+- Visual indication when operation was auto-approved
+- Audit log entry for every auto-approved operation
+- Default: read_file auto-approved, all others require approval
 
 **Example:**
-- Whitelist: `**/*.md` (auto-approve all markdown files)
-- Blacklist: `!**/secrets.md` (except secrets.md)
-
-### Why NOT AI-Based Approval?
-**Rationale:**
-- **Predictability:** Users need to know exactly what's automated
-- **Transparency:** AI decisions are black boxes
-- **Security:** Can't audit AI reasoning
-- **Trust:** Users want explicit control
-- **Simplicity:** Easier to implement and debug
-
-**Decision:** Explicit rules only, no AI learning
-
-### Why Default Auto-Approve Read Operations?
-**Rationale:**
-- **Low risk:** Read operations are generally safe
-- **High frequency:** Most common operation
-- **User expectation:** Users expect to review writes, not reads
-- **Productivity:** Biggest approval fatigue source
-
-**Evidence:** 85% of approvals are for `read_file` in typical sessions
-
-### Why 30-Day Rule Review Reminder?
-**Rationale:**
-- **Security hygiene:** Rules can become outdated
-- **Awareness:** Users forget what they've automated
-- **Best practice:** Regular security review
-- **Balance:** Not too frequent to be annoying
-
----
-
-## Rule Syntax Examples
-
-### Tool Rules
-
-```yaml
-# Auto-approve all read operations
-- type: tool
-  pattern: read_file
-  action: approve
-
-# Auto-approve list operations  
-- type: tool
-  pattern: list_files
-  action: approve
-
-# Never auto-approve execute_command
-- type: tool
-  pattern: execute_command
-  action: deny
+```
+Settings → Auto-Approval
+☑ Auto-approve read operations (read_file, list_files, search_files)
+☐ Auto-approve search operations
+☐ Auto-approve command execution (not recommended)
 ```
 
 ---
 
-### Path Rules
+#### P0-2: Path-Based Auto-Approval
+**Description:** Auto-approve operations on specific file paths or directories
 
-```yaml
-# Auto-approve all operations in docs directory
-- type: path
-  pattern: docs/**
-  action: approve
+**User Stories:**
+- As a developer, I want to auto-approve all changes to documentation files
+- As a user, I want to trust operations in specific directories (test/, docs/)
 
-# Auto-approve reads in src, but not writes
-- type: path
-  pattern: src/**
-  action: approve
-  operations: [read]
+**Acceptance Criteria:**
+- Create rules using glob patterns (docs/**, test/**/*)
+- Support both whitelist (approve) and blacklist (deny) patterns
+- Most specific pattern wins
+- Preview what files match before saving rule
+- Clear examples of common patterns
 
-# Never approve .env files
-- type: path
-  pattern: "**/.env*"
-  action: deny
-  priority: 1000  # High priority blacklist
+**Example Rules:**
+- docs/** → Auto-approve all operations in docs directory
+- test/**/*.test.ts → Auto-approve test file modifications
+- **/.env* → Never auto-approve (blacklist)
+
+**UI Example:**
+```
+Add Path Rule
+Pattern: docs/**
+Action: ○ Approve  ○ Deny
+Preview: Matches 47 files in workspace
+[Save Rule]
 ```
 
 ---
 
-### Command Rules
+#### P0-3: Command Pattern Auto-Approval
+**Description:** Auto-approve shell commands matching specific patterns
 
-```yaml
-# Auto-approve safe git commands
-- type: command
-  pattern: "^git (status|diff|log|show).*"
-  action: approve
+**User Stories:**
+- As a developer, I want to auto-approve safe git commands
+- As a user, I want to whitelist specific npm scripts
 
-# Auto-approve npm/yarn scripts
-- type: command
-  pattern: "^(npm|yarn) (test|build|lint)$"
-  action: approve
+**Acceptance Criteria:**
+- Support regex patterns for command matching
+- Built-in dangerous command blacklist (rm -rf, sudo, etc.)
+- Test pattern against example commands before saving
+- Clear warnings for risky patterns
+- Common command templates (git status, npm test, etc.)
 
-# Never approve dangerous commands
-- type: command
-  pattern: ".*(rm -rf|sudo|dd).*"
-  action: deny
-  priority: 1000
+**Example Rules:**
+- ^git (status|diff|log)$ → Auto-approve safe git commands
+- ^npm (test|build|lint)$ → Auto-approve npm scripts
+- .*(rm -rf|sudo).* → Blacklist dangerous commands
+
+**UI Example:**
+```
+Add Command Rule
+Pattern: ^git (status|diff|log)$
+Test: git status ✓  |  git push ✗
+Matches: Safe git read operations
+[Save Rule]
 ```
 
 ---
 
-### Composite Rules
+#### P0-4: Rule Management Interface
+**Description:** Settings interface for viewing and managing all auto-approval rules
 
-```yaml
-# Auto-approve read operations in docs directory
-- type: composite
-  conditions:
-    - tool: read_file
-    - path: docs/**
-  action: approve
+**User Stories:**
+- As a user, I want to see all my active auto-approval rules in one place
+- As a developer, I want to enable/disable rules without deleting them
 
-# Deny writes to production configs
-- type: composite
-  conditions:
-    - operation: write
-    - path: "**/prod/**"
-  action: deny
-  priority: 900
+**Acceptance Criteria:**
+- List all active rules with description
+- Enable/disable toggle for each rule
+- Edit and delete options
+- Last used timestamp
+- Usage count indicator
+- Search/filter rules
+
+**UI Example:**
 ```
+Auto-Approval Rules (5 active)
+
+✅ Read Operations
+   Auto-approve: read_file, list_files, search_files
+   Last used: 2 minutes ago (237 uses)
+   [Disable] [Edit]
+
+✅ Documentation Changes  
+   Path: docs/**
+   Last used: 1 hour ago (12 uses)
+   [Disable] [Edit] [Delete]
+
+✅ Safe Git Commands
+   Pattern: ^git (status|diff|log)$
+   Last used: 5 minutes ago (8 uses)
+   [Disable] [Edit] [Delete]
+```
+
+---
+
+#### P0-5: Comprehensive Audit Trail
+**Description:** Complete logging of all auto-approved operations
+
+**User Stories:**
+- As a team lead, I want to review what operations were auto-approved
+- As a user, I want transparency into what the agent did automatically
+
+**Acceptance Criteria:**
+- Log every auto-approval with timestamp, rule, and details
+- Searchable audit log interface
+- Export audit log for compliance
+- Visual distinction between manual and auto-approved
+- 30-day retention by default
+
+**Example Log Entries:**
+```
+Auto-Approval Audit Log
+
+10:47 AM - read_file docs/api.md
+  Rule: "Read Operations"
+  Auto-approved ✓
+
+10:48 AM - execute_command "git status"
+  Rule: "Safe Git Commands"
+  Auto-approved ✓
+
+10:49 AM - write_file src/auth.go
+  No matching rule
+  Manual approval required →
+```
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Quick Rule Creation from Approval Dialog
+**Description:** Create auto-approval rules directly from approval dialogs
+
+**User Stories:**
+- As a developer, I want to create a rule when I approve an operation
+- As a user, I want context-aware rule creation without leaving workflow
+
+**Acceptance Criteria:**
+- "Always approve this" option in approval dialog
+- Suggests appropriate rule type based on operation
+- Preview what rule will match
+- One-click rule creation and current operation approval
+- Confirmation with clear impact explanation
+
+**Workflow:**
+```
+Approval Dialog for: read_file docs/setup.md
+
+[Approve] [Deny] [Always Approve]
+          ↓
+Create auto-approval rule for:
+○ This specific file (docs/setup.md)
+○ All files in docs/ (docs/**)
+○ All read operations (read_file)
+
+Rule will match: 47 files in docs/
+[Create Rule & Approve]
+```
+
+---
+
+#### P1-2: Rule Templates
+**Description:** Pre-configured rule sets for common scenarios
+
+**User Stories:**
+- As a new user, I want recommended rules for my workflow
+- As a developer, I want quick setup without manual configuration
+
+**Acceptance Criteria:**
+- Templates for common scenarios (Documentation Work, Testing, Safe Commands)
+- One-click template activation
+- Clear explanation of what each template enables
+- Customizable after applying
+- Preview of all rules in template
+
+**Templates:**
+
+**"Documentation Writer"**
+- Auto-approve: read_file, list_files
+- Auto-approve: write_file docs/**
+- Auto-approve: search_files
+
+**"Tester"**
+- Auto-approve: read_file
+- Auto-approve: write_file test/**
+- Auto-approve: execute_command ^(npm|yarn) test$
+
+**"Safe Git User"**
+- Auto-approve: execute_command ^git (status|diff|log|show)$
+- Auto-approve: execute_command ^git branch$
+
+---
+
+#### P1-3: Rule Impact Preview
+**Description:** Show what operations would be auto-approved before saving rule
+
+**User Stories:**
+- As a user, I want to see what my rule will match before enabling it
+- As a developer, I want to avoid creating overly broad rules by mistake
+
+**Acceptance Criteria:**
+- Preview matching files/commands before saving
+- Show count of matches
+- Highlight potentially risky matches
+- Test rule against recent operations
+- Warning for overly broad patterns
+
+**Example:**
+```
+Rule Preview: docs/**
+
+Will auto-approve operations on:
+✓ docs/api.md
+✓ docs/setup.md
+✓ docs/architecture/overview.md
+⚠️ docs/secrets/config.md (contains 'secrets')
+... and 43 more files
+
+⚠️ Warning: This rule is quite broad
+Consider: docs/*.md (top-level only)
+
+[Refine Pattern] [Accept & Save]
+```
+
+---
+
+#### P1-4: Rule Priority Management
+**Description:** Control evaluation order when multiple rules could match
+
+**User Stories:**
+- As a power user, I want to control which rule applies when multiple match
+- As a developer, I want blacklist rules to always override whitelist
+
+**Acceptance Criteria:**
+- Drag-and-drop rule reordering
+- Automatic priority for blacklist rules (always first)
+- Visual indication of evaluation order
+- Preview which rule would match for test cases
+
+---
+
+#### P1-5: Regular Rule Review Prompts
+**Description:** Periodic reminders to review auto-approval rules
+
+**User Stories:**
+- As a security-conscious user, I want reminders to review my automation
+- As a team lead, I want to ensure rules don't become stale
+
+**Acceptance Criteria:**
+- 30-day review reminder by default
+- Configurable review period
+- Show unused rules (no matches in review period)
+- One-click rule cleanup (disable unused)
+- Snooze option
+
+**Prompt:**
+```
+Rule Review Reminder
+
+It's been 30 days since you reviewed your auto-approval rules.
+
+Active rules: 5
+Last modified: 23 days ago
+Unused rules: 1 ("npm deploy" - 0 matches)
+
+[Review Rules Now] [Remind in 7 Days] [Disable Reminders]
+```
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: Smart Rule Suggestions
+**Description:** Suggest rules based on usage patterns
+
+**User Stories:**
+- As a user, I want suggestions for rules I might benefit from
+- As a developer, I want data-driven optimization of my workflow
+
+**Acceptance Criteria:**
+- Analyze approval history for patterns
+- Suggest rules for frequently approved operations
+- Show time savings estimate
+- One-click rule creation from suggestion
+- Privacy-conscious (local analysis only)
+
+**Example:**
+```
+💡 Rule Suggestion
+
+You've manually approved "npm test" 15 times this week.
+
+Create auto-approval rule?
+Pattern: ^npm test$
+Estimated savings: 2 minutes/week
+
+[Create Rule] [Dismiss] [Don't suggest this]
+```
+
+---
+
+#### P2-2: Workspace-Specific Rules
+**Description:** Different auto-approval rules per workspace/project
+
+**User Stories:**
+- As a developer, I want different rules for different projects
+- As a user, I want strict rules for production code, relaxed for personal projects
+
+**Acceptance Criteria:**
+- Per-workspace rule configuration
+- Inherit from global rules with overrides
+- Visual indication of active rule source (global vs. workspace)
+- Easy rule promotion (workspace → global)
+
+---
+
+#### P2-3: Rule Import/Export
+**Description:** Share and backup auto-approval rule configurations
+
+**User Stories:**
+- As a team lead, I want to share standard rules with team
+- As a user, I want to backup my rule configuration
+
+**Acceptance Criteria:**
+- Export rules as JSON/YAML file
+- Import rules from file
+- Merge vs. replace import options
+- Security warnings for imported rules
+- Rule validation before import
+
+---
+
+## User Experience Flows
+
+### First-Time Setup Experience
+
+```
+User starts Forge
+    ↓
+Default rules active:
+- ✅ Auto-approve read_file
+- ✅ Auto-approve list_files  
+- ✅ Auto-approve search_files
+    ↓
+Agent reads multiple files
+    ↓
+No approval prompts—seamless
+    ↓
+Toast notification:
+"Auto-approved 5 read operations (default rules)"
+    ↓
+Agent wants to write file
+    ↓
+Approval dialog appears (writes require approval)
+```
+
+**Experience:** Safe defaults that "just work" for common case
+
+---
+
+### Creating First Custom Rule
+
+```
+User repeatedly approves "read_file docs/api.md"
+    ↓
+Approval dialog appears (4th time)
+    ↓
+User clicks "Always approve this"
+    ↓
+Dialog shows options:
+○ This file (docs/api.md)
+● All files in docs/ (docs/**)  ← Selected
+○ All read operations (already enabled)
+    ↓
+Preview: "Will match 47 files in docs/"
+    ↓
+User clicks "Create Rule & Approve"
+    ↓
+Rule saved + current operation approved
+    ↓
+Toast: "Auto-approval rule created for docs/**"
+    ↓
+Future docs/ operations auto-approve silently
+```
+
+**Experience:** Contextual, guided rule creation
+
+---
+
+### Power User Workflow Optimization
+
+```
+Experienced user opens settings
+    ↓
+Navigates to Auto-Approval tab
+    ↓
+Sees 3 active rules
+    ↓
+Clicks "Apply Template: Safe Git User"
+    ↓
+Preview shows 5 additional rules
+    ↓
+Accepts template
+    ↓
+Adds custom rule: ^npm (test|build|lint)$
+    ↓
+Tests pattern with examples
+    ↓
+Saves rule
+    ↓
+Returns to coding with optimized automation
+```
+
+**Experience:** Powerful customization for advanced users
+
+---
+
+### Security Review Flow
+
+```
+30 days pass
+    ↓
+System shows review reminder
+    ↓
+User clicks "Review Rules Now"
+    ↓
+Settings opens to Auto-Approval tab
+    ↓
+System highlights:
+- ⚠️ 1 unused rule (0 matches in 30 days)
+- ✓ 4 active rules with usage stats
+    ↓
+User disables unused rule
+    ↓
+Reviews others—all still appropriate
+    ↓
+Clicks "Complete Review"
+    ↓
+Next review in 30 days
+```
+
+**Experience:** Proactive security hygiene
+
+---
+
+## User Interface & Interaction Design
+
+### Auto-Approval Settings Panel
+
+```
+┌─ Settings: Auto-Approval Rules ─────────────────────────┐
+│                                                          │
+│ Quick Setup                                              │
+│ [Apply Template ▼]                                       │
+│                                                          │
+│ Active Rules (5)                           [+ Add Rule]  │
+│                                                          │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ ✅ Read Operations (Default)                        │ │
+│ │    Auto-approve: read_file, list_files, search      │ │
+│ │    Last used: 2 min ago • 237 uses today            │ │
+│ │    [Disable] [Edit]                                 │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ ✅ Documentation Changes                            │ │
+│ │    Path: docs/**                                    │ │
+│ │    Last used: 1 hour ago • 12 uses today            │ │
+│ │    [Disable] [Edit] [Delete]                        │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ ✅ Safe Git Commands                                │ │
+│ │    Pattern: ^git (status|diff|log)$                 │ │
+│ │    Last used: 5 min ago • 8 uses today              │ │
+│ │    [Disable] [Edit] [Delete]                        │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ ⚠️  NPM Deploy (Unused)                             │ │
+│ │    Pattern: ^npm run deploy$                        │ │
+│ │    Last used: Never • 0 uses in 30 days             │ │
+│ │    [Enable] [Delete]                                │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│ [View Audit Log]                    [Review Rules]      │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Visual checkboxes show enabled/disabled state
+- Usage statistics show rule effectiveness
+- Warning indicators for unused or risky rules
+- Quick actions (disable, edit, delete) per rule
+- Template quick-start for new users
+
+---
+
+### Rule Creation Dialog
+
+```
+┌─ Create Auto-Approval Rule ─────────────────────────────┐
+│                                                          │
+│ Rule Type:                                               │
+│ ○ Tool         ○ Path         ● Command                 │
+│                                                          │
+│ Command Pattern (regex)                                  │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ ^git (status|diff|log)$                            │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ Test Pattern                                             │
+│ git status → ✓ Match                                     │
+│ git push   → ✗ No match                                  │
+│ git diff   → ✓ Match                                     │
+│ [Add test...]                                            │
+│                                                          │
+│ Description (optional)                                   │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ Safe git read-only commands                        │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ ℹ️  This rule will auto-approve git commands that       │
+│    query repository state without making changes.       │
+│                                                          │
+│                              [Cancel]  [Create Rule]     │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clear rule type selection
+- Live pattern testing
+- Helpful description of what rule does
+- Visual feedback on pattern matching
+- Guidance for creating effective rules
+
+---
+
+### Approval Dialog with Rule Creation
+
+```
+┌─ Tool Approval Required ────────────────────────────────┐
+│ read_file                                                │
+│                                                          │
+│ File: docs/api-reference.md                              │
+│                                                          │
+│ This is the 4th time you've approved reading from docs/ │
+│                                                          │
+│ 💡 Create auto-approval rule?                           │
+│                                                          │
+│ ○ Just this file (docs/api-reference.md)                │
+│ ● All files in docs/ (docs/**)                          │
+│ ○ All read operations (already enabled)                 │
+│                                                          │
+│ Preview: Will match 47 files in docs/                   │
+│                                                          │
+│ ⌨  [Ctrl+A] Approve Once                                │
+│    [Ctrl+S] Create Rule & Approve                       │
+│    [Ctrl+R] Reject                                       │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Context-aware suggestion (detects repetition)
+- Multiple rule scope options
+- Clear preview of impact
+- Approve once vs. create rule distinction
+- Keyboard shortcuts for speed
+
+---
+
+### Audit Log Viewer
+
+```
+┌─ Auto-Approval Audit Log ───────────────────────────────┐
+│                                                          │
+│ Filter: [All Rules ▼] [Last 24 hours ▼] [Search...]     │
+│                                                          │
+│ Today, 10:47 AM                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ 🤖 Auto-approved: read_file                        │  │
+│ │    File: docs/api.md                               │  │
+│ │    Rule: "Read Operations" (default)              │  │
+│ │    [View Details]                                  │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ Today, 10:48 AM                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ 🤖 Auto-approved: execute_command                  │  │
+│ │    Command: git status                             │  │
+│ │    Rule: "Safe Git Commands"                      │  │
+│ │    [View Details]                                  │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ Today, 10:49 AM                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ 👤 Manual approval: write_file                     │  │
+│ │    File: src/auth.go                               │  │
+│ │    No matching rule                                │  │
+│ │    [View Details]                                  │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ Showing 23 of 156 entries                                │
+│                                                          │
+│ [Export Log]                              [Load More]    │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Design Principles:**
+- Clear distinction between auto and manual approvals
+- Filtering and search for finding specific operations
+- Details on demand (expandable entries)
+- Export capability for compliance
+- Chronological view with timestamps
 
 ---
 
 ## Success Metrics
 
 ### Adoption Metrics
-- **Rule creation:** >60% of users create at least one auto-approval rule
-- **Default acceptance:** >80% keep default "auto-approve reads" rule
-- **Power user adoption:** >90% of users with 10+ sessions create rules
-- **Rule count:** Average 3-5 rules per active user
+
+**Rule Creation:**
+- Target: >60% of users create at least one custom auto-approval rule
+- Measure: User accounts with non-default rules
+
+**Default Acceptance:**
+- Target: >80% keep default "auto-approve reads" rule enabled
+- Measure: Users who disable default rule
+
+**Power User Adoption:**
+- Target: >90% of users with 10+ sessions create custom rules
+- Measure: Rule creation rate by session count
+
+**Rule Count per User:**
+- Target: Average 3-5 rules per active user
+- Measure: Mean and median rules per user account
+
+---
 
 ### Efficiency Metrics
-- **Approval reduction:** 60% fewer manual approvals with auto-approval
-- **Time savings:** Average 30 seconds saved per auto-approved operation
-- **Workflow interruption:** 70% reduction in approval dialog appearances
-- **Session duration:** 25% longer sessions (less friction)
+
+**Approval Reduction:**
+- Target: 60% fewer manual approval prompts with auto-approval
+- Measure: Manual approvals with vs. without rules
+
+**Time Savings:**
+- Target: Average 30 seconds saved per auto-approved operation
+- Measure: Time from request to execution (auto vs. manual)
+
+**Workflow Interruption:**
+- Target: 70% reduction in approval dialog appearances
+- Measure: Dialog count per session with vs. without rules
+
+**Session Duration:**
+- Target: 25% longer sessions with auto-approval (less friction)
+- Measure: Average session length comparison
+
+---
 
 ### Safety Metrics
-- **Blacklist effectiveness:** 100% of blacklisted operations blocked
-- **False positive rate:** <2% of auto-approvals were actually risky
-- **Audit completeness:** 100% of auto-approvals logged
-- **Rule review compliance:** >50% of users review rules when prompted
+
+**Blacklist Effectiveness:**
+- Target: 100% of blacklisted operations blocked
+- Measure: Attempted vs. blocked dangerous operations
+
+**False Positive Rate:**
+- Target: <2% of auto-approvals were actually risky (user regret)
+- Measure: User reports of unwanted auto-approvals
+
+**Audit Completeness:**
+- Target: 100% of auto-approvals logged
+- Measure: Compare auto-approvals to audit entries
+
+**Rule Review Compliance:**
+- Target: >50% of users review rules when prompted
+- Measure: Review completion rate on 30-day reminders
+
+---
 
 ### Usability Metrics
-- **Rule creation success:** >90% of rule creation attempts succeed
-- **Rule understanding:** >85% of users understand what their rules do
-- **Disable rate:** <10% of rules disabled due to unexpected behavior
-- **Discovery:** >70% discover auto-approval within first 5 sessions
+
+**Rule Creation Success:**
+- Target: >90% of rule creation attempts succeed
+- Measure: Successful vs. failed rule saves
+
+**Rule Understanding:**
+- Target: >85% of users understand what their rules do
+- Measure: Post-creation survey on rule clarity
+
+**Disable Rate:**
+- Target: <10% of rules disabled due to unexpected behavior
+- Measure: Rules disabled within 7 days of creation
+
+**Discovery:**
+- Target: >70% discover auto-approval within first 5 sessions
+- Measure: First rule creation by session number
 
 ---
 
-## Dependencies
+## User Enablement
 
-### External Dependencies
-- Glob pattern matching library
-- Regex engine (standard library)
-- File system access (for path validation)
+### Discoverability
 
-### Internal Dependencies
-- Tool approval system
-- Settings system (for persistence)
-- Audit logging system
-- Event system (for notifications)
+**First-Time Experience:**
+- Default rules active on first use (reads auto-approved)
+- Toast notification explaining auto-approval
+- Link to settings in notification
+- Tutorial on rule creation
 
-### Platform Requirements
-- File system permissions
-- Writable config directory
-- JSON/YAML parsing
+**Progressive Disclosure:**
+- Beginner: Use default rules, observe behavior
+- Intermediate: Create first custom rule from approval dialog
+- Advanced: Build comprehensive rule set in settings
 
 ---
 
-## Risks & Mitigations
+### Learning Path
+
+**Beginner (Sessions 1-5):**
+1. Experience default auto-approval (reads)
+2. Observe toast notifications showing what was auto-approved
+3. Understand safety through audit log
+4. Learn keyboard shortcuts for approval
+
+**Intermediate (Sessions 6-20):**
+1. Identify repetitive approvals (agent suggests patterns)
+2. Create first custom rule from approval dialog
+3. Monitor rule usage in settings
+4. Experiment with path-based rules
+
+**Advanced (Sessions 21+):**
+1. Build comprehensive rule set for workflow
+2. Use templates for quick setup
+3. Configure workspace-specific rules
+4. Review and optimize rules regularly
+5. Share rule sets with team
+
+---
+
+### Support Materials
+
+**Documentation:**
+1. "Understanding Auto-Approval" - Concept overview
+2. "Creating Effective Rules" - Best practices guide
+3. "Rule Patterns Cookbook" - Common rule examples
+4. "Security Considerations" - Safe automation guidelines
+
+**In-App Help:**
+- Tooltips explaining each rule type
+- Examples in rule creation dialog
+- Pattern testing with instant feedback
+- Impact preview before saving
+
+**Video Tutorials:**
+1. "Your First Auto-Approval Rule" (2 min)
+2. "Advanced Rule Patterns" (5 min)
+3. "Team Rule Management" (3 min)
+4. "Security Best Practices" (4 min)
+
+**Interactive Guides:**
+- Rule creation wizard for beginners
+- Template selection helper
+- Pattern testing playground
+
+---
+
+## Risk & Mitigation
 
 ### Risk 1: Overly Permissive Rules
-**Impact:** Critical  
+**Impact:** Critical - Security compromised  
 **Probability:** Medium  
+**User Impact:** Dangerous operations auto-approved
+
 **Mitigation:**
-- Warn about broad rules (e.g., `**/*`)
-- Require confirmation for risky patterns
-- Rule impact preview before saving
-- Regular review reminders
-- Maximum rule count limit (20)
-- Examples show specific, not broad rules
+- Warn about broad patterns (**, *.*)
+- Require confirmation for risky rule types
+- Show impact preview before saving
+- Maximum rule count limit (20 recommended)
+- Regular review reminders (30 days)
+- Example rules are specific, not broad
+- Blacklist hard-coded dangerous patterns
+
+**User Education:**
+"Be specific with your rules. Instead of '**' (all files), use 'docs/**' (just docs). Instead of '.*' (any command), use '^git status$' (exact match)."
+
+---
 
 ### Risk 2: Rule Complexity Confusion
-**Impact:** Medium  
+**Impact:** Medium - Users create ineffective rules  
 **Probability:** High  
-**Mitigation:**
-- Provide rule templates
-- Interactive rule builder
-- Clear examples for each type
-- Preview what rule will match
-- Help text in settings
-- Validation with helpful errors
+**User Impact:** Rules don't work as expected, frustration
 
-### Risk 3: Blacklist Bypass
-**Impact:** Critical  
-**Probability:** Low  
 **Mitigation:**
-- Blacklist always evaluated first
-- No way to override blacklist with whitelist
-- Hard-coded dangerous operation list
-- Extensive testing of rule evaluation
-- Security review of rule engine
+- Provide rule templates for common cases
+- Interactive rule builder with visual preview
+- Clear examples for each rule type
+- Pattern testing before activation
+- Help text throughout settings UI
+- Validation with helpful error messages
+- "What will this match?" preview tool
 
-### Risk 4: Performance Degradation
-**Impact:** Medium  
-**Probability:** Low  
-**Mitigation:**
-- Compile regex patterns once
-- Cache rule evaluation results
-- Limit number of rules (max 50)
-- Optimize pattern matching
-- Performance testing with many rules
-
-### Risk 5: Audit Log Growth
-**Impact:** Low  
-**Probability:** Medium  
-**Mitigation:**
-- 30-day retention by default
-- Automatic log rotation
-- Size limits (10MB max)
-- Export before deletion
-- Configurable retention
+**User Education:**
+Video tutorial on rule patterns, cookbook of common rules, in-app pattern tester with instant feedback.
 
 ---
 
-## Future Enhancements
+### Risk 3: Approval Fatigue Returns
+**Impact:** Medium - System doesn't solve core problem  
+**Probability:** Low  
+**User Impact:** Still too many approval prompts
 
-### Phase 2 Ideas
-- **Smart Suggestions:** Suggest rules based on usage patterns
+**Mitigation:**
+- Smart rule suggestions based on usage
+- Quick rule creation from approval dialog
+- Template rule sets for instant setup
+- Default rules cover most common cases (reads)
+- Context-aware "always approve" options
+
+**Monitoring:**
+Track approval dialog frequency per user, identify users with high approval rates, suggest rules automatically.
+
+---
+
+### Risk 4: False Sense of Security
+**Impact:** Medium - Users over-trust automation  
+**Probability:** Low  
+**User Impact:** Dangerous operations slip through
+
+**Mitigation:**
+- Blacklist always evaluated first (cannot override)
+- Hard-coded dangerous operation list
+- Warnings for risky rule configurations
+- Regular review reminders
+- Audit log visibility (transparency)
+- Educational content about limitations
+
+**User Education:**
+"Auto-approval rules save time on trusted operations, but they're not a substitute for reviewing important changes. Always review rules periodically."
+
+---
+
+### Risk 5: Rule Management Overhead
+**Impact:** Low - Users overwhelmed by rule maintenance  
+**Probability:** Medium  
+**User Impact:** Too many rules, hard to manage
+
+**Mitigation:**
+- Usage statistics show valuable rules
+- Automatic detection of unused rules
+- One-click cleanup (disable unused)
+- Rule templates reduce initial setup
+- Maximum recommended count (20 rules)
+- Search/filter for large rule sets
+
+---
+
+## Dependencies & Integration Points
+
+### Feature Dependencies
+
+**Tool Approval System:**
+- Auto-approval integrates into approval decision flow
+- Hooks into pre-approval rule evaluation
+- Shares audit logging infrastructure
+
+**Settings System:**
+- Rules stored in user settings configuration
+- Settings UI hosts auto-approval management
+- Persistent storage across sessions
+
+**Audit System:**
+- Every auto-approval logged
+- Shared audit infrastructure with approval system
+- Log viewer integration
+
+**Event System:**
+- Auto-approval events for UI notifications
+- Rule match events for transparency
+- Rule creation/modification events
+
+---
+
+### User-Facing Integrations
+
+**Approval Dialog:**
+- "Always approve" option integration
+- Rule creation context from current operation
+- Preview of rule impact
+
+**Settings Interface:**
+- Dedicated auto-approval tab
+- Rule management UI
+- Audit log viewer
+- Template selection
+
+**Toast Notifications:**
+- Auto-approval confirmation messages
+- Rule creation success feedback
+- Review reminder prompts
+
+---
+
+## Constraints & Trade-offs
+
+### Product Constraints
+
+**Security vs. Convenience:**
+- **Trade-off:** Full automation vs. complete safety
+- **Decision:** Explicit rules only, no AI learning
+- **Rationale:** Predictability and transparency trump convenience
+
+**Flexibility vs. Simplicity:**
+- **Trade-off:** Complex pattern matching vs. easy configuration
+- **Decision:** Start simple (templates), expose power gradually
+- **Rationale:** Most users need simple rules; experts can learn advanced
+
+**Automation vs. Control:**
+- **Trade-off:** Fewer approvals vs. risk awareness
+- **Decision:** Blacklist always wins, review reminders
+- **Rationale:** Never sacrifice safety for speed
+
+---
+
+### Design Constraints
+
+**Pattern Matching Power:**
+- **Constraint:** Regex can be complex for non-technical users
+- **Trade-off:** Power vs. accessibility
+- **Decision:** Templates for beginners, regex for experts
+- **Rationale:** Different users need different tools
+
+**Rule Count:**
+- **Constraint:** Too many rules = performance and usability issues
+- **Trade-off:** Comprehensiveness vs. manageability
+- **Decision:** Recommend max 20, warn at 15
+- **Rationale:** Most workflows covered by 3-5 good rules
+
+**Default Automation:**
+- **Constraint:** What should be auto-approved by default?
+- **Trade-off:** Security vs. first-time UX
+- **Decision:** Only read operations (read_file, list_files, search_files)
+- **Rationale:** Extremely low risk, high frequency, reduces 80%+ of approvals
+
+---
+
+## Competitive Analysis
+
+### GitHub Copilot
+**Approach:** No autonomous execution, no approval system needed  
+**Strengths:** Simple - suggests, doesn't execute  
+**Weaknesses:** No automation of file operations  
+**Differentiation:** We enable powerful automation with granular control
+
+### Cursor
+**Approach:** Basic approval, no auto-approval rules  
+**Strengths:** Simple yes/no approval flow  
+**Weaknesses:** Approval fatigue for repetitive operations  
+**Differentiation:** Smart automation through user-defined rules
+
+### Aider
+**Approach:** Git-based review, no real-time auto-approval  
+**Strengths:** Familiar git workflow  
+**Weaknesses:** Post-facto review, no command automation  
+**Differentiation:** Real-time automation with immediate productivity gains
+
+### Windsurf
+**Approach:** Approval for all tools, some command whitelisting  
+**Strengths:** Security-first  
+**Weaknesses:** Limited rule customization, high friction  
+**Differentiation:** Comprehensive rule system (tool, path, command patterns)
+
+### ChatGPT Code Interpreter
+**Approach:** Sandboxed execution, no approval needed  
+**Strengths:** No interruptions  
+**Weaknesses:** Limited to sandbox, can't modify user files  
+**Differentiation:** Real file system access with safety through rules
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Work at full speed with AI assistance—Forge auto-approves trusted operations while keeping you in control. Define your automation boundaries once, code without interruptions."
+
+**Key Differentiators:**
+- Granular rule system (tool, path, command)
+- Smart defaults that work immediately
+- Complete audit transparency
+- Template-based quick setup for beginners
+- Regex power for advanced users
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Power users frustrated with approval fatigue
+- Teams seeking standardized AI workflows
+- Security-conscious developers wanting control
+
+**Value Propositions by Segment:**
+- **Power Users:** "Eliminate repetitive approvals, keep coding flow"
+- **Teams:** "Standard rules across team, consistent automation"
+- **Security-Focused:** "Audit everything, automate safely"
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. "Auto-Approval Quick Start" - 5-minute setup guide
+2. "Rule Patterns Cookbook" - Common rule examples
+3. "Creating Effective Rules" - Best practices
+4. "Security Considerations" - Safe automation guidelines
+5. "Team Rule Management" - Sharing and standardization
+
+**FAQ Topics:**
+- "What's safe to auto-approve?"
+- "How do I create a rule from an approval dialog?"
+- "Why was this operation auto-approved?"
+- "How do I share rules with my team?"
+- "What's the difference between tool, path, and command rules?"
+
+---
+
+### Support Considerations
+
+**Common Support Requests:**
+1. Creating path-based rules (glob patterns)
+2. Understanding regex for command patterns
+3. Debugging rule matching ("Why didn't my rule work?")
+4. Managing rule priority
+5. Interpreting audit logs
+
+**Support Resources:**
+- Interactive rule pattern tester
+- Rule impact preview tool
+- Template library with explanations
+- Video tutorials on rule creation
+- Cookbook of proven rules
+
+**Self-Service Tools:**
+- Pattern testing playground in settings
+- "What will this match?" preview
+- Rule debugging (show evaluation trace)
+- Import pre-built rule sets
+
+---
+
+## Evolution & Roadmap
+
+### Version History
+
+**v1.0 (Current):**
+- Tool-based auto-approval rules
+- Path-based rules with glob patterns
+- Command pattern rules with regex
+- Rule management interface
+- Comprehensive audit logging
+- Template rule sets
+
+---
+
+### Future Enhancements
+
+#### Phase 2: Intelligence & Optimization
+- **Smart Suggestions:** Analyze usage patterns, suggest rules
 - **Rule Testing:** Test rules against historical operations
 - **Conditional Rules:** Time-based, user-based conditions
-- **Rule Groups:** Organize rules by project/task
-- **Shared Rules:** Import rules from team/community
+- **Rule Groups:** Organize rules by project/context
+- **Workspace Rules:** Per-workspace rule overrides
 
-### Phase 3 Ideas
-- **Machine Learning:** Learn safe patterns (with user approval)
-- **Risk Scoring:** Automatic risk assessment of rules
-- **Policy Integration:** Connect to organizational policy engines
-- **Advanced Patterns:** More complex matching logic
-- **Rule Debugging:** Detailed trace of rule evaluation
+**User Value:** Less manual configuration, optimized automation
 
 ---
 
-## Open Questions
+#### Phase 3: Team & Collaboration
+- **Shared Rule Sets:** Import rules from team/community
+- **Rule Templates Marketplace:** Community-contributed patterns
+- **Team Policy Integration:** Organization-wide rules
+- **Approval Analytics:** Dashboard for team leads
+- **Rule Recommendations:** Based on team usage
 
-1. **Should we suggest rules based on user behavior?**
-   - Pro: Easier rule discovery
-   - Con: Privacy concerns, AI complexity
-   - Decision: Phase 2 feature with opt-in
-
-2. **Should rules be workspace-specific?**
-   - Pro: Different rules for different projects
-   - Con: More complex management
-   - Decision: Phase 2 if requested
-
-3. **Should we support rule sharing/import from community?**
-   - Pro: Faster setup for new users
-   - Con: Security validation needed
-   - Decision: Phase 3 with security review
-
-4. **Should rule evaluation be customizable (plugins)?**
-   - Pro: Ultimate flexibility
-   - Con: Security nightmare
-   - Decision: No - too risky
+**User Value:** Standardized workflows, faster onboarding
 
 ---
 
-## Related Documentation
+#### Phase 4: Advanced Features
+- **Machine Learning Suggestions:** AI-powered rule recommendations (opt-in)
+- **Risk Scoring:** Automatic risk assessment of operations
+- **Advanced Pattern DSL:** More expressive rule language
+- **Rule Debugging Tools:** Detailed evaluation traces
+- **Integration Plugins:** Custom rule evaluation logic
 
-- [ADR-0017: Auto-Approval and Settings System](../adr/0017-auto-approval-and-settings-system.md)
-- [Tool Approval System PRD](tool-approval-system.md)
-- [Settings System PRD](settings-system.md)
-- [How-to: Configure Auto-Approval Rules](../how-to/use-tui-interface.md#auto-approval-configuration)
+**User Value:** Sophisticated automation for complex workflows
+
+---
+
+### Open Questions
+
+**Question 1: Should we suggest rules based on user behavior?**
+- **Pro:** Reduces configuration burden, data-driven optimization
+- **Con:** Privacy concerns, potential for bad suggestions
+- **Current Direction:** Phase 2 feature with opt-in, local-only analysis
+
+**Question 2: Should rules be workspace-specific by default?**
+- **Pro:** Different projects need different automation
+- **Con:** More complex mental model, harder management
+- **Current Direction:** Global by default, workspace overrides in Phase 2
+
+**Question 3: Should we support community rule sharing?**
+- **Pro:** Faster setup for new users, learn from community
+- **Con:** Security validation needed, quality control
+- **Current Direction:** Phase 3 with security review process
+
+**Question 4: Should we allow custom rule evaluation logic?**
+- **Pro:** Ultimate flexibility for power users
+- **Con:** Security nightmare, arbitrary code execution
+- **Current Direction:** No—too risky, provide better pattern DSL instead
+
+**Question 5: Should we limit rule count?**
+- **Pro:** Prevents overly complex configurations
+- **Con:** Power users may legitimately need many rules
+- **Current Direction:** Recommend max 20, warn at 15, no hard limit
+
+---
+
+## Technical References
+
+- **Architecture:** Auto-approval rule evaluation system
+- **Implementation:** See ADR-0017 (Auto-Approval and Settings System)
+- **Related Features:** Tool Approval PRD, Settings System PRD
+- **API:** Settings API for rule CRUD operations
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed technical implementation details (Go structs, component diagrams)
+- Enhanced user experience sections with detailed flows
+- Added comprehensive UI mockups
+- Expanded competitive analysis
+- Added go-to-market considerations
+
+### 2024-12 (Original)
+- Initial PRD with technical architecture
+- Data models and evaluation flow
+- Component structure diagrams

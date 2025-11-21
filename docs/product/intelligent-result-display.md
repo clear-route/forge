@@ -1,6 +1,6 @@
 # Product Requirements: Intelligent Result Display
 
-**Feature:** Smart Tool Result Rendering and Caching  
+**Feature:** Smart Tool Result Management  
 **Version:** 1.0  
 **Status:** Implemented  
 **Owner:** Core Team  
@@ -8,457 +8,1137 @@
 
 ---
 
-## Overview
+## Product Vision
 
-Intelligent Result Display provides smart rendering of tool execution results in the TUI, automatically summarizing large outputs, caching recent results for review, and keeping the chat interface clean and focused. This prevents visual clutter while maintaining full transparency and access to all tool execution details.
+Transform overwhelming tool output into a clean, focused conversation experience. Intelligent Result Display ensures developers can follow the agent's reasoning without drowning in walls of text, while maintaining complete transparency and instant access to every execution detail when needed.
+
+**Strategic Alignment:** Clean interfaces drive trust and productivity. When developers can focus on what matters without visual clutter, they make better decisions faster and enjoy using AI assistance.
 
 ---
 
 ## Problem Statement
 
-Users interacting with coding agents that execute many tools face significant UX challenges:
+Developers using AI coding assistants that execute multiple tools face severe interface challenges that kill productivity and obscure important information:
 
-1. **Visual Clutter:** Tool results flood the chat, making conversation hard to follow
-2. **Lost Context:** Important agent messages buried under pages of tool output
-3. **Poor Scannability:** Hard to find specific information in walls of text
-4. **Cognitive Overload:** Too much information displayed at once
-5. **Navigation Difficulty:** Scrolling through long outputs interrupts flow
-6. **Information Loss:** Once scrolled past, tool results are hard to find again
+1. **Visual Chaos:** Tool results flood the chat, creating walls of text that bury agent messages and make conversations impossible to follow
+2. **Lost Context:** Important agent explanations disappear above scrolled-off tool outputs
+3. **Information Overload:** 500-line file reads, massive command outputs, and verbose logs overwhelm developers
+4. **Navigation Nightmare:** Finding specific tool results after they scroll off screen becomes archaeological work
+5. **Decision Paralysis:** Too much information displayed simultaneously prevents quick scanning and understanding
+6. **Flow Disruption:** Constant scrolling breaks mental focus and workflow rhythm
 
-Traditional approaches show all tool results inline, creating an overwhelming experience that degrades as sessions get longer.
+**Current Workarounds (All Problematic):**
+- **Scroll endlessly** → Exhausting, loses place in conversation
+- **Ignore results entirely** → Dangerous, misses errors and important details
+- **Copy results elsewhere** → Tedious, breaks workflow
+- **Clear terminal frequently** → Loses important history
 
----
-
-## Goals
-
-### Primary Goals
-
-1. **Clean Interface:** Keep chat viewport focused on important conversation
-2. **Smart Summarization:** Show concise summaries with expansion option
-3. **Easy Access:** Make full results accessible when needed
-4. **Result Persistence:** Cache recent results for later review
-5. **Contextual Rendering:** Display different result types appropriately
-6. **Performance:** Handle large results without UI lag
-
-### Non-Goals
-
-1. **Result Editing:** This is NOT for modifying tool results
-2. **Result Analysis:** Does NOT provide tools to analyze or process results
-3. **Result Export:** Does NOT focus on exporting results (though may support)
-4. **Multi-Session Results:** Does NOT persist results across sessions
+**Real-World Impact:**
+- Developer misses critical error message buried in 200 lines of tool output → Wastes 30 minutes debugging
+- Team member can't find agent's explanation because it scrolled off after 10 file reads → Re-asks question
+- Junior developer overwhelmed by output volume → Abandons AI assistant entirely
+- Code review delayed because relevant diff buried in terminal history → Productivity loss
 
 ---
 
-## User Personas
+## Key Value Propositions
+
+### For Productivity-Focused Developers
+- **Clean Workspace:** Conversation remains scannable and focused, not cluttered with output
+- **Quick Scanning:** See what happened without wading through details
+- **Zero Lost Information:** Every result accessible on demand, nothing disappears
+- **Flow State:** Work without constant scrolling interruptions
+
+### For Detail-Oriented Developers
+- **Complete Transparency:** Full access to every tool execution detail
+- **Easy Investigation:** Find and review any past result in seconds
+- **Debugging Power:** Inspect command outputs, file contents, and errors thoroughly
+- **Historical Access:** Compare results across multiple tool executions
+
+### For Learning Developers
+- **Digestible Output:** Summaries prevent overwhelming information dumps
+- **Gradual Disclosure:** See high-level first, dive into details when ready
+- **Pattern Recognition:** Easier to spot what tools do when not buried in output
+- **Confident Exploration:** Can always expand to understand more
+
+---
+
+## Target Users & Use Cases
 
 ### Primary: Productivity-Focused Developer
-- **Background:** Developer who values clean, scannable interfaces
-- **Workflow:** Rapid iteration with many tool calls
-- **Pain Points:** Gets lost in walls of tool output
-- **Goals:** See agent thinking without result clutter
+
+**Profile:**
+- Values clean, scannable interfaces
+- Runs many tool operations per session
+- Wants to follow agent reasoning without distraction
+- Prioritizes flow over forensic detail
+
+**Key Use Cases:**
+- Iterating on code with multiple file reads and modifications
+- Following agent's refactoring process
+- Reviewing what happened without deep investigation
+- Maintaining conversation focus during rapid development
+
+**Pain Points Addressed:**
+- Can't follow conversation when results flood chat
+- Scrolling constantly breaks concentration
+- Important agent messages get buried
+
+**Success Story:**
+"The agent just read 8 files, applied 5 diffs, and ran 3 tests. Before, I'd lose track of the conversation in the output noise. Now I see clean summaries ('✓ Read handler.go (234 lines)', '✓ Applied 3 edits'), the agent's next message is right there, and I can expand any result I care about. Perfect."
+
+---
 
 ### Secondary: Investigative Developer
-- **Background:** Developer debugging issues or reviewing changes
-- **Workflow:** Needs to review tool execution details carefully
-- **Pain Points:** Can't find specific tool result after scrolling
-- **Goals:** Easy access to all tool execution history
+
+**Profile:**
+- Debugs issues requiring detailed result inspection
+- Reviews tool execution carefully
+- Needs to compare outputs across time
+- Values complete information access
+
+**Key Use Cases:**
+- Debugging test failures by reviewing command output
+- Comparing file contents before and after changes
+- Investigating why a tool execution failed
+- Reviewing multiple search results to find patterns
+
+**Pain Points Addressed:**
+- Can't find specific tool result after it scrolls off
+- Need to compare results but they're scattered in history
+- Important error details get lost in clutter
+
+**Success Story:**
+"The agent ran a command that failed 10 minutes ago. I pressed Ctrl+R, saw the result list, found 'execute_command: npm test', and expanded the full error output. Diagnosed the issue in 30 seconds instead of scrolling for 5 minutes trying to find it."
+
+---
 
 ### Tertiary: Learning Developer
-- **Background:** New to AI agents, learning what tools do
-- **Workflow:** Wants to understand tool execution
-- **Pain Points:** Overwhelmed by amount of output
-- **Goals:** Clear, digestible view of what's happening
+
+**Profile:**
+- New to AI-assisted development
+- Learning what tools do and when
+- Easily overwhelmed by information
+- Building mental models of agent behavior
+
+**Key Use Cases:**
+- Understanding what each tool execution accomplished
+- Learning file operations by reviewing results
+- Studying command outputs to understand workflows
+- Gradually building confidence through exploration
+
+**Pain Points Addressed:**
+- Overwhelmed by volume of tool output
+- Hard to understand what happened when buried in text
+- Can't learn patterns when interface is chaotic
+
+**Success Story:**
+"As a beginner, seeing clean summaries helps me understand what's happening without panic. When I want to learn more, I can expand any result and study it. The intelligent display is like training wheels—it simplifies without hiding anything."
 
 ---
 
-## Requirements
+## Product Requirements
 
-### Functional Requirements
+### Priority 0 (Must Have)
 
-#### FR1: Result Summarization
-- **R1.1:** Automatically detect large tool results (>10 lines)
-- **R1.2:** Generate concise summary (first 3 lines or smart extraction)
-- **R1.3:** Show "..." indicator for truncated content
-- **R1.4:** Display expansion control (▶ Expand / ▼ Collapse)
-- **R1.5:** Preserve full content for expansion
+#### P0-1: Automatic Result Summarization
+**Description:** Intelligently truncate large tool results to concise summaries
 
-#### FR2: Smart Truncation
-- **R2.1:** Keep important lines (errors, warnings, key output)
-- **R2.2:** Show context around important content
-- **R2.3:** Avoid truncating in middle of logical blocks
-- **R2.4:** Different strategies per result type (file read vs command output)
-- **R2.5:** Configurable truncation thresholds
+**User Stories:**
+- As a user, I want to see brief summaries of tool results so the chat stays clean
+- As a developer, I want important information highlighted in summaries
 
-#### FR3: Expand/Collapse Controls
-- **R3.1:** Click or keyboard shortcut to expand
-- **R3.2:** Smooth animation for expansion
-- **R3.3:** Collapse back to summary
-- **R3.4:** Preserve scroll position when toggling
-- **R3.5:** Visual indicator of expansion state
+**Acceptance Criteria:**
+- Results under 10 lines displayed in full
+- Results over 10 lines automatically summarized to 3-5 lines
+- Smart extraction keeps important lines (errors, warnings, key output)
+- Clear visual indicator when content is truncated (e.g., "... X more lines")
+- Summary shows file path for file operations
+- Command results show command, exit code, and first few output lines
+- Success operations show brief confirmation (e.g., "✓ File written: main.go (245 lines)")
 
-#### FR4: Result Caching
-- **R4.1:** Cache last N tool results (default: 20)
-- **R4.2:** Store full result content
-- **R4.3:** Include result metadata (tool name, timestamp, status)
-- **R4.4:** FIFO eviction when cache full
-- **R4.5:** Clear cache on session end
-- **R4.6:** Configurable cache size
+**Examples:**
 
-#### FR5: Result List Overlay
-- **R5.1:** Show all cached results in overlay
-- **R5.2:** Navigate with arrow keys
-- **R5.3:** Select result to view details
-- **R5.4:** Search/filter results by tool name or content
-- **R5.5:** Show result metadata (tool, time, size)
-- **R5.6:** Jump to result in main chat
-
-#### FR6: Context-Aware Rendering
-- **R6.1:** File content → syntax highlighted
-- **R6.2:** Diffs → unified or side-by-side view
-- **R6.3:** Command output → preserve ANSI colors
-- **R6.4:** JSON → formatted and collapsible
-- **R6.5:** Errors → highlighted in red
-- **R6.6:** Success messages → brief confirmation
-
-#### FR7: Result Types
-- **R7.1:** File read results → show file path, size, preview
-- **R7.2:** File write results → "✓ File written: path (size)"
-- **R7.3:** Search results → show matches with context
-- **R7.4:** Command execution → show command, exit code, output
-- **R7.5:** List operations → show count, truncated list
-- **R7.6:** Tool errors → show error message prominently
-
-#### FR8: Performance Optimization
-- **R8.1:** Lazy rendering (virtualization for long results)
-- **R8.2:** Incremental syntax highlighting
-- **R8.3:** Efficient storage of large results
-- **R8.4:** Limit max result size (warn + truncate if exceeded)
-- **R8.5:** Async rendering for expensive operations
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Render truncated result within 50ms
-- **N1.2:** Expand full result within 200ms
-- **N1.3:** Open result list overlay within 100ms
-- **N1.4:** Handle results up to 100KB without lag
-- **N1.5:** Smooth scrolling with cached results
-
-#### NFR2: Usability
-- **N2.1:** Clear visual distinction between summary and full content
-- **N2.2:** Intuitive expand/collapse controls
-- **N2.3:** Easy navigation in result list
-- **N2.4:** Consistent behavior across result types
-- **N2.5:** Keyboard accessible (no mouse required)
-
-#### NFR3: Reliability
-- **N3.1:** Never crash on malformed results
-- **N3.2:** Graceful handling of oversized results
-- **N3.3:** Preserve cache on UI errors
-- **N3.4:** Consistent state after expand/collapse
-- **N3.5:** Safe handling of special characters
-
-#### NFR4: Memory Efficiency
-- **N4.1:** Cache size bounded to prevent memory leaks
-- **N4.2:** Efficient storage format
-- **N4.3:** Lazy loading of full results
-- **N4.4:** Automatic cleanup of old results
-- **N4.5:** Memory usage under 50MB for full cache
-
----
-
-## User Experience
-
-### Core Workflows
-
-#### Workflow 1: Rapid Development (Many Tool Calls)
-1. User asks agent to refactor code
-2. Agent executes 10 tools (read_file, apply_diff, etc.)
-3. Each result shows brief summary:
-   - "✓ Read main.go (234 lines)"
-   - "✓ Applied 3 edits to handler.go"
-4. Chat remains clean and focused
-5. Agent's next message is immediately visible
-6. User continues conversation without scrolling
-
-**Success Criteria:** User can follow agent reasoning despite many tool calls
-
-#### Workflow 2: Reviewing Specific Tool Result
-1. Agent executed command 5 minutes ago
-2. User wants to see full output now
-3. User presses Ctrl+R (result list)
-4. Result list overlay shows last 20 results
-5. User navigates to "execute_command: npm test"
-6. Selects it, sees full output
-7. Closes overlay
-
-**Success Criteria:** User finds any cached result in under 10 seconds
-
-#### Workflow 3: Expanding Inline Result
-1. Agent shows file read summary: "✓ Read config.json (45 lines)"
-2. User wants to see full content
-3. User navigates to result message
-4. Presses Enter or clicks ▶ Expand
-5. Full file content appears with syntax highlighting
-6. User reviews content
-7. Presses Enter again to collapse
-
-**Success Criteria:** User can expand/collapse without disrupting flow
-
-#### Workflow 4: Debugging Command Failure
-1. Agent executed shell command that failed
-2. Result shows: "✗ Command failed (exit code 1)"
-3. Error output is truncated in summary
-4. User expands to see full stderr
-5. Identifies issue from error message
-6. Provides fix to agent
-
-**Success Criteria:** Error details are accessible but don't clutter chat
-
-#### Workflow 5: Comparing Multiple Results
-1. Agent ran same command 3 times
-2. User wants to compare outputs
-3. Opens result list
-4. Sees all 3 executions with timestamps
-5. Opens each in sequence
-6. Compares outputs to spot differences
-
-**Success Criteria:** Multiple related results are easy to access
-
----
-
-## Technical Architecture
-
-### Component Structure
-
+**Small Result (Shown in Full):**
 ```
-Intelligent Result Display
-├── Result Renderer
-│   ├── Summary Generator
-│   ├── Truncation Engine
-│   ├── Syntax Highlighter
-│   └── Format Detector
-├── Result Cache
-│   ├── Cache Manager
-│   ├── Storage
-│   ├── Eviction Policy
-│   └── Query Engine
-├── Result List Overlay
-│   ├── List Renderer
-│   ├── Search Filter
-│   ├── Detail Viewer
-│   └── Navigation Handler
-└── Expansion System
-    ├── Expand/Collapse State
-    ├── Animation Controller
-    └── Virtual Scroller
-```
-
-### Data Model
-
-```go
-type CachedResult struct {
-    ID          string
-    ToolName    string
-    Timestamp   time.Time
-    Status      ResultStatus
-    Content     string
-    Summary     string
-    Size        int
-    Metadata    map[string]interface{}
-}
-
-type ResultCache struct {
-    results     []CachedResult
-    maxSize     int
-    lookup      map[string]*CachedResult
-}
-
-type ResultDisplay struct {
-    IsExpanded  bool
-    ShowLines   int
-    TotalLines  int
-    Summary     string
-    FullContent string
+✓ File written: config.json (8 lines)
+{
+  "name": "forge",
+  "version": "1.0",
+  "port": 3000
 }
 ```
 
-### Result Processing Flow
-
+**Large Result (Summarized):**
 ```
-Tool Execution Complete
-    ↓
-Result arrives at TUI
-    ↓
-Detect Result Type
-    ↓
-Generate Summary (if needed)
-    ↓
-┌─────────────────────────────┐
-│ Result Size?                │
-│ - Small (<10 lines): Inline │
-│ - Large (>10 lines): Truncate│
-└──────────┬──────────────────┘
-           ↓
-Store in Cache
-           ↓
-Render Summary/Full in Chat
-           ↓
-User can expand/collapse
-           ↓
-Access via result list
+📄 Read src/handler.go (234 lines)
+1 │ package handler
+2 │
+3 │ import (
+... 229 more lines
+
+[Press Enter to expand full content]
+```
+
+**Command Output (Summarized):**
+```
+⚡ Executed: npm test
+Exit code: 1 (failed)
+
+FAIL  src/handler.test.js
+  ● Handler › processes requests
+    Expected: 200
+    Received: 500
+
+... 45 more lines
+
+[Press Enter to expand full output]
 ```
 
 ---
 
-## Design Decisions
+#### P0-2: Expand/Collapse Controls
+**Description:** Allow users to reveal full content on demand
 
-### Why 20 Results in Cache?
-- **Memory:** Reasonable limit (typically <10MB)
-- **Usefulness:** Covers recent session activity
-- **Configurable:** Power users can increase
-- **Performance:** Fast search/retrieval
+**User Stories:**
+- As a user, I want to expand summaries to see full content
+- As a developer, I want to collapse expanded results to restore clean view
 
-**Alternatives considered:**
-- Unlimited: Memory leak risk
-- Time-based: Unpredictable size
-- 10 results: Too few for long sessions
+**Acceptance Criteria:**
+- Navigate to any result and press Enter to expand
+- Expanded result shows complete content with syntax highlighting
+- Press Enter again to collapse back to summary
+- Smooth transition animation (not jarring)
+- Visual indicator of expansion state (▶ collapsed, ▼ expanded)
+- Scroll position preserved when toggling expansion
+- Click interaction also works (not keyboard-only)
+- Keyboard shortcut hint visible in footer
 
-### Why Auto-Truncate at 10 Lines?
-- **Scannability:** 10 lines fit on most screens
-- **Context:** Enough to understand result
-- **Balance:** Not too aggressive, not too lenient
-- **Configurable:** Users can adjust
+**User Flow:**
+```
+User sees summarized result
+    ↓
+Navigate to result message
+    ↓
+Press Enter or click ▶ Expand
+    ↓
+Full content appears with syntax highlighting
+    ↓
+Review content
+    ↓
+Press Enter or click ▼ Collapse
+    ↓
+Returns to clean summary view
+```
 
-**Testing showed:** Most summaries are 3-5 lines, expansion rate ~15%
+---
 
-### Why Result List Overlay vs Inline History?
-- **Screen space:** Overlay doesn't consume permanent space
-- **Focus:** Keeps main chat clean
-- **Discoverability:** Clear entry point (Ctrl+R)
-- **Functionality:** More features (search, filter, sort)
+#### P0-3: Result History Cache
+**Description:** Store recent tool results for later access
 
-### Why Cache Results Instead of Re-Query?
-- **Performance:** Instant access without re-execution
-- **Consistency:** Results don't change after caching
-- **History:** Tool might not be re-runnable
-- **UX:** Immediate display
+**User Stories:**
+- As a user, I want to review past tool results without scrolling
+- As a developer, I want to find specific tool executions quickly
+
+**Acceptance Criteria:**
+- Cache last 20 tool results automatically
+- Store full content, not just summaries
+- Include metadata: tool name, timestamp, success/failure status
+- Oldest results evicted when cache full (FIFO)
+- Cache cleared when session ends
+- Cache size configurable in settings
+- No performance degradation with full cache
+
+**Cache Contents:**
+- Tool name and operation (e.g., "read_file: src/main.go")
+- Timestamp (relative: "2 minutes ago")
+- Status (success ✓, failure ✗)
+- Full result content
+- Result size (lines/bytes)
+
+---
+
+#### P0-4: Result List Overlay
+**Description:** Browse all cached results in dedicated interface
+
+**User Stories:**
+- As a user, I want to see all recent tool executions in one place
+- As a developer investigating issues, I want quick access to any past result
+
+**Acceptance Criteria:**
+- Keyboard shortcut to open result list (Ctrl+R)
+- Display all cached results with metadata
+- Navigate list with arrow keys
+- Select result to view full content
+- Show result index and total (e.g., "Result 5 of 18")
+- Indicate which results have been viewed
+- Close overlay with Esc
+- Return to main chat view after closing
+
+**Result List Interface:**
+```
+┌─ Recent Tool Results (18 cached) ─────────────────────────┐
+│                                                            │
+│ ▸ read_file: src/handler.go           2 min ago  ✓       │
+│   read_file: test/handler_test.go     3 min ago  ✓       │
+│   apply_diff: src/handler.go          4 min ago  ✓       │
+│   execute_command: npm test           5 min ago  ✗       │
+│   search_files: TODO                  7 min ago  ✓       │
+│   list_files: src/                    8 min ago  ✓       │
+│   ...                                                      │
+│                                                            │
+│ ✓ = Success    ✗ = Failed    ▸ = Selected               │
+│                                                            │
+│ [↑↓] Navigate  [Enter] View  [Esc] Close                 │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### P0-5: Context-Aware Rendering
+**Description:** Display different result types with appropriate formatting
+
+**User Stories:**
+- As a user, I want file contents syntax highlighted
+- As a developer, I want command output to preserve colors and formatting
+
+**Acceptance Criteria:**
+- **File content:** Syntax highlighted based on file extension
+- **Diffs:** Unified or side-by-side view with color coding
+- **Command output:** Preserve ANSI colors and formatting
+- **JSON/structured data:** Formatted and indented properly
+- **Errors:** Highlighted in red with clear error indication
+- **Success messages:** Brief confirmation with ✓ indicator
+- **Binary files:** Show file type and size, not content
+- **Large text blocks:** Proper wrapping and scrolling
+
+**Format Examples:**
+
+**File Content:**
+```
+📄 Read src/handler.go (45 lines)
+
+1  │ package handler
+2  │
+3  │ import (
+4  │     "fmt"
+5  │     "net/http"
+6  │ )
+...
+   └─ Syntax highlighted based on .go extension
+```
+
+**Command Output (with ANSI colors preserved):**
+```
+⚡ Executed: npm run build
+
+> build
+> webpack --mode production
+
+✓ Compiled successfully in 3.2s
+  - main.js (245 KB)
+  - vendor.js (1.2 MB)
+```
+
+**Error Result:**
+```
+✗ Command failed: go test ./...
+
+FAIL: TestHandler (0.01s)
+    handler_test.go:23: Expected 200, got 500
+    
+Exit code: 1
+```
+
+---
+
+#### P0-6: Performance Optimization
+**Description:** Handle large results without UI lag
+
+**User Stories:**
+- As a user, I want instant response when expanding results
+- As a developer, I want smooth scrolling even with large cached results
+
+**Acceptance Criteria:**
+- Render summarized result within 50ms
+- Expand full result within 200ms (for typical sizes <100KB)
+- Result list overlay opens within 100ms
+- Smooth scrolling with virtualization for large content
+- Lazy syntax highlighting (highlight as content becomes visible)
+- Warn before expanding extremely large results (>500KB)
+- Maximum result size limit (1MB) with truncation and warning
+- No memory leaks from cached results
+
+**Large Result Warning:**
+```
+⚠️  Large Result Warning
+
+This result is 847 KB (12,450 lines).
+Expanding may take a moment.
+
+[Expand Anyway]  [View Summary Only]  [Export to File]
+```
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Smart Summary Generation
+**Description:** Intelligently extract most important lines for summaries
+
+**User Stories:**
+- As a user, I want summaries to show the most relevant information
+- As a developer debugging, I want errors and warnings in summaries even if not at top
+
+**Acceptance Criteria:**
+- Prioritize error messages and warnings in summaries
+- Show context around important lines (1-2 lines before/after)
+- Avoid truncating in middle of logical blocks (functions, JSON objects)
+- Different strategies per result type:
+  - File reads: First few lines + function signatures
+  - Command output: Command + exit code + errors/warnings
+  - Search results: Matches with surrounding context
+- Keep stack traces together (don't split)
+- Preserve indentation and structure
+
+**Smart Summary Example:**
+```
+⚡ Executed: pytest tests/
+
+Exit code: 1 (1 failed, 12 passed)
+
+FAILED tests/test_handler.py::test_auth
+    AssertionError: Expected 200, got 401
+    
+... 89 more lines (11 passed tests)
+
+[Press Enter to see all test output]
+```
+vs. naive truncation that would show 3 random lines from middle
+
+---
+
+#### P1-2: Result Search and Filtering
+**Description:** Find specific results in cache quickly
+
+**User Stories:**
+- As a user, I want to search for results by tool name or content
+- As a developer, I want to filter results by success/failure
+
+**Acceptance Criteria:**
+- Search box in result list overlay
+- Search by tool name (e.g., "read_file")
+- Search by file path (e.g., "handler.go")
+- Filter by status (success, failure, all)
+- Filter by tool type
+- Real-time filtering as user types
+- Show match count (e.g., "5 of 18 results")
+- Clear search/filter button
+
+**Filtered Result List:**
+```
+┌─ Recent Tool Results ─────────────────────────────────────┐
+│                                                            │
+│ 🔍 Search: [handler_______________]  [x] Clear           │
+│ Filter: [✓ Success] [✗ Failed] [All]                     │
+│                                                            │
+│ Showing 3 of 18 results                                   │
+│                                                            │
+│ ▸ read_file: src/handler.go           2 min ago  ✓       │
+│   apply_diff: src/handler.go          4 min ago  ✓       │
+│   read_file: test/handler_test.go     3 min ago  ✓       │
+│                                                            │
+│ [↑↓] Navigate  [Enter] View  [/] Search  [Esc] Close     │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### P1-3: Result Comparison View
+**Description:** Compare multiple related results side-by-side
+
+**User Stories:**
+- As a developer, I want to compare command outputs across runs
+- As a user, I want to see how files changed over time
+
+**Acceptance Criteria:**
+- Select multiple results in result list (Shift+arrow)
+- Open comparison view (Enter with multiple selected)
+- Side-by-side or diff view
+- Highlight differences between results
+- Show timestamps for each result
+- Useful for: comparing test runs, file versions, command outputs
+
+---
+
+#### P1-4: Result Export
+**Description:** Save results to files for later reference
+
+**User Stories:**
+- As a developer, I want to save important results before they're evicted
+- As a team lead, I want to share results with colleagues
+
+**Acceptance Criteria:**
+- Export single result to file
+- Export all cached results to directory
+- Preserve formatting and metadata
+- Configurable export location
+- Export formats: plain text, JSON (with metadata), HTML (formatted)
+- Keyboard shortcut for quick export
+
+---
+
+#### P1-5: Configurable Truncation
+**Description:** Let users customize summarization behavior
+
+**User Stories:**
+- As a power user, I want larger summaries (more than 3-5 lines)
+- As a minimalist, I want briefer summaries
+
+**Acceptance Criteria:**
+- Setting: Summary line count (default: 5, range: 1-20)
+- Setting: Auto-truncate threshold (default: 10 lines, range: 5-100)
+- Setting: Cache size (default: 20 results, range: 10-100)
+- Setting: Enable/disable smart summarization
+- Setting: Maximum result size before warning
+- Preview settings changes before applying
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: AI-Powered Summaries
+**Description:** Use LLM to generate intelligent natural-language summaries
+
+**User Stories:**
+- As a user, I want to understand complex results through AI explanations
+- As a learning developer, I want summaries that explain what happened
+
+**Acceptance Criteria:**
+- Optional AI summary generation (disabled by default due to cost)
+- Generate 1-2 sentence explanation of result
+- Highlight important changes or findings
+- Explain errors in plain language
+
+**Example:**
+```
+📄 Read src/handler.go (234 lines)
+
+AI Summary: This file implements the main HTTP request handler with 
+authentication middleware and error handling. Recent changes added 
+request validation.
+
+[Press Enter to see full file content]
+```
+
+---
+
+#### P2-2: Result Annotations
+**Description:** Add notes to specific results for future reference
+
+**User Stories:**
+- As a developer, I want to mark important results with notes
+- As a team member, I want to leave comments on problematic outputs
+
+**Acceptance Criteria:**
+- Add annotation to any cached result
+- Annotations persist while result is in cache
+- View annotations in result list
+- Search annotations
+- Export annotations with results
+
+---
+
+#### P2-3: Result Persistence
+**Description:** Save result history across sessions
+
+**User Stories:**
+- As a user, I want to review yesterday's tool executions
+- As a developer debugging recurring issues, I want historical data
+
+**Acceptance Criteria:**
+- Option to persist results to disk
+- Load previous session results
+- Configurable retention period
+- Automatic cleanup of old results
+- Privacy considerations (sensitive data)
+
+---
+
+## User Experience Flows
+
+### Rapid Development Flow (Many Tool Calls)
+
+```
+User: "Refactor the authentication handler"
+    ↓
+Agent thinks and plans
+    ↓
+Agent: "I'll read the current implementation, identify improvements, 
+       and apply refactoring"
+    ↓
+Tool 1: read_file: src/auth/handler.go
+Result: 📄 Read src/auth/handler.go (234 lines)
+        [Clean summary, not 234 lines of code]
+    ↓
+Tool 2: read_file: test/auth_test.go
+Result: 📄 Read test/auth_test.go (156 lines)
+    ↓
+Tool 3: apply_diff: src/auth/handler.go
+Result: ✓ Applied 5 edits to src/auth/handler.go (+23 -15 lines)
+    ↓
+Tool 4: apply_diff: test/auth_test.go
+Result: ✓ Applied 2 edits to test/auth_test.go (+8 -2 lines)
+    ↓
+Tool 5: execute_command: go test ./auth
+Result: ⚡ Executed: go test ./auth
+        ✓ All tests passed (0.23s)
+    ↓
+Agent: "I've refactored the handler with these improvements:
+       1. Extracted validation into separate function
+       2. Added better error messages
+       3. Updated tests for new structure
+       All tests passing."
+    ↓
+User sees: Clean conversation with summaries, can follow reasoning
+User can expand any result if curious about details
+```
+
+**Experience:** Clean, focused, professional. No visual clutter, yet complete transparency.
+
+---
+
+### Debugging Investigation Flow
+
+```
+User working on feature
+    ↓
+Agent runs tests, command fails
+    ↓
+Result: ⚡ Executed: npm test
+        Exit code: 1 (failed)
+        
+        FAIL  src/handler.test.js
+          ● Handler › auth validation
+            Expected: 200
+            Received: 401
+        
+        ... 67 more lines
+        
+        [Press Enter to expand full output]
+    ↓
+User wants full details
+    ↓
+User navigates to result and presses Enter
+    ↓
+Full test output expands:
+    - All test results
+    - Complete stack trace
+    - Debug output
+    - Environment details
+    ↓
+User studies output, identifies issue
+    ↓
+User: "The token validation is failing. Check the auth middleware"
+    ↓
+Agent investigates and fixes
+    ↓
+Later, user wants to compare outputs
+    ↓
+User presses Ctrl+R (result list)
+    ↓
+Sees both test runs:
+    - execute_command: npm test (5 min ago) ✗
+    - execute_command: npm test (1 min ago) ✓
+    ↓
+Can compare to verify fix
+```
+
+**Experience:** Full debugging power without permanent clutter. Access when needed, hidden otherwise.
+
+---
+
+### Result Review and Comparison Flow
+
+```
+Agent made multiple file modifications
+    ↓
+User wants to review all changes
+    ↓
+User presses Ctrl+R to open result list
+    ↓
+┌─ Recent Tool Results (12 cached) ─────────────────────────┐
+│                                                            │
+│   read_file: src/handler.go           2 min ago  ✓       │
+│   read_file: src/validator.go         3 min ago  ✓       │
+│ ▸ apply_diff: src/handler.go          4 min ago  ✓       │
+│   apply_diff: src/validator.go        4 min ago  ✓       │
+│   execute_command: go test             5 min ago  ✓       │
+│   ...                                                      │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+    ↓
+User selects first apply_diff
+    ↓
+Views full diff of handler.go changes
+    ↓
+Presses Esc to return to list
+    ↓
+Selects second apply_diff
+    ↓
+Views full diff of validator.go changes
+    ↓
+Understands complete scope of refactoring
+    ↓
+Closes result list, continues conversation
+```
+
+**Experience:** Efficient review workflow with complete history access.
+
+---
+
+## User Interface Design
+
+### Inline Result Summary
+
+```
+┌─ Conversation ─────────────────────────────────────────────┐
+│                                                             │
+│ Agent: I'll read the configuration file and update the      │
+│        timeout setting.                                     │
+│                                                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ 📄 Read config/settings.json (45 lines)                 │ │
+│ │                                                          │ │
+│ │  1 │ {                                                  │ │
+│ │  2 │   "app": {                                         │ │
+│ │  3 │     "name": "forge",                              │ │
+│ │  ... 42 more lines                                      │ │
+│ │                                                          │ │
+│ │ [Press Enter to expand full content] ▶                  │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│ Agent: I see the current timeout is 30 seconds. I'll       │
+│        update it to 60 seconds as requested.                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Expanded Result View
+
+```
+┌─ Conversation ─────────────────────────────────────────────┐
+│                                                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ 📄 Read config/settings.json (45 lines)       [Expanded] │ │
+│ │                                                          │ │
+│ │  1 │ {                                                  │ │
+│ │  2 │   "app": {                                         │ │
+│ │  3 │     "name": "forge",                              │ │
+│ │  4 │     "version": "1.0.0",                           │ │
+│ │  5 │     "port": 3000,                                  │ │
+│ │  6 │     "timeout": 30                                  │ │
+│ │  7 │   },                                                │ │
+│ │  8 │   "database": {                                    │ │
+│ │  9 │     "host": "localhost",                          │ │
+│ │ 10 │     "port": 5432,                                  │ │
+│ │ ... (continues with syntax highlighting)                │ │
+│ │                                                          │ │
+│ │ [Press Enter to collapse] ▼                             │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Result List Overlay
+
+```
+┌─ Recent Tool Results (18 cached) ─────────────────────────┐
+│                                                            │
+│ 🔍 Search: [____________]  Filter: [All ▾]               │
+│                                                            │
+│ ▸ read_file: config/settings.json     2 min ago  ✓       │
+│   apply_diff: config/settings.json    3 min ago  ✓       │
+│   read_file: src/handler.go           5 min ago  ✓       │
+│   apply_diff: src/handler.go          6 min ago  ✓       │
+│   execute_command: go test ./...      8 min ago  ✗       │
+│   search_files: TODO                  10 min ago ✓       │
+│   list_files: src/                    12 min ago ✓       │
+│   read_file: README.md                15 min ago ✓       │
+│   execute_command: git status         18 min ago ✓       │
+│   ...                                                      │
+│                                                            │
+│ ✓ = Success  ✗ = Failed  ▸ = Selected                    │
+│                                                            │
+│ [↑↓] Navigate  [Enter] View  [/] Search  [Esc] Close     │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Result Detail View (from list)
+
+```
+┌─ Tool Result Detail ──────────────────────────────────────┐
+│                                                            │
+│ Tool: execute_command                                      │
+│ Time: 8 minutes ago                                        │
+│ Status: Failed ✗                                          │
+│                                                            │
+│ ⚡ Executed: go test ./...                                │
+│                                                            │
+│ Exit code: 1                                               │
+│                                                            │
+│ FAIL: TestHandler (0.01s)                                 │
+│     handler_test.go:23:                                   │
+│         Expected: 200                                     │
+│         Received: 500                                     │
+│                                                            │
+│ FAIL: TestValidator (0.00s)                               │
+│     validator_test.go:15:                                 │
+│         Validation failed unexpectedly                     │
+│                                                            │
+│ FAIL                                                       │
+│ coverage: 67.8% of statements                              │
+│                                                            │
+│ [Esc] Back to list  [E] Export  [C] Copy                  │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Success Metrics
 
-### UX Metrics
-- **Clutter reduction:** 80% less vertical space consumed by results
-- **Expansion rate:** 15-25% of results expanded (indicates good defaults)
-- **Result access:** >50% of users access result list at least once
-- **Scroll reduction:** 60% less scrolling needed per session
+### Adoption & Usage
 
-### Performance Metrics
-- **Render time:** p95 under 100ms for any result
-- **Expansion time:** p95 under 200ms
-- **Cache lookup:** p95 under 10ms
-- **Memory usage:** Under 50MB for full cache
+**Primary Metrics:**
+- **Interface Cleanliness:** 80% reduction in vertical space consumed by tool results
+- **Expansion Rate:** 15-25% of results expanded (indicates summaries are informative but users sometimes need details)
+- **Result List Usage:** >50% of users access result list at least once per session
+- **Cache Hit Rate:** >70% of result reviews use cached data (not re-scrolling)
 
-### Usability Metrics
-- **Discovery:** >70% of users discover expand/collapse within first session
-- **Result finding:** p95 under 15 seconds to find specific cached result
-- **Satisfaction:** >85% prefer intelligent display over raw output
-- **Error rate:** <5% of expansions result in issues
+**Engagement Metrics:**
+- **Time to Find Result:** p95 <15 seconds to locate specific cached result
+- **Scroll Reduction:** 60% less scrolling per session compared to full inline results
+- **Session Length:** Increased session duration (cleaner interface encourages longer use)
 
 ---
 
-## Dependencies
+### User Satisfaction
 
-### External Dependencies
-- Syntax highlighting library (Chroma)
-- Text processing utilities
-- ANSI color parsing (for command output)
+**Quality Metrics:**
+- **Satisfaction Score:** >4.5/5 for result display experience
+- **Preference:** >85% prefer intelligent display over full inline results
+- **Cognitive Load:** Users report 40% less information overwhelm
+- **Trust:** >90% feel confident they're not missing important information
 
-### Internal Dependencies
-- TUI framework (for overlay rendering)
-- Event system (for result events)
-- Settings system (for cache size configuration)
-
-### Platform Requirements
-- Terminal with ANSI color support
-- Sufficient memory for result caching
-- Unicode support (for icons/indicators)
+**Discovery Metrics:**
+- **Expansion Discovery:** >70% of users discover expand/collapse within first session
+- **Result List Discovery:** >60% find result list (Ctrl+R) within first 3 sessions
+- **Feature Utilization:** >40% use advanced features (search, filter, comparison)
 
 ---
 
-## Risks & Mitigations
+### Performance
 
-### Risk 1: Important Information Truncated
-**Impact:** High  
+**Speed Metrics:**
+- **Summary Render:** p95 <50ms to display truncated result
+- **Expansion Time:** p95 <200ms to expand full result
+- **Result List Open:** p95 <100ms to open result list overlay
+- **Cache Lookup:** p95 <10ms to find result in cache
+- **Memory Usage:** <50MB for full cache (20 results)
+
+**Reliability Metrics:**
+- **Error Rate:** <0.1% of result renders fail
+- **Expansion Errors:** <0.5% of expansions cause issues
+- **Cache Corruption:** 0% cache data loss
+- **Performance Degradation:** No slowdown with full cache
+
+---
+
+### Business Impact
+
+**Productivity Metrics:**
+- **Review Efficiency:** 50% faster tool result review
+- **Error Detection:** Bugs found 30% faster due to cleaner interface
+- **Workflow Interruption:** 70% reduction in flow breaks from scrolling
+- **Session Completion:** 25% more users complete full coding sessions
+
+**Adoption Metrics:**
+- **Feature Stickiness:** 90% of users who try intelligent display continue using it
+- **Churn Reduction:** 15% fewer users abandon product due to interface overwhelm
+- **Recommendation:** Net Promoter Score increase of +12 points
+
+---
+
+## Risk & Mitigation
+
+### Risk 1: Critical Information Hidden in Summaries
+**Impact:** High - Users might miss important errors or warnings  
 **Probability:** Medium  
-**Mitigation:**
-- Smart truncation (keep errors/warnings)
-- Clear indicators that content is truncated
-- Easy expansion mechanism
-- User testing to validate truncation logic
-- Configurable truncation length
+**User Impact:** Bugs, security issues, or important details overlooked
 
-### Risk 2: Cache Memory Growth
-**Impact:** Medium  
+**Mitigation:**
+- Smart summarization prioritizes errors and warnings
+- Always show error messages in summaries, even if result is long
+- Visual indicators when content is truncated (clear "... X more lines")
+- User testing to validate that important info makes it to summaries
+- Configurable truncation threshold for power users
+- Training/documentation on when to expand results
+- Keyboard shortcut hint always visible
+
+**User Communication:**
+"Summaries automatically highlight errors and warnings. When reviewing critical operations, expand full results to ensure nothing is missed."
+
+---
+
+### Risk 2: Users Don't Discover Expansion
+**Impact:** Medium - Underutilization of feature  
 **Probability:** Low  
-**Mitigation:**
-- Hard limit on cache size (20 results default)
-- FIFO eviction policy
-- Size limits per result (100KB max)
-- Automatic cleanup on session end
-- Memory monitoring
+**User Impact:** Frustration from lack of detail access
 
-### Risk 3: Performance with Large Results
-**Impact:** Medium  
-**Probability:** Medium  
 **Mitigation:**
-- Virtual scrolling for large content
-- Lazy syntax highlighting
-- Warn before expanding huge results
-- Limit max displayable size
+- Clear visual affordance (▶ Expand button)
+- Keyboard shortcut in footer reminder
+- First-time tutorial highlights expansion
+- Hover tooltip explains expansion
+- Contextual help when viewing summaries
+- Documentation with examples
+
+**Discovery Support:**
+- Tutorial on first truncated result
+- "Tip of the day" feature highlighting expansion
+- Video tutorials showing workflow
+
+---
+
+### Risk 3: Cache Memory Growth
+**Impact:** Medium - Memory usage or performance issues  
+**Probability:** Low  
+**User Impact:** Slow application, crashes, or memory warnings
+
+**Mitigation:**
+- Hard limit on cache size (20 results default, configurable)
+- FIFO eviction policy (oldest results removed first)
+- Per-result size limit (1MB max, warn and truncate if exceeded)
+- Automatic cache cleanup on session end
+- Memory monitoring and warnings
+- User control over cache size in settings
+
+**Monitoring:**
+- Track cache memory usage
+- Alert on approaching limits
+- Provide cache statistics in settings
+
+---
+
+### Risk 4: Expansion Performance Lag
+**Impact:** Medium - Poor user experience with large results  
+**Probability:** Medium  
+**User Impact:** Frustration, perceived slowness
+
+**Mitigation:**
+- Virtual scrolling for large content (only render visible portions)
+- Lazy syntax highlighting (highlight as user scrolls)
+- Warn before expanding extremely large results (>500KB)
+- Option to export large results to file instead of expanding
+- Progressive rendering (show first screen immediately, load rest in background)
 - Optimize rendering pipeline
 
-### Risk 4: User Confusion About Missing Results
-**Impact:** Low  
-**Probability:** Low  
+**Large Result Workflow:**
+```
+User tries to expand 2MB log file
+    ↓
+Warning appears:
+"This result is very large (2.1 MB).
+ Expanding may take several seconds.
+ 
+ [Expand Anyway] [View First 1000 Lines] [Export to File]"
+    ↓
+User chooses appropriate option
+```
+
+---
+
+### Risk 5: Result List Overwhelming for Long Sessions
+**Impact:** Low - Too many results to navigate  
+**Probability:** Medium  
+**User Impact:** Difficulty finding specific results
+
 **Mitigation:**
-- Clear cache size limit in settings
-- Result count indicator in result list
-- Help text explains caching behavior
-- Option to export results before eviction
+- Search and filter functionality
+- Smart sorting (recent first, or by relevance)
+- Group related results (all file operations together)
+- Result count limit (20 default) prevents infinite growth
+- Clear cache button for fresh start
+- Export results before clearing if needed
+
+**Future Enhancement:**
+Auto-grouping of related operations (e.g., "File Refactoring (5 operations)")
 
 ---
 
-## Future Enhancements
+## Competitive Analysis
 
-### Phase 2 Ideas
-- **Result Export:** Save individual results to file
-- **Result Search:** Full-text search across all cached results
-- **Result Filtering:** Filter by tool, status, timestamp
-- **Result Grouping:** Group related results (e.g., all file reads)
-- **Custom Summaries:** User-defined summary templates
+### GitHub Actions Logs
+**Approach:** Collapsible log sections with timestamps  
+**Strengths:** Clean interface, easy to scan, expandable detail  
+**Weaknesses:** Web-only, not real-time during interaction  
+**Differentiation:** We provide real-time in-terminal experience with smart summaries
 
-### Phase 3 Ideas
-- **Result Persistence:** Save results across sessions
-- **Result Annotations:** Add notes to specific results
+### Cursor AI Output
+**Approach:** Inline results with some truncation  
+**Strengths:** Immediate visibility, integrated with editor  
+**Weaknesses:** Can still get cluttered, less sophisticated summarization  
+**Differentiation:** More aggressive intelligent summarization, result history cache
+
+### Aider Terminal Output
+**Approach:** Full inline output with git-style formatting  
+**Strengths:** Complete transparency, familiar to developers  
+**Weaknesses:** Visual clutter, hard to follow with many operations  
+**Differentiation:** Clean summaries while maintaining full transparency through expansion
+
+### VSCode Terminal
+**Approach:** Raw output, user manages scrolling  
+**Strengths:** Simple, familiar, no hidden information  
+**Weaknesses:** No intelligence, overwhelming with large outputs  
+**Differentiation:** Smart summarization and result management without hiding information
+
+### Jupyter Notebooks
+**Approach:** Collapsible cell outputs  
+**Strengths:** Cell-based organization, rich output rendering  
+**Weaknesses:** Not real-time, web-based  
+**Differentiation:** Terminal-native with real-time streaming and caching
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Forge keeps your coding conversation clean and focused with intelligent result summaries—see what matters, expand when curious, and access complete history instantly. No more drowning in tool output."
+
+**Key Differentiators:**
+- Automatic smart summarization (not just truncation)
+- Complete result history with instant access
+- Context-aware rendering (syntax highlighting, ANSI colors)
+- Clean interface without sacrificing transparency
+- Keyboard-driven workflow for power users
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Developers who value clean, focused interfaces
+- Power users who run many operations per session
+- Teams debugging complex issues requiring result review
+
+**Value Propositions by Segment:**
+- **Productivity Users:** "Stay in flow with clean, scannable results"
+- **Debugging Teams:** "Find and compare any result instantly"
+- **Learning Developers:** "Digestible output that doesn't overwhelm"
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. "Understanding Result Display" - How summaries work
+2. "Expanding and Reviewing Results" - Quick start guide
+3. "Using Result History" - Ctrl+R and result list guide
+4. "Customizing Result Display" - Settings reference
+5. "Troubleshooting Large Results" - Performance tips
+
+**FAQ Topics:**
+- "How do I see full tool results?"
+- "What does the '... X more lines' mean?"
+- "How do I access previous results?"
+- "Can I increase the cache size?"
+- "Why is result expansion slow?"
+- "How are summaries generated?"
+
+---
+
+## Evolution & Roadmap
+
+### Version History
+
+**v1.0 (Current):**
+- Automatic result summarization
+- Expand/collapse controls
+- Result history cache (20 results)
+- Result list overlay (Ctrl+R)
+- Context-aware rendering
+- Performance optimization for large results
+
+---
+
+### Future Enhancements
+
+#### Phase 2: Enhanced Discovery & Access
+- **Result Search:** Full-text search across cached results
+- **Smart Filtering:** Filter by tool, status, timestamp, size
+- **Result Grouping:** Group related operations visually
+- **Custom Summary Templates:** User-defined summarization rules
+- **Result Export:** Save individual or bulk results to files
+- **Comparison View:** Side-by-side result comparison
+
+**User Value:** Faster result discovery, more powerful investigation tools
+
+---
+
+#### Phase 3: Intelligence & Collaboration
+- **AI-Powered Summaries:** Natural language explanations of results
+- **Result Annotations:** Add notes and tags to results
+- **Result Persistence:** Save history across sessions
 - **Result Sharing:** Share result snapshots with team
-- **Advanced Truncation:** AI-powered smart summarization
-- **Result Analytics:** Statistics about result patterns
+- **Analytics:** Track result patterns and common operations
+- **Smart Suggestions:** "You might want to review this result based on your question"
+
+**User Value:** Deeper insights, team collaboration, historical analysis
 
 ---
 
-## Related Documentation
+#### Phase 4: Advanced Features
+- **Result Visualization:** Charts and graphs for structured data
+- **Interactive Results:** Edit and re-run operations from results
+- **Result Diffing:** Automatic comparison of similar results
+- **Custom Renderers:** Plugin system for specialized result types
+- **Result Workflows:** Chain result review into approval workflows
+- **ML-Based Summarization:** Adaptive summaries that learn user preferences
 
-- [ADR-0022: Intelligent Tool Result Display](../adr/0022-intelligent-tool-result-display.md)
-- [How-to: Use TUI Interface - Result Display](../how-to/use-tui-interface.md#tool-results)
-- [TUI Executor PRD](tui-executor.md)
-- [Architecture: Event System](../architecture/events.md)
+**User Value:** Professional-grade result analysis and workflow automation
+
+---
+
+## Technical References
+
+- **Architecture:** Result caching and rendering system
+- **Implementation:** Virtual scrolling and lazy rendering
+- **Related Features:** TUI Executor PRD, Streaming Execution PRD
+- **Performance:** Syntax highlighting and memory optimization
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed technical implementation details (component structure, data models)
+- Enhanced user experience flows with detailed scenarios
+- Added comprehensive UI mockups and examples
+- Expanded competitive analysis
+- Added go-to-market considerations
+- Improved success metrics with user-focused KPIs
+- Added risk mitigation strategies
+
+### 2024-12 (Original)
+- Initial PRD with technical architecture
+- Component structure and data models
+- Result processing flow diagrams

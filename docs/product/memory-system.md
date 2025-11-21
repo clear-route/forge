@@ -8,9 +8,11 @@
 
 ---
 
-## Overview
+## Product Vision
 
-The Memory System manages conversation history, ensuring the agent has access to relevant context while staying within token limits. It implements intelligent pruning strategies, maintains message integrity, and provides tools for users to understand and control what the agent remembers.
+Enable developers to have extended, productive coding sessions with the AI agent by automatically managing conversation history, ensuring the agent always has access to relevant context while optimizing for cost and performance. Users should never worry about context limits or manually managing what the agent remembers.
+
+**Strategic Alignment:** Supports Forge's mission to be a reliable, long-term coding partner by maintaining conversation continuity across complex, multi-hour development sessions.
 
 ---
 
@@ -33,592 +35,850 @@ Without intelligent memory management, agents either:
 
 ---
 
-## Goals
+## Key Value Propositions
 
-### Primary Goals
+### For Long-Session Developers
+- **Uninterrupted Flow:** Continue coding for hours without hitting context limits
+- **Preserved Decisions:** Agent remembers earlier architectural decisions and constraints
+- **Seamless Transitions:** Move between related tasks without losing relevant context
 
-1. **Maximize Relevance:** Keep most important context within token budget
-2. **Maintain Continuity:** Preserve conversation coherence across long sessions
-3. **Optimize Costs:** Minimize unnecessary token usage
-4. **Transparent Pruning:** Make clear what's been removed and why
-5. **User Control:** Allow users to influence memory strategy
-6. **Graceful Degradation:** Handle approaching limits proactively
+### For Cost-Conscious Developers
+- **Optimized Token Usage:** Only pay for relevant context, not old irrelevant messages
+- **Transparent Costs:** See exactly how memory impacts token consumption
+- **Configurable Limits:** Set memory budgets aligned with cost tolerance
 
-### Non-Goals
-
-1. **Perfect Recall:** Does NOT aim to remember everything forever
-2. **External Storage:** Does NOT persist conversations to disk (yet)
-3. **Semantic Search:** Does NOT use embeddings for retrieval (simple strategy)
-4. **Cross-Session Memory:** Does NOT remember across multiple sessions
-5. **Context Compression:** Does NOT use LLM-based summarization (yet)
+### For Multi-Task Developers
+- **Clean Slate:** Fresh context for each new task without manual cleanup
+- **Task Isolation:** Old task discussions don't pollute new task thinking
+- **Quick Resets:** Manually clear history when switching contexts
 
 ---
 
-## User Personas
+## Target Users & Use Cases
 
 ### Primary: Long-Session Developer
-- **Background:** Developer working on complex tasks over extended periods
-- **Workflow:** 1-2 hour coding sessions with many back-and-forth exchanges
-- **Pain Points:** Agent forgets earlier decisions or context
-- **Goals:** Maintain conversation continuity without manual intervention
+**Profile:**
+- Works on complex tasks over 1-2 hour sessions
+- Many back-and-forth exchanges with the agent
+- Builds on earlier decisions throughout the session
+
+**Key Use Cases:**
+- Refactoring large codebases with ongoing architectural discussions
+- Debugging issues that require remembering previous attempts
+- Implementing features that reference earlier design decisions
+
+**Pain Points Addressed:**
+- Agent forgetting earlier context mid-session
+- Having to repeat information already discussed
+- Context limits forcing session restarts
 
 ### Secondary: Cost-Conscious Developer
-- **Background:** Using paid LLM APIs, monitors token usage carefully
-- **Workflow:** Frequent short sessions, worried about wasted tokens
-- **Pain Points:** Paying for old irrelevant messages in context
-- **Goals:** Efficient memory usage without sacrificing quality
+**Profile:**
+- Using paid LLM APIs, monitors usage carefully
+- Prefers shorter, focused sessions
+- Values efficiency and cost optimization
+
+**Key Use Cases:**
+- Quick coding tasks with minimal conversation overhead
+- Monitoring token usage to control costs
+- Pruning old messages to reduce API charges
+
+**Pain Points Addressed:**
+- Paying for old irrelevant messages in context
+- Uncertainty about what's consuming tokens
+- Lack of control over memory efficiency
 
 ### Tertiary: Multi-Task Developer
-- **Background:** Switches between different coding tasks frequently
-- **Workflow:** Starts fresh conversation for each new task
-- **Pain Points:** Old task context pollutes new task thinking
-- **Goals:** Clean slate for each task while preserving current task context
+**Profile:**
+- Frequently switches between different coding tasks
+- Prefers isolated conversations for each task
+- Needs clean context for focused thinking
+
+**Key Use Cases:**
+- Working on multiple features in parallel
+- Switching between bug fixes and new development
+- Starting fresh discussions for unrelated tasks
+
+**Pain Points Addressed:**
+- Old task context polluting new task thinking
+- Confusion when agent references irrelevant earlier discussion
+- Manual effort to reset conversation context
 
 ---
 
-## Requirements
+## Product Requirements
 
-### Functional Requirements
+### Priority 0 (Must Have)
 
-#### FR1: Message Storage
-- **R1.1:** Store all conversation messages in memory
-- **R1.2:** Track message metadata (role, timestamp, tokens, importance)
-- **R1.3:** Maintain message order chronologically
-- **R1.4:** Support multiple message types (user, assistant, system, tool)
-- **R1.5:** Calculate and cache token counts per message
-- **R1.6:** Handle large messages efficiently
+#### P0-1: Automatic Memory Management
+**Description:** System automatically manages conversation history without user intervention
 
-#### FR2: Token Tracking
-- **R2.1:** Count tokens for each message accurately
-- **R2.2:** Track cumulative token usage
-- **R2.3:** Monitor against context window limit
-- **R2.4:** Warn when approaching limit (80% threshold)
-- **R2.5:** Provide token breakdown by message type
-- **R2.6:** Update counts when messages pruned
+**User Stories:**
+- As a developer, I want the agent to automatically handle memory limits so I never hit context errors
+- As a user, I want seamless conversations without thinking about technical constraints
 
-#### FR3: Pruning Strategy
-- **R3.1:** Implement rolling window strategy (keep last N messages)
-- **R3.2:** Always preserve system prompt (never prune)
-- **R3.3:** Always preserve most recent messages (last 10)
-- **R3.4:** Prune from middle of conversation (oldest first)
-- **R3.5:** Prune in message pairs (user + assistant together)
-- **R3.6:** Leave pruning markers ("... [15 messages removed] ...")
-
-#### FR4: Importance Scoring
-- **R4.1:** Score messages by importance (0.0-1.0)
-- **R4.2:** Higher score for messages with:
-  - Tool calls and results
-  - User directives or constraints
-  - Error messages or corrections
-  - Recent messages
-- **R4.3:** Lower score for:
-  - Old casual conversation
-  - Redundant information
-  - Successfully completed one-off tasks
-- **R4.4:** Use scores to guide pruning decisions
-
-#### FR5: Smart Pruning
-- **R5.1:** Detect conversation segments (task boundaries)
-- **R5.2:** Prune entire completed tasks before fragmenting current task
-- **R5.3:** Keep error/correction pairs even if old
-- **R5.4:** Preserve context necessary for current task
-- **R5.5:** Avoid breaking conversation flow unnecessarily
-
-#### FR6: Pruning Triggers
-- **R6.1:** Automatic pruning at 80% context usage
-- **R6.2:** Aggressive pruning at 90% context usage
-- **R6.3:** User-initiated pruning (manual clear history)
-- **R6.4:** Task-boundary pruning (between major tasks)
-- **R6.5:** Session start pruning (reset on new conversation)
-
-#### FR7: Memory Visibility
-- **R7.1:** Show memory stats in context overlay
-- **R7.2:** Indicate when history has been pruned
-- **R7.3:** Display oldest message still in memory
-- **R7.4:** Show total messages vs. messages in context
-- **R7.5:** Explain pruning strategy in help text
-
-#### FR8: Memory Configuration
-- **R8.1:** Configure max messages (default: 50)
-- **R8.2:** Configure max tokens (default: 80% of model limit)
-- **R8.3:** Configure pruning strategy (rolling window, importance-based)
-- **R8.4:** Configure minimum recent messages to keep (default: 10)
-- **R8.5:** Settings accessible via settings overlay
-
-#### FR9: Context Building
-- **R9.1:** Build conversation context for each LLM call
-- **R9.2:** Include system prompt + message history + current message
-- **R9.3:** Apply token limit to total context
-- **R9.4:** Prune if over limit before sending to LLM
-- **R9.5:** Validate final context size
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Token counting under 10ms per message
-- **N1.2:** Pruning decision under 50ms
-- **N1.3:** Context building under 200ms
-- **N1.4:** Memory stats calculation under 100ms
-- **N1.5:** No noticeable lag during conversation
-
-#### NFR2: Accuracy
-- **N2.1:** Token counts within 5% of actual LLM usage
-- **N2.2:** Pruning preserves conversation coherence >90% of time
-- **N2.3:** Never prune system prompt or recent messages
-- **N2.4:** Importance scoring correlates with user judgment >80%
-- **N2.5:** Context limits never exceeded
-
-#### NFR3: Memory Efficiency
-- **N3.1:** Memory usage scales linearly with conversation length
-- **N3.2:** No memory leaks over long sessions
-- **N3.3:** Efficient storage format (minimize redundancy)
-- **N3.4:** Lazy computation of token counts (cache results)
-- **N3.5:** Total memory under 100MB for typical session
-
-#### NFR4: Reliability
-- **N4.1:** Never lose messages unexpectedly
-- **N4.2:** Graceful handling of token counting errors
-- **N4.3:** Consistent behavior across sessions
-- **N4.4:** Recovery from pruning errors
-- **N4.5:** Atomic operations (no partial states)
+**Acceptance Criteria:**
+- Conversations continue indefinitely without context limit errors
+- Users never need to manually manage message history
+- Memory management is invisible during normal usage
 
 ---
 
-## User Experience
+#### P0-2: Recent Context Preservation
+**Description:** Most recent conversation always remains available to the agent
 
-### Core Workflows
+**User Stories:**
+- As a developer, I want my last several messages always remembered for conversation continuity
+- As a user, I expect the agent to remember what we just discussed
 
-#### Workflow 1: Normal Conversation (No Pruning)
-1. User starts conversation
-2. Exchange 20 messages (under token limit)
-3. Agent has full conversation context
-4. No pruning occurs
-5. User continues seamlessly
-
-**Success Criteria:** No pruning needed for typical sessions
-
-#### Workflow 2: Approaching Context Limit
-1. User in long conversation (40 messages)
-2. Context usage reaches 75%
-3. Memory system shows: "Context: 75% used" in overlay
-4. User continues conversation
-5. At 80%, oldest messages pruned automatically
-6. Chat shows: "... [5 messages removed to save space] ..."
-7. Agent continues with relevant recent context
-
-**Success Criteria:** Seamless pruning without disrupting conversation
-
-#### Workflow 3: Task Boundary Pruning
-1. User completes refactoring task
-2. Agent: "Task complete. Refactored 3 files."
-3. User: "Now let's work on the tests"
-4. Memory system detects task boundary
-5. Old refactoring messages pruned
-6. Test discussion starts with clean context
-
-**Success Criteria:** Task switching clears irrelevant history
-
-#### Workflow 4: Manual History Clear
-1. User wants fresh start mid-session
-2. Types: `/clear` (hypothetical command)
-3. Memory system: "Clear conversation history?"
-4. User confirms
-5. All messages except system prompt cleared
-6. User starts new topic with clean slate
-
-**Success Criteria:** User can reset conversation anytime
-
-#### Workflow 5: Checking Memory State
-1. User notices agent missed earlier context
-2. Opens context overlay (Ctrl+I)
-3. Sees: "Memory: 35 messages (10 pruned 15 min ago)"
-4. Realizes early context was removed
-5. User re-provides important information
-6. Agent continues successfully
-
-**Success Criteria:** User understands memory state and can compensate
+**Acceptance Criteria:**
+- Last 10+ exchanges always preserved
+- Current task context never pruned
+- Recent decisions and constraints maintained
 
 ---
 
-## Technical Architecture
+#### P0-3: Memory Visibility
+**Description:** Users can see memory state and understand what the agent remembers
 
-### Component Structure
+**User Stories:**
+- As a developer, I want to check memory status when context seems lost
+- As a user, I want transparency into what's been pruned and why
+
+**Acceptance Criteria:**
+- Context overlay shows total messages vs. messages in memory
+- Pruning events visible in chat with clear markers
+- Memory statistics accessible via keyboard shortcut
+
+---
+
+#### P0-4: Cost-Effective Context
+**Description:** Memory system minimizes token usage while preserving conversation quality
+
+**User Stories:**
+- As a cost-conscious developer, I want to minimize token usage without losing important context
+- As a user, I want the most efficient use of my LLM budget
+
+**Acceptance Criteria:**
+- Old irrelevant messages automatically removed
+- Token usage optimized based on relevance
+- Context limited to what's necessary for current task
+
+---
+
+### Priority 1 (Should Have)
+
+#### P1-1: Smart Pruning Strategy
+**Description:** System intelligently decides which messages to remove based on importance
+
+**User Stories:**
+- As a developer, I want important context preserved even if it's old
+- As a user, I want the agent to remember critical information longer
+
+**Acceptance Criteria:**
+- Error messages and corrections preserved longer
+- Tool calls and results prioritized
+- User directives and constraints protected from pruning
+
+---
+
+#### P1-2: Task Boundary Detection
+**Description:** System recognizes task transitions and prunes completed task context
+
+**User Stories:**
+- As a multi-task developer, I want clean context when switching tasks
+- As a user, I want old task discussions cleared when moving to new topics
+
+**Acceptance Criteria:**
+- Task completion triggers context evaluation
+- Completed task messages pruned when starting new task
+- Current task context always preserved
+
+---
+
+#### P1-3: Memory Configuration
+**Description:** Users can customize memory behavior through settings
+
+**User Stories:**
+- As a power user, I want control over memory strategy and limits
+- As a developer, I want to tune memory for my workflow
+
+**Acceptance Criteria:**
+- Maximum message count configurable
+- Token limits adjustable per user preference
+- Pruning strategy selectable (aggressive vs. conservative)
+
+---
+
+#### P1-4: Pruning Notifications
+**Description:** Users see when and why messages were removed
+
+**User Stories:**
+- As a developer, I want to know when context was pruned
+- As a user, I want clear markers showing removed conversation
+
+**Acceptance Criteria:**
+- Chat displays pruning markers: "... [5 messages removed to save space] ..."
+- Context overlay shows pruning timestamp and reason
+- Help text explains pruning strategy
+
+---
+
+### Priority 2 (Nice to Have)
+
+#### P2-1: Manual History Control
+**Description:** Users can manually clear conversation history
+
+**User Stories:**
+- As a developer, I want to reset conversation for a fresh start
+- As a user, I want control over when to clear the slate
+
+**Acceptance Criteria:**
+- Slash command or keyboard shortcut to clear history
+- Confirmation dialog before clearing
+- Option to preserve system configuration
+
+---
+
+#### P2-2: Memory Warnings
+**Description:** Proactive warnings when approaching context limits
+
+**User Stories:**
+- As a developer, I want early warning before automatic pruning
+- As a user, I want to prepare for context changes
+
+**Acceptance Criteria:**
+- Warning at 75% context usage
+- Suggestion to manually clear if approaching limit
+- Option to continue or reset conversation
+
+---
+
+#### P2-3: Importance Hints
+**Description:** Users can mark messages as important to protect from pruning
+
+**User Stories:**
+- As a power user, I want to flag critical context for preservation
+- As a developer, I want control over what gets remembered
+
+**Acceptance Criteria:**
+- Command to mark current message as important
+- Visual indicator for protected messages
+- Protected messages exempt from automatic pruning
+
+---
+
+## User Experience Flow
+
+### Normal Conversation Flow (No Pruning)
 
 ```
-Memory System
-├── Message Store
-│   ├── Message List
-│   ├── Message Metadata
-│   └── Token Cache
-├── Pruning Engine
-│   ├── Strategy Selector
-│   ├── Importance Scorer
-│   ├── Pruning Executor
-│   └── Marker Injector
-├── Token Accountant
-│   ├── Tokenizer
-│   ├── Token Counter
-│   ├── Budget Tracker
-│   └── Limit Monitor
-├── Context Builder
-│   ├── Message Selector
-│   ├── Context Assembler
-│   └── Validator
-└── Memory Stats
-    ├── Usage Calculator
-    ├── Metrics Collector
-    └── Reporter
-```
-
-### Data Model
-
-```go
-type Memory struct {
-    messages        []Message
-    systemPrompt    *Message
-    maxMessages     int
-    maxTokens       int
-    strategy        PruningStrategy
-    tokenizer       Tokenizer
-    prunedCount     int
-    lastPruneTime   time.Time
-}
-
-type Message struct {
-    ID          string
-    Role        MessageRole
-    Content     string
-    Timestamp   time.Time
-    Tokens      int
-    Importance  float64
-    ToolCall    *ToolCall
-    ToolResult  *ToolResult
-}
-
-type PruningStrategy int
-const (
-    StrategyRollingWindow PruningStrategy = iota
-    StrategyImportanceBased
-    StrategyHybrid
-)
-
-type MemoryStats struct {
-    TotalMessages   int
-    MessagesInContext int
-    PrunedMessages  int
-    TotalTokens     int
-    TokenLimit      int
-    PercentUsed     float64
-    OldestMessage   time.Time
-    LastPrune       time.Time
-}
-```
-
-### Pruning Decision Flow
-
-```
-Context Building Request
+User starts conversation
     ↓
-Calculate Current Token Usage
+Exchange messages (under limit)
     ↓
-Usage > 80% of limit?
-    ├─ No → Use full history
-    └─ Yes → Trigger Pruning
-        ↓
-    Select Pruning Strategy
-        ↓
-    Score All Messages for Importance
-        ↓
-    Sort Messages (oldest, lowest importance first)
-        ↓
-    ┌──────────────────────────────┐
-    │ Pruning Loop:                │
-    │ 1. Skip system prompt        │
-    │ 2. Skip last 10 messages     │
-    │ 3. Select lowest score msg   │
-    │ 4. Remove message            │
-    │ 5. Recalculate tokens        │
-    │ 6. Under limit? → Stop       │
-    │ 7. Else continue loop        │
-    └──────────────────────────────┘
-        ↓
-    Insert Pruning Marker
-        ↓
-    Return Pruned Context
+Agent has full context
+    ↓
+Conversation continues seamlessly
 ```
 
----
-
-## Design Decisions
-
-### Why Rolling Window Strategy?
-**Rationale:**
-- **Simple:** Easy to understand and implement
-- **Predictable:** Users know recent messages are kept
-- **Effective:** Recent context usually most relevant
-- **Fast:** O(1) pruning decisions
-- **Debuggable:** Clear what's kept vs removed
-
-**Alternatives considered:**
-- Importance-based only: More complex, harder to predict
-- LLM summarization: Too slow, adds cost
-- No pruning: Runs out of context
-
-**Decision:** Start with rolling window, add importance-based in Phase 2
-
-### Why Keep Last 10 Messages Always?
-**Rationale:**
-- **Continuity:** Last few exchanges critical for coherence
-- **User expectation:** Users assume recent context is safe
-- **Task completion:** Most tasks need last few messages
-- **Safety margin:** Prevents breaking current task
-
-**Testing showed:** 10 messages covers 95% of immediate context needs
-
-### Why Prune at 80% Not 100%?
-**Rationale:**
-- **Headroom:** Prevents emergency pruning mid-response
-- **Efficiency:** Proactive pruning is cheaper than reactive
-- **User experience:** Gradual pruning less jarring
-- **Error prevention:** Avoids hitting hard limits
-
-### Why Not Use Embeddings for Retrieval?
-**Current decision:** Simple chronological pruning
-
-**Rationale:**
-- **Complexity:** Embeddings add significant overhead
-- **Cost:** Requires separate embedding API calls
-- **Performance:** Embedding generation is slow
-- **Overkill:** Rolling window works for 90% of use cases
-
-**Future:** Phase 3 may add semantic retrieval for long sessions
+**Experience:** Invisible - users never notice memory management
 
 ---
 
-## Pruning Strategies Comparison
-
-### 1. Rolling Window (Current)
-**How it works:** Keep last N messages, remove oldest
-
-**Pros:**
-- Simple and fast
-- Predictable behavior
-- Low overhead
-
-**Cons:**
-- May remove important old messages
-- No semantic understanding
-
-**Best for:** Most conversations, bounded context
-
----
-
-### 2. Importance-Based (Future)
-**How it works:** Score messages by importance, remove lowest scores
-
-**Pros:**
-- Preserves critical context
-- Smarter than pure chronological
-
-**Cons:**
-- More complex scoring logic
-- Slower pruning decisions
-- Less predictable
-
-**Best for:** Long sessions with diverse topics
-
----
-
-### 3. Hybrid (Future)
-**How it works:** Combine rolling window + importance
-
-**Pros:**
-- Balance of simplicity and intelligence
-- Keeps recent + important
-
-**Cons:**
-- Most complex implementation
-- Tuning required
-
-**Best for:** Power users, extended sessions
-
----
-
-## Importance Scoring Algorithm
+### Approaching Limit Flow
 
 ```
-Base Score: 0.5 (neutral)
-
-Modifiers:
-  + 0.3 if contains tool call
-  + 0.2 if contains tool result
-  + 0.2 if user directive/constraint
-  + 0.3 if error message
-  + 0.2 if correction/clarification
-  + 0.1 for each reference to earlier message
-  - 0.1 for each day old
-  - 0.2 if casual/social content
-  - 0.3 if task marked complete
-
-Recency Boost:
-  + 0.4 if in last 5 messages
-  + 0.2 if in last 10 messages
-  + 0.1 if in last 20 messages
-
-System Prompt: 1.0 (never pruned)
-Final Score: Clamp to [0.0, 1.0]
+Long conversation (many messages)
+    ↓
+Context reaches 75%
+    ↓
+Context overlay shows: "Context: 75% used"
+    ↓
+User continues
+    ↓
+At 80%, automatic pruning triggered
+    ↓
+Chat shows: "... [5 messages removed] ..."
+    ↓
+Agent continues with recent context
 ```
+
+**Experience:** Minimal disruption - clear communication about pruning
+
+---
+
+### Task Transition Flow
+
+```
+Complete refactoring task
+    ↓
+Agent: "Task complete"
+    ↓
+User: "Now let's work on tests"
+    ↓
+System detects task boundary
+    ↓
+Old refactoring messages pruned
+    ↓
+Test discussion starts with clean context
+```
+
+**Experience:** Fresh start for new task without manual intervention
+
+---
+
+### Manual Clear Flow
+
+```
+User wants fresh start
+    ↓
+Types: /clear
+    ↓
+Confirmation: "Clear conversation history?"
+    ↓
+User confirms
+    ↓
+All messages cleared except system prompt
+    ↓
+Clean slate for new conversation
+```
+
+**Experience:** User-controlled reset when needed
+
+---
+
+### Memory Check Flow
+
+```
+Agent seems to forget earlier context
+    ↓
+User opens context overlay (Ctrl+I)
+    ↓
+Sees: "Memory: 35 messages (10 pruned 15 min ago)"
+    ↓
+User re-provides needed information
+    ↓
+Agent continues successfully
+```
+
+**Experience:** Transparency enables user compensation
+
+---
+
+## User Interface & Interaction Design
+
+### Context Overlay Memory Section
+
+**Visual Layout:**
+```
+┌─ Memory ──────────────────────────┐
+│ Total Messages: 45                │
+│ In Context: 35                    │
+│ Pruned: 10 (15 minutes ago)       │
+│                                   │
+│ Context Usage: ████████░░ 75%     │
+│ Token Count: 15,234 / 20,000      │
+│                                   │
+│ Oldest Message: 1 hour ago        │
+│ Strategy: Rolling Window          │
+└───────────────────────────────────┘
+```
+
+**Interaction:**
+- Read-only display of memory state
+- Updates in real-time as conversation progresses
+- Hover tooltips explain each metric
+
+---
+
+### Pruning Markers in Chat
+
+**Visual Treatment:**
+```
+[User] Let's refactor the auth module
+[Agent] I'll help with that refactoring...
+
+... [5 messages removed to save space] ...
+
+[User] Now let's work on the tests
+[Agent] I'll help you write tests...
+```
+
+**Design:**
+- Subtle gray text, italicized
+- Clearly distinguishable from conversation
+- Clickable to show pruning details (future)
+
+---
+
+### Settings Panel Memory Configuration
+
+**Layout:**
+```
+┌─ Memory Settings ─────────────────┐
+│                                   │
+│ Maximum Messages: [50] ▼          │
+│ Token Limit: [16000] ▼            │
+│                                   │
+│ Pruning Strategy:                 │
+│ ○ Conservative (keep more)        │
+│ ● Balanced (recommended)          │
+│ ○ Aggressive (save tokens)        │
+│                                   │
+│ Recent Messages to Keep: [10] ▼   │
+│                                   │
+│ [ Apply ] [ Reset to Defaults ]   │
+└───────────────────────────────────┘
+```
+
+**Interaction:**
+- Dropdowns for numeric values
+- Radio buttons for strategy selection
+- Immediate preview of impact
 
 ---
 
 ## Success Metrics
 
 ### Effectiveness Metrics
-- **Context preservation:** >90% of conversations maintain coherence after pruning
-- **Relevance ratio:** >80% of tokens in context are relevant to current task
-- **Prune accuracy:** <5% of pruned messages later needed
-- **Task completion:** >95% of tasks complete without context issues
+
+**Conversation Continuity:**
+- Target: >90% of conversations maintain coherence after pruning
+- Measure: User surveys and conversation quality scoring
+
+**Relevance Ratio:**
+- Target: >80% of tokens in context are relevant to current task
+- Measure: Manual review of pruned vs. retained messages
+
+**Task Completion Rate:**
+- Target: >95% of tasks complete without context issues
+- Measure: Track task completion vs. memory-related errors
+
+---
 
 ### Efficiency Metrics
-- **Token waste:** <10% of context tokens are irrelevant
-- **Pruning overhead:** <5% of session time spent on pruning
-- **Memory usage:** <100MB for typical session
-- **Cache hit rate:** >90% of token counts served from cache
+
+**Token Optimization:**
+- Target: <10% of context tokens are irrelevant
+- Measure: Automated relevance scoring of context
+
+**Cost Savings:**
+- Target: 20-30% reduction in token usage vs. no pruning
+- Measure: Compare token counts with and without memory management
+
+**Memory Overhead:**
+- Target: <5% of session time spent on memory operations
+- Measure: Performance profiling of memory functions
+
+---
 
 ### User Experience Metrics
-- **Surprise rate:** <5% of users surprised by forgotten context
-- **Manual intervention:** <10% of sessions require manual history management
-- **Continuity score:** >85% of conversations feel coherent despite pruning
-- **Transparency:** >80% of users understand memory state via overlay
+
+**Surprise Rate:**
+- Target: <5% of users surprised by forgotten context
+- Measure: User feedback and support tickets
+
+**Manual Intervention:**
+- Target: <10% of sessions require manual history management
+- Measure: Track /clear command usage and manual resets
+
+**User Satisfaction:**
+- Target: >85% satisfaction with memory behavior
+- Measure: Post-session surveys on memory experience
 
 ---
 
-## Dependencies
+## User Enablement
 
-### External Dependencies
-- Tokenizer library (tiktoken for OpenAI, custom for others)
-- Token counting utilities
+### Discoverability
 
-### Internal Dependencies
-- LLM provider (for context limits)
-- Settings system (for memory configuration)
-- Context overlay (for visibility)
-- Event system (for pruning notifications)
+**Context Overlay Integration:**
+- Memory section visible in standard context overlay (Ctrl+I)
+- First-time user tooltip: "View memory state here"
+- Memory warnings call attention to overlay
 
-### Platform Requirements
-- Sufficient RAM for conversation storage
-- Fast token counting (efficient tokenizer)
+**Pruning Markers:**
+- Clear visual indication in chat when pruning occurs
+- Help link in marker for explanation
+
+**Settings Discovery:**
+- Memory section in settings overlay
+- Labeled as "Memory & Context Management"
+- Tooltips explain each configuration option
 
 ---
 
-## Risks & Mitigations
+### Learning Path
+
+**Beginner:**
+1. Use default settings - memory "just works"
+2. Notice pruning markers in long conversations
+3. Check context overlay when curious about memory state
+
+**Intermediate:**
+1. Open context overlay during sessions to monitor usage
+2. Understand relationship between message count and tokens
+3. Learn when to manually clear history (/clear command)
+
+**Advanced:**
+1. Customize memory settings for workflow
+2. Tune pruning strategy based on cost preferences
+3. Use importance hints to protect critical context (future)
+
+---
+
+### Support Materials
+
+**Documentation:**
+- "How Memory Works" explanation in help docs
+- "Optimizing for Long Sessions" guide
+- "Managing Context Costs" cost-optimization tips
+
+**In-App Help:**
+- Context overlay tooltips explain metrics
+- Settings panel help text for each option
+- Pruning marker explanations
+
+**Examples:**
+- Sample long conversation showing pruning behavior
+- Before/after examples of memory optimization
+- Cost comparison scenarios
+
+---
+
+## Risk & Mitigation
 
 ### Risk 1: Important Context Pruned
-**Impact:** High  
+**Impact:** High - Agent loses critical information  
 **Probability:** Medium  
-**Mitigation:**
-- Keep generous recent window (10+ messages)
-- Importance scoring to protect critical messages
-- User can see what was pruned
-- Easy to re-provide lost context
-- Future: Summarization instead of deletion
+**User Impact:** Broken conversation flow, lost decisions
 
-### Risk 2: Excessive Token Counting Overhead
-**Impact:** Medium  
-**Probability:** Low  
 **Mitigation:**
-- Cache token counts aggressively
-- Lazy computation (only when needed)
-- Efficient tokenizer implementation
-- Batch token counting where possible
-- Monitor and optimize hot paths
+- Always preserve recent messages (last 10+)
+- Importance scoring protects critical messages
+- Clear pruning markers let users compensate
+- Manual re-provision of lost context easy
+- Future: User can mark messages as important
 
-### Risk 3: Inaccurate Token Counts
-**Impact:** High  
-**Probability:** Low  
-**Mitigation:**
-- Use same tokenizer as LLM provider
-- Validate counts against API responses
-- Conservative estimates (slight overcount)
-- Regular validation tests
-- Update tokenizer with provider changes
+---
 
-### Risk 4: Pruning Breaks Conversation Flow
-**Impact:** Medium  
+### Risk 2: Excessive Pruning Disrupts Flow
+**Impact:** Medium - Conversation feels choppy  
 **Probability:** Medium  
+**User Impact:** Reduced conversation quality
+
 **Mitigation:**
-- Always preserve recent messages
-- Prune in logical units (message pairs)
-- Leave clear pruning markers
-- Test pruning logic extensively
+- Conservative default settings
+- Prune in logical units (task boundaries)
+- Leave clear markers explaining what was removed
+- Extensive testing of pruning logic
 - User feedback loop for improvements
 
-### Risk 5: Memory Leaks
-**Impact:** Medium  
-**Probability:** Low  
+---
+
+### Risk 3: Users Don't Understand Memory Behavior
+**Impact:** Medium - Confusion when context is lost  
+**Probability:** High  
+**User Impact:** Support burden, user frustration
+
 **Mitigation:**
-- Hard limits on message count
-- Regular cleanup of old sessions
-- Memory profiling in tests
-- Bounded data structures
-- Clear session end handling
+- Clear documentation in help system
+- Context overlay transparency
+- Pruning markers explain what happened
+- Settings include explanatory help text
+- First-time user tooltips
 
 ---
 
-## Future Enhancements
+### Risk 4: Cost-Quality Trade-off
+**Impact:** Medium - Aggressive pruning saves money but hurts quality  
+**Probability:** Low  
+**User Impact:** Either high costs or poor quality
 
-### Phase 2 Ideas
-- **Importance-Based Pruning:** Smart scoring algorithm
-- **Summarization:** LLM-generated summaries of pruned content
-- **User Hints:** Let users mark messages as "important"
-- **Topic Detection:** Identify and preserve topic boundaries
-- **Configurable Strategies:** Multiple pruning modes to choose from
-
-### Phase 3 Ideas
-- **Semantic Retrieval:** Embedding-based context selection
-- **Long-Term Memory:** Persist important facts across sessions
-- **Memory Visualization:** Graph of conversation structure
-- **Adaptive Pruning:** Learn optimal strategy from user behavior
-- **Memory Compression:** More efficient storage formats
+**Mitigation:**
+- Balanced default strategy
+- User control via settings
+- Clear cost vs. quality implications in UI
+- Recommended settings for different use cases
+- Token usage visibility for informed decisions
 
 ---
 
-## Open Questions
+### Risk 5: One-Size-Fits-All Doesn't Work
+**Impact:** Low - Different users need different strategies  
+**Probability:** Medium  
+**User Impact:** Some users unhappy with defaults
 
-1. **Should we persist conversation history to disk?**
-   - Pro: Resume sessions, audit trail
-   - Con: Privacy, storage management, complexity
-   - Decision: Phase 3 feature with encryption
-
-2. **Should we use LLM summarization for pruned content?**
-   - Pro: Preserves information in condensed form
-   - Con: Cost, latency, quality variability
-   - Decision: Phase 2 experiment
-
-3. **Should users be able to edit message history?**
-   - Use case: Remove incorrect information
-   - Risk: Confusion about what agent "knows"
-   - Decision: Phase 3, with clear UI indicators
-
-4. **Should we support multiple memory strategies per session?**
-   - Pro: Flexibility for different tasks
-   - Con: UI complexity, user confusion
-   - Decision: Single strategy per session for simplicity
+**Mitigation:**
+- Configurable settings for power users
+- Multiple pruning strategies to choose from
+- Documentation for different workflow patterns
+- Future: Adaptive learning from user behavior
+- Per-project memory settings (future)
 
 ---
 
-## Related Documentation
+## Dependencies & Integration Points
 
-- [ADR-0005: Memory and Context Management](../adr/0005-memory-and-context-management.md)
-- [ADR-0014: Intelligent Context Pruning](../adr/0014-intelligent-context-pruning.md)
-- [Context Management PRD](context-management.md)
-- [Agent Loop Architecture PRD](agent-loop-architecture.md)
-- [Architecture: Memory System](../architecture/memory.md)
+### Feature Dependencies
+
+**Context Management System:**
+- Requires context overlay for memory visibility
+- Depends on token counting infrastructure
+- Integrates with settings system for configuration
+
+**Agent Loop:**
+- Memory state used in every agent iteration
+- Pruning decisions made before LLM calls
+- Context building dependent on memory
+
+**Cost Tracking:**
+- Memory optimizations impact overall token usage
+- Integration with token usage displays
+- Cost projections based on memory settings
+
+---
+
+### External Dependencies
+
+**LLM Provider Context Limits:**
+- Different providers have different token limits
+- Memory system must adapt to model capabilities
+- Provider-specific tokenizer required
+
+**Tokenization Libraries:**
+- Accurate token counting essential
+- Must match LLM provider's tokenizer
+- Performance requirements for real-time counting
+
+---
+
+### Data Flow
+
+**Input:** User messages and agent responses  
+**Processing:** Token counting, importance scoring, pruning decisions  
+**Output:** Optimized context for LLM calls  
+**Storage:** In-memory conversation history  
+**Display:** Context overlay, pruning markers, statistics
+
+---
+
+## Constraints & Trade-offs
+
+### Technical Constraints
+
+**Token Counting Accuracy:**
+- **Constraint:** Must match LLM provider exactly
+- **Trade-off:** Slight overestimation is safer than underestimation
+- **Decision:** Use conservative estimates, accept small inefficiency
+
+**Real-time Performance:**
+- **Constraint:** Memory operations can't slow down conversations
+- **Trade-off:** Accuracy vs. speed in importance scoring
+- **Decision:** Simple heuristics over complex algorithms
+
+**Memory Overhead:**
+- **Constraint:** Can't consume excessive RAM for history
+- **Trade-off:** How many messages to keep in memory
+- **Decision:** Bounded history with hard limits
+
+---
+
+### Product Trade-offs
+
+**Automatic vs. Manual Control:**
+- **Trade-off:** Invisible automation vs. user control
+- **Decision:** Automatic by default, manual override available
+- **Rationale:** Most users prefer "just works" experience
+
+**Aggressive vs. Conservative Pruning:**
+- **Trade-off:** Cost savings vs. information preservation
+- **Decision:** Balanced default with configurable extremes
+- **Rationale:** Optimize for conversation quality first, then cost
+
+**Transparency vs. Simplicity:**
+- **Trade-off:** Detailed memory stats vs. minimal UI
+- **Decision:** Stats available but not prominent
+- **Rationale:** Power users access overlay, others ignore it
+
+---
+
+## Competitive Analysis
+
+### Claude Desktop
+**Approach:** Automatic conversation summarization  
+**Strengths:** Preserves information in compressed form  
+**Weaknesses:** Slower, costs extra, quality varies  
+**Differentiation:** We use simple pruning for speed and predictability
+
+### ChatGPT
+**Approach:** Mostly transparent pruning  
+**Strengths:** Users don't worry about it  
+**Weaknesses:** No visibility into what's remembered  
+**Differentiation:** We provide transparency via context overlay
+
+### Cursor
+**Approach:** Context limited per-file  
+**Strengths:** Simple, predictable  
+**Weaknesses:** Limited cross-file conversation  
+**Differentiation:** We enable longer, multi-file conversations
+
+### Continue.dev
+**Approach:** Manual context management  
+**Strengths:** User has full control  
+**Weaknesses:** Requires constant attention  
+**Differentiation:** We automate while still providing control
+
+---
+
+## Go-to-Market Considerations
+
+### Positioning
+
+**Primary Message:**  
+"Never worry about context limits - Forge automatically manages conversation memory so you can focus on coding, not context management."
+
+**Key Differentiators:**
+- Transparent memory management with full visibility
+- Cost-optimized without sacrificing conversation quality
+- Long session support for complex development tasks
+
+---
+
+### Target Segments
+
+**Early Adopters:**
+- Developers working on large, complex codebases
+- Users frustrated by context limits in other tools
+- Cost-conscious developers monitoring API usage
+
+**Value Propositions by Segment:**
+- **Enterprise:** Cost optimization at scale
+- **Indie Developers:** Affordable long sessions
+- **Power Users:** Full control and transparency
+
+---
+
+### Documentation Needs
+
+**Essential Documentation:**
+1. "Understanding Memory Management" - How it works
+2. "Memory Settings Guide" - Configuration options
+3. "Optimizing for Long Sessions" - Best practices
+4. "Cost vs. Quality Trade-offs" - Decision guidance
+
+**FAQ Topics:**
+- "Why was my earlier context pruned?"
+- "How can I make the agent remember longer?"
+- "What's the best strategy for my workflow?"
+- "How much does memory optimization save?"
+
+---
+
+### Support Considerations
+
+**Common Support Requests:**
+1. Context appears lost mid-conversation
+2. Not understanding pruning markers
+3. Wanting to preserve specific information
+4. Optimizing memory for cost savings
+
+**Support Resources:**
+- Context overlay for self-service diagnostics
+- Clear documentation on memory behavior
+- Settings presets for common scenarios
+- Example configurations for different workflows
+
+---
+
+## Evolution & Roadmap
+
+### Version History
+
+**v1.0 (Current):**
+- Rolling window pruning strategy
+- Basic importance scoring
+- Context overlay visibility
+- Configurable limits
+
+---
+
+### Future Enhancements
+
+#### Phase 2: Intelligent Pruning
+- Advanced importance scoring algorithm
+- LLM-based summarization of pruned content
+- User hints (mark messages as important)
+- Topic detection and boundary preservation
+
+**User Value:** Better preservation of critical context with more aggressive cost optimization
+
+---
+
+#### Phase 3: Semantic Memory
+- Embedding-based context retrieval
+- Long-term memory across sessions
+- Memory visualization (conversation graph)
+- Adaptive pruning based on user patterns
+
+**User Value:** Smarter memory that learns user preferences and workflow patterns
+
+---
+
+#### Phase 4: Persistent Memory
+- Disk-based conversation persistence
+- Resume sessions across restarts
+- Encrypted storage for privacy
+- Cross-session knowledge retention
+
+**User Value:** Continuity across sessions, build on previous work
+
+---
+
+### Open Questions
+
+**Question 1: Should we persist conversations to disk?**
+- **Pro:** Resume sessions, audit trail, long-term learning
+- **Con:** Privacy concerns, storage management, complexity
+- **Current Direction:** Phase 4 feature with user consent and encryption
+
+**Question 2: Should we use LLM summarization?**
+- **Pro:** Preserves information in condensed form
+- **Con:** Cost, latency, quality variability
+- **Current Direction:** Phase 2 experiment with opt-in
+
+**Question 3: Should users edit message history?**
+- **Pro:** Remove incorrect information, clean up mistakes
+- **Con:** Confusion about what agent "knows"
+- **Current Direction:** Phase 3 with clear UI indicators
+
+**Question 4: Multiple strategies per session?**
+- **Pro:** Flexibility for different task types
+- **Con:** UI complexity, user confusion
+- **Current Direction:** Single strategy per session for simplicity
+
+---
+
+## Technical References
+
+- **Architecture Documentation:** `docs/architecture/memory.md`
+- **Implementation Details:** See ADR-0005 (Memory and Context Management)
+- **Advanced Pruning:** See ADR-0014 (Intelligent Context Pruning)
+- **Related Features:** Context Management PRD, Agent Loop Architecture PRD
 
 ---
 
 ## Changelog
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+### 2024-12-XX
+- Transformed to product-focused PRD format
+- Removed technical implementation details
+- Enhanced user experience sections
+- Added competitive analysis
+- Expanded go-to-market considerations
+
+### 2024-12 (Original)
+- Initial PRD with implementation details
+- Technical architecture sections
+- Code examples and data structures

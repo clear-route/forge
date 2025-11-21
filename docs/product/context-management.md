@@ -1,603 +1,402 @@
-# Product Requirements: Context Management
+# Context Management & Visibility
 
-**Feature:** Context Information and Tracking  
-**Version:** 1.0  
-**Status:** Implemented  
-**Owner:** Core Team  
-**Last Updated:** December 2024
+## Product Vision
 
----
+Context management is fundamental to Forge's effectiveness as an AI coding assistant. As conversations grow longer and tool outputs accumulate, the LLM's context window fills up, potentially causing the agent to "forget" earlier context or fail entirely. This feature provides transparency into context usage and automatically manages context size, enabling longer, more productive coding sessions without manual intervention or context loss.
 
-## Overview
+**Strategic Purpose:**
+- **Enable long-running sessions** without context overflow errors
+- **Build user trust** through transparency into what the agent "knows"
+- **Reduce friction** by eliminating manual context management
+- **Improve cost efficiency** by optimizing token usage
 
-Context Management provides users with comprehensive visibility into the agent's current state, token usage, conversation history, and workspace information. It helps users understand what the agent knows, how much context is being used, and make informed decisions about conversation flow and resource usage.
+## Key Value Propositions
 
----
+- **For Junior Developers**: Confidence that the agent maintains full context throughout extended debugging sessions, without worrying about technical limitations
+- **For Senior Engineers**: Visibility into token usage and automatic optimization during complex refactoring tasks involving many files
+- **For Cost-Conscious Users**: Automatic reduction of token consumption through intelligent summarization, lowering API costs
+- **Competitive Advantage**: Proactive context management vs reactive "context full" errors in other tools
 
-## Problem Statement
+## Target Users & Use Cases
 
-Users interacting with AI agents face context-related challenges:
+### Primary Personas
 
-1. **Black Box Problem:** Users don't know what context the agent has access to
-2. **Token Blindness:** No visibility into token usage until hitting limits
-3. **Cost Uncertainty:** Cloud LLM usage costs are hidden until bill arrives
-4. **Memory Mystery:** Unclear what conversation history is retained
-5. **Context Overflow:** Users don't know when approaching context limits
-6. **Debugging Difficulty:** Hard to troubleshoot why agent behaves certain way
+**1. Extended Session User**
+- **Role**: Developer working on complex, multi-file features
+- **Goals**: Maintain full context across 30+ minute sessions
+- **Pain Points**: Other tools lose context mid-conversation, forcing restarts
 
-Without context visibility, users can't effectively manage conversations, optimize costs, or understand agent behavior.
+**2. Cost-Conscious Developer**
+- **Role**: Individual developer or small team watching API costs
+- **Goals**: Understand and optimize token usage
+- **Pain Points**: Unexpected high costs from inefficient context management
 
----
+**3. Debugging Power User**
+- **Role**: Developer investigating complex bugs across many files
+- **Goals**: Keep full debugging history available while exploring codebase
+- **Pain Points**: Context limits prevent thorough investigation
 
-## Goals
+### Core Use Cases
 
-### Primary Goals
+1. **Long Refactoring Session**: Developer refactoring architecture across 15 files over 45 minutes. Agent automatically summarizes old file reads while keeping recent context, maintaining continuity without hitting limits.
 
-1. **Transparency:** Make all context information visible and understandable
-2. **Token Awareness:** Show real-time token usage and limits
-3. **Cost Management:** Help users optimize LLM API costs
-4. **Conversation Insight:** Display what's in conversation history
-5. **Workspace Clarity:** Show what files/directories agent can access
-6. **Performance Monitoring:** Track session statistics and metrics
+2. **Token Budget Management**: Developer checks `/context` before starting large task, sees 60% usage, decides to start fresh session to avoid mid-task interruption.
 
-### Non-Goals
+3. **Debugging Investigation**: Developer reading many files to trace bug. Tool call summarization compresses old file reads to summaries, freeing space for new explorations while retaining key findings.
 
-1. **Context Modification:** This is NOT for editing context directly
-2. **Context Injection:** Does NOT allow injecting arbitrary context
-3. **Context Filtering:** Does NOT provide tools to filter/remove context items
-4. **Multi-Session Context:** Does NOT track context across multiple sessions (yet)
+## Product Requirements
 
----
+### Must Have (P0)
 
-## User Personas
+- **Context Visibility Command**: `/context` slash command shows real-time context statistics
+- **Token Usage Display**: Clear visualization of current vs max tokens with percentage
+- **Automatic Summarization**: System automatically reduces context size when approaching limits
+- **Non-Disruptive Operation**: Summarization happens seamlessly without interrupting user
+- **Progress Feedback**: Visual indication when summarization is occurring
 
-### Primary: Cost-Conscious Developer
-- **Background:** Using paid LLM APIs, monitors costs carefully
-- **Workflow:** Long coding sessions with agent
-- **Pain Points:** Surprised by large API bills
-- **Goals:** Understand and control token usage
+### Should Have (P1)
 
-### Secondary: Context-Aware Power User
-- **Background:** Experienced with LLMs, understands context windows
-- **Workflow:** Carefully manages conversation to stay within limits
-- **Pain Points:** Needs to know when approaching limit
-- **Goals:** Maximize context efficiency
+- **Detailed Breakdown**: Show token allocation (system prompt, tools, messages)
+- **Multiple Strategies**: Different summarization approaches (threshold-based, tool-focused)
+- **Cumulative Tracking**: Total session token usage across all API calls
+- **Smart Tool Handling**: Preserve recent tool calls, summarize old ones
 
-### Tertiary: Debugging Developer
-- **Background:** Troubleshooting unexpected agent behavior
-- **Workflow:** Investigating why agent missed information or hallucinated
-- **Pain Points:** Can't see what context agent actually has
-- **Goals:** Understand what agent knows to fix issues
+### Could Have (P2)
 
----
+- **Cost Estimation**: Show approximate API cost based on token usage
+- **Workspace Statistics**: Display info about accessible files/directories
+- **Historical Trends**: Track context usage over time
+- **Export Capability**: Save context snapshot for debugging
 
-## Requirements
+## User Experience Flow
 
-### Functional Requirements
+### Entry Points
 
-#### FR1: Context Overlay UI
-- **R1.1:** Accessible via `/context` slash command
-- **R1.2:** Accessible via keyboard shortcut (Ctrl+I)
-- **R1.3:** Display in modal overlay
-- **R1.4:** Organized sections with clear labels
-- **R1.5:** Scrollable content for large context
-- **R1.6:** Close with Esc or dedicated key
+**Primary**: `/context` slash command in TUI
+- Discoverable through autocomplete
+- Available at any time during conversation
+- Non-modal, doesn't interrupt workflow
 
-#### FR2: Workspace Information
-- **R2.1:** Show current workspace path
-- **R2.2:** Display workspace statistics (files, size, language breakdown)
-- **R2.3:** Show workspace permissions (read/write access)
-- **R2.4:** List workspace restrictions (sandboxing info)
-- **R2.5:** Indicate if workspace is git repository
+**Secondary**: Automatic summarization
+- Triggered automatically by system
+- Brief notification overlay during processing
+- No user action required
 
-#### FR3: Conversation History
-- **R3.1:** Show total message count (user + agent + tool)
-- **R3.2:** Display message breakdown by role
-- **R3.3:** Show conversation age (time since first message)
-- **R3.4:** List recent topics/themes (optional, AI-generated)
-- **R3.5:** Indicate if history has been pruned
-
-#### FR4: Token Usage Tracking
-- **R4.1:** Display current request token breakdown:
-  - System prompt tokens
-  - User message tokens
-  - Assistant response tokens
-  - Tool call tokens
-  - Tool result tokens
-- **R4.2:** Show cumulative session totals
-- **R4.3:** Display context window limit (model-specific)
-- **R4.4:** Calculate remaining token budget
-- **R4.5:** Show percentage of context used
-- **R4.6:** Warn when approaching limit (>80%)
-
-#### FR5: Memory State
-- **R5.1:** Show current memory size (in messages)
-- **R5.2:** Display memory strategy (e.g., "rolling window")
-- **R5.3:** Indicate pruning status (if history trimmed)
-- **R5.4:** Show oldest message still in memory
-- **R5.5:** Display memory configuration (max messages/tokens)
-
-#### FR6: System Prompt Information
-- **R6.1:** Show system prompt length (tokens)
-- **R6.2:** Display custom instructions if set
-- **R6.3:** List active tools in prompt
-- **R6.4:** Show prompt version/timestamp
-- **R6.5:** Indicate if using default vs custom prompt
-
-#### FR7: Session Statistics
-- **R7.1:** Session duration (time since start)
-- **R7.2:** Total tool calls executed
-- **R7.3:** Total agent iterations
-- **R7.4:** Success/failure counts
-- **R7.5:** Average response time
-- **R7.6:** Provider information (model, endpoint)
-
-#### FR8: Cost Estimation
-- **R8.1:** Estimate current session cost (if provider pricing known)
-- **R8.2:** Show cost breakdown (input vs output tokens)
-- **R8.3:** Display cost per message (average)
-- **R8.4:** Provide cost optimization tips
-- **R8.5:** Compare costs across different models
-
-#### FR9: Context Health Indicators
-- **R9.1:** Green/yellow/red status for token usage
-- **R9.2:** Warning for approaching context limit
-- **R9.3:** Alert for excessive tool result sizes
-- **R9.4:** Suggestion to clear history or summarize
-- **R9.5:** Performance impact indicators
-
-### Non-Functional Requirements
-
-#### NFR1: Performance
-- **N1.1:** Context overlay opens within 100ms
-- **N1.2:** Token counting completes within 50ms
-- **N1.3:** Statistics calculation under 100ms
-- **N1.4:** No impact on agent loop performance
-- **N1.5:** Efficient caching of computed values
-
-#### NFR2: Accuracy
-- **N2.1:** Token counts within 5% of actual usage
-- **N2.2:** Cost estimates within 10% of actual (if pricing stable)
-- **N2.3:** Message counts exactly accurate
-- **N2.4:** Timestamps precise to the second
-- **N2.5:** Consistent calculations across refreshes
-
-#### NFR3: Usability
-- **N3.1:** Information presented in logical groupings
-- **N3.2:** No jargon; clear explanations
-- **N3.3:** Visual hierarchy for important info
-- **N3.4:** Color coding for status indicators
-- **N3.5:** Responsive to different terminal sizes
-
-#### NFR4: Reliability
-- **N4.1:** Never crash when displaying context
-- **N4.2:** Graceful handling of missing data
-- **N4.3:** Fallback values for unavailable metrics
-- **N4.4:** Consistent behavior across providers
-- **N4.5:** Safe handling of large contexts
-
----
-
-## User Experience
-
-### Core Workflows
-
-#### Workflow 1: Checking Token Usage Mid-Session
-1. User in middle of long conversation
-2. Wants to know how much context used
-3. Presses Ctrl+I or types `/context`
-4. Context overlay opens
-5. User sees "Token Usage: 3,247 / 8,192 (40%)"
-6. Status is green (safe)
-7. User closes overlay
-8. Continues conversation confidently
-
-**Success Criteria:** User knows token budget in under 3 seconds
-
-#### Workflow 2: Investigating Why Agent Missed Information
-1. Agent didn't reference earlier message
-2. User suspects context was pruned
-3. Opens context overlay
-4. Sees "Memory: Pruned - oldest message from 15 min ago"
-5. Realizes early context was lost
-6. User provides information again
-7. Agent responds correctly
-
-**Success Criteria:** User understands why agent forgot context
-
-#### Workflow 3: Optimizing for Cost
-1. User worried about API costs
-2. Opens context overlay
-3. Sees "Estimated session cost: $0.45"
-4. Notices tool results are large (2K tokens each)
-5. Checks "Cost Optimization Tips"
-6. Learns to use more focused queries
-7. Adjusts conversation style
-
-**Success Criteria:** User has actionable cost insights
-
-#### Workflow 4: Understanding Workspace Scope
-1. New user unsure what agent can access
-2. Opens context overlay
-3. Sees "Workspace: /home/user/project (123 files, Go/TypeScript)"
-4. Notices "Restrictions: Read/write in workspace only"
-5. Understands sandbox boundaries
-6. Asks agent to work on project files
-
-**Success Criteria:** User knows workspace boundaries
-
-#### Workflow 5: Monitoring Long-Running Session
-1. User in 2-hour coding session
-2. Periodically checks context
-3. Sees token usage climbing: 60% → 75% → 85%
-4. Gets yellow warning at 80%
-5. Decides to start fresh session
-6. Saves important info
-7. Restarts with clean context
-
-**Success Criteria:** User prevents context overflow
-
----
-
-## Technical Architecture
-
-### Component Structure
+### Core User Journey
 
 ```
-Context Management System
-├── Context Collector
-│   ├── Workspace Analyzer
-│   ├── Memory Inspector
-│   ├── Token Counter
-│   └── Session Tracker
-├── Context Overlay (TUI)
-│   ├── Info Renderer
-│   ├── Status Indicators
-│   ├── Progress Bars
-│   └── Section Organizer
-├── Token Accounting
-│   ├── Tokenizer Integration
-│   ├── Token Cache
-│   ├── Usage Tracker
-│   └── Cost Calculator
-└── Statistics Engine
-    ├── Metric Aggregator
-    ├── Trend Analyzer
-    └── Health Checker
+User working on task → Context grows → User types /context
+                                              ↓
+                                        [View statistics]
+                                              ↓
+                                  [Decision: Continue or restart?]
+                                      ↙                    ↘
+                            Continue working          Start fresh session
+                                  ↓                          ↓
+                        Context reaches 80%              Clean context
+                                  ↓
+                        Automatic summarization
+                                  ↓
+                        Brief progress indicator
+                                  ↓
+                        User continues uninterrupted
 ```
 
-### Data Model
+### Success States
 
-```go
-type ContextInfo struct {
-    Workspace    WorkspaceInfo
-    Conversation ConversationInfo
-    TokenUsage   TokenUsageInfo
-    Memory       MemoryInfo
-    System       SystemInfo
-    Session      SessionInfo
-}
+- User sees context overlay and understands current usage
+- User makes informed decision about session continuation
+- Automatic summarization completes without user noticing
+- Context stays below 90% throughout session
+- User completes task without context overflow errors
 
-type WorkspaceInfo struct {
-    Path         string
-    FileCount    int
-    TotalSize    int64
-    Languages    map[string]int
-    IsGitRepo    bool
-    Permissions  []string
-}
+### Error/Edge States
 
-type ConversationInfo struct {
-    MessageCount    int
-    UserMessages    int
-    AssistantMsgs   int
-    ToolCalls       int
-    StartTime       time.Time
-    LastActivity    time.Time
-}
+- **Context overlay shows >95% usage**: Warning color (red) with suggestion to start fresh
+- **Summarization fails**: Graceful degradation - continue without summarization, notify user
+- **Very short context window**: Disable automatic summarization, rely on user awareness
+- **Rapid context growth**: Multiple summarizations in quick succession - show cumulative savings
 
-type TokenUsageInfo struct {
-    Current      TokenBreakdown
-    Session      TokenBreakdown
-    Limit        int
-    Remaining    int
-    PercentUsed  float64
-    Status       HealthStatus
-}
+## User Interface & Interaction Design
 
-type TokenBreakdown struct {
-    System    int
-    User      int
-    Assistant int
-    Tools     int
-    Total     int
-}
+### Key Interactions
 
-type MemoryInfo struct {
-    MessageCount  int
-    IsPruned      bool
-    Strategy      string
-    OldestMessage time.Time
-    Config        MemoryConfig
-}
+**Context Overlay (`/context` command)**:
+- Modal dialog with scrollable content
+- Fixed width for consistency (80 columns)
+- Organized sections with clear headers
+- Color-coded progress bar (green/yellow/red)
+- ESC or Enter to dismiss
 
-type SessionInfo struct {
-    Duration      time.Duration
-    Iterations    int
-    ToolCalls     int
-    Provider      string
-    Model         string
-    EstimatedCost float64
-}
-```
+**Summarization Status**:
+- Brief overlay during processing
+- Shows strategy name and progress
+- Displays token savings in real-time
+- Auto-dismisses on completion
 
-### Context Collection Flow
+### Information Architecture
 
 ```
-Slash Command: /context
-    ↓
-Context Collector: Gather info from multiple sources
-    ↓
-┌──────────────────────────────────────┐
-│ Parallel Collection:                 │
-│ - Workspace analyzer                 │
-│ - Memory system query                │
-│ - Token counter                      │
-│ - Session tracker                    │
-└──────────────┬───────────────────────┘
-               ↓
-Aggregate Results
-               ↓
-Calculate Derived Metrics
-  - Percentage used
-  - Health status
-  - Cost estimates
-               ↓
-Render Context Overlay
-               ↓
-Display to User
+Context Information Overlay
+├── System Section
+│   ├── System prompt tokens
+│   └── Custom instructions status
+├── Tool System Section  
+│   ├── Available tools count
+│   └── Tool tokens
+├── Message History Section
+│   ├── Total messages
+│   ├── Conversation turns
+│   └── Conversation tokens
+├── Current Context Section
+│   ├── Used vs max tokens (percentage)
+│   ├── Visual progress bar
+│   └── Free space remaining
+└── Cumulative Usage Section
+    ├── Total input tokens
+    ├── Total output tokens
+    └── Session total
 ```
 
----
+### Progressive Disclosure
 
-## Design Decisions
+- **Level 1** (Always visible): Overall percentage, progress bar
+- **Level 2** (In overlay): Breakdown by component (system, tools, messages)
+- **Level 3** (Future): Per-message token counts, detailed history
 
-### Why Real-Time Token Counting?
-- **Accuracy:** Shows actual usage, not estimates
-- **Transparency:** Users see what LLM sees
-- **Optimization:** Enables informed decisions
-- **Cost control:** Prevents bill shock
-- **Industry practice:** Other tools (OpenAI playground) show tokens
+## Feature Metrics & Success Criteria
 
-### Why Session Totals vs Per-Message?
-- **Context:** Session totals show cumulative usage
-- **Trends:** Users want to know total cost/usage
-- **Budgeting:** Helps manage daily/weekly limits
-- **Both needed:** Show current + cumulative
+### Key Performance Indicators
 
-**Decision:** Display both current request and session totals
+**Adoption Metrics:**
+- \>40% of users check context info at least once per session
+- \>60% of power users (sessions >20 min) use `/context` regularly
+- \>80% feature discovery within first week
 
-### Why Not Allow Context Editing?
-- **Complexity:** Editing context can break agent reasoning
-- **Safety:** Manual editing could corrupt state
-- **Use case unclear:** Users want visibility, not editing
-- **Alternative:** Provide "start fresh" option instead
+**Effectiveness Metrics:**
+- 70% reduction in context overflow errors vs baseline
+- 25% decrease in average token usage per session (via summarization)
+- \>90% of sessions stay below 90% context usage
+- Average 2-3 automatic summarizations per 30-minute session
 
-**Decision:** Read-only context view; editing in future if needed
+**Usability Metrics:**
+- \>85% of users understand context info on first view
+- \<5% of users report confusion about summarization
+- \>30% of context checks lead to user action (restart, optimization)
 
-### Why Show Workspace Stats?
-- **Transparency:** Users should know what agent can access
-- **Trust:** Proves sandboxing works
-- **Context:** Helps users frame requests appropriately
-- **Debugging:** Explains why agent can't access certain files
+### Success Thresholds
 
----
+**Minimum Viable:**
+- Context visibility works correctly 100% of time
+- Automatic summarization prevents overflow in 90% of cases
+- No user-reported data loss from summarization
 
-## Context Information Sections
+**Target:**
+- \<2s average summarization time
+- 40%+ token reduction from summarization
+- \<1% user complaints about summarization quality
 
-### 1. Workspace Overview
-```
-📁 Workspace
-  Path: /home/user/my-project
-  Files: 247 (Go: 156, TypeScript: 78, Other: 13)
-  Size: 4.2 MB
-  Git Repo: Yes (main branch)
-  Access: Read/Write (sandboxed)
-```
+## User Enablement
 
-### 2. Conversation History
-```
-💬 Conversation
-  Messages: 45 (User: 23, Agent: 18, Tools: 4)
-  Duration: 32 minutes
-  Started: 2:15 PM
-  Last Activity: Just now
-```
+### Discoverability
 
-### 3. Token Usage
-```
-🔢 Token Usage
-  Current Request: 3,247 / 8,192 (40%) ●●●●○○○○○○
-  Session Total: 45,891 tokens
-  
-  Breakdown:
-    System Prompt:   487 tokens (6%)
-    User Messages:   1,234 tokens (15%)
-    Agent Responses: 1,456 tokens (18%)
-    Tool Results:    70 tokens (1%)
-    
-  Status: ✓ Healthy (60% remaining)
-```
+- `/context` appears in slash command autocomplete
+- First-time welcome message mentions context management
+- Documentation includes context management section
+- In-app help text explains feature
 
-### 4. Memory State
-```
-🧠 Memory
-  Messages in Memory: 45
-  Strategy: Rolling window (last 50 messages)
-  Oldest Message: 32 minutes ago
-  Pruned: No
-```
+### Onboarding
 
-### 5. Session Statistics
-```
-📊 Session Stats
-  Duration: 32 minutes
-  Agent Iterations: 67
-  Tools Executed: 23
-  Success Rate: 95%
-  Avg Response Time: 2.3s
-```
+**First Use:**
+1. User types `/context` (or discovers via autocomplete)
+2. Overlay shows current statistics with brief explanatory text
+3. User understands current context state
+4. User discovers feature is always available
 
-### 6. Cost Information
-```
-💰 Estimated Cost
-  Session: ~$0.34
-  Breakdown:
-    Input tokens:  $0.12 (23K @ $5/1M)
-    Output tokens: $0.22 (15K @ $15/1M)
-  
-  Tips: Tool results account for 40% of tokens.
-        Consider more focused file reads.
-```
+**First Summarization:**
+1. Brief notification: "Optimizing context..."
+2. Progress overlay shows token savings
+3. User sees work continues uninterrupted
+4. User trusts automatic management
 
----
+### Mastery Path
 
-## Success Metrics
+**Novice**: Checks context occasionally, relies on automatic summarization
+**Intermediate**: Proactively checks before large tasks, understands token budgeting
+**Expert**: Uses context info to optimize workflow, starts fresh at strategic points
 
-### Adoption Metrics
-- **Usage rate:** >50% of users access context info at least once per session
-- **Frequency:** Power users check context 3+ times per long session
-- **Discovery:** >70% of users find context feature within first week
+## Risk & Mitigation
 
-### Effectiveness Metrics
-- **Token awareness:** >80% of users can estimate token usage after using feature
-- **Cost reduction:** 30% decrease in token usage for cost-conscious users
-- **Context management:** 50% fewer "context overflow" errors
-- **Session planning:** Users start fresh sessions before hitting limits
+### User Risks
 
-### Usability Metrics
-- **Comprehension:** >90% of users understand displayed information
-- **Action rate:** >40% of context checks lead to user action (optimization, fresh start, etc.)
-- **Error prevention:** 60% reduction in "agent forgot context" complaints
+**Risk**: Summarization loses critical context
+- **Impact**: High - User loses important information
+- **Probability**: Low
+- **Mitigation**: 
+  - Conservative summarization (only old messages)
+  - Preserve recent context completely
+  - Test summarization quality extensively
+  - Allow user to view original messages if needed (future)
 
----
+**Risk**: Users don't understand token counts
+- **Impact**: Medium - Feature provides less value
+- **Probability**: Medium
+- **Mitigation**:
+  - Use percentages and progress bars (more intuitive)
+  - Provide human-readable formatting (K/M suffixes)
+  - Color-code for quick understanding
+  - Include "what this means" explanatory text
 
-## Dependencies
+**Risk**: Summarization interrupts workflow
+- **Impact**: High - User experience degraded
+- **Probability**: Low
+- **Mitigation**:
+  - Make summarization fast (<3s target)
+  - Show progress to set expectations
+  - Never block user input
+  - Auto-dismiss completion notification
+
+### Adoption Risks
+
+**Risk**: Users don't discover `/context` command
+- **Mitigation**: 
+  - Include in autocomplete
+  - Mention in welcome message
+  - Document prominently
+  - Consider proactive suggestion at high usage
+
+**Risk**: Users distrust automatic summarization
+- **Mitigation**:
+  - Clear messaging about what's being summarized
+  - Show token savings to demonstrate value
+  - Provide transparency into process
+  - Never lose user messages (only summarize tool results/agent responses)
+
+## Dependencies & Integration Points
+
+### Feature Dependencies
+
+- **Memory System**: Must access conversation history for counting and summarization
+- **Agent Loop**: Integration point for triggering summarization
+- **Tool System**: Knowledge of available tools for token counting
+- **TUI System**: Overlay rendering and slash command handling
+
+### System Integration
+
+- **LLM Provider**: Uses provider for generating summaries
+- **Token Counter**: Requires accurate tokenization library
+- **Event System**: Emits events for TUI updates during summarization
 
 ### External Dependencies
-- Tokenizer library (for accurate token counting)
-- File system access (for workspace stats)
-- Time utilities (for duration tracking)
 
-### Internal Dependencies
-- Agent core (for conversation history)
-- Memory system (for memory state)
-- LLM provider (for token limits, pricing)
-- Settings system (for configuration)
+- Tokenization library (tiktoken-go or equivalent)
+- LLM API for generating summaries
+- No third-party analytics or tracking
 
-### Platform Requirements
-- Access to conversation history
-- Token counting capability
-- File system stat operations
+## Constraints & Trade-offs
 
----
+### Design Decisions
 
-## Risks & Mitigations
+**Decision**: Automatic vs Manual Summarization
+- **Chosen**: Automatic with visibility
+- **Rationale**: Reduces user burden, prevents errors, but provide transparency
+- **Trade-off**: Less user control, but better UX for most users
 
-### Risk 1: Inaccurate Token Counts
-**Impact:** High  
-**Probability:** Medium  
-**Mitigation:**
-- Use same tokenizer as LLM provider
-- Validate counts against API responses
-- Update tokenizer with provider changes
-- Show estimates with ±5% disclaimer
-- Cache tokenization results
+**Decision**: Multiple Summarization Strategies
+- **Chosen**: Pluggable strategy system
+- **Rationale**: Different use cases benefit from different approaches
+- **Trade-off**: More complexity, but better optimization
 
-### Risk 2: Performance Impact
-**Impact:** Medium  
-**Probability:** Low  
-**Mitigation:**
-- Lazy computation (only when overlay opened)
-- Cache calculated values
-- Async collection of non-critical stats
-- Optimize tokenization (batch operations)
-- Set timeout for stat collection
+**Decision**: Real-time Token Counting
+- **Chosen**: Count on every context check
+- **Rationale**: Always accurate, worth small performance cost
+- **Trade-off**: Slight overhead, but negligible in practice
 
-### Risk 3: Information Overload
-**Impact:** Medium  
-**Probability:** Medium  
-**Mitigation:**
-- Progressive disclosure (basic vs detailed view)
-- Visual hierarchy (important info prominent)
-- Color coding for quick scanning
-- Collapsible sections
-- Focus on actionable insights
+### Known Limitations
 
-### Risk 4: Privacy Concerns
-**Impact:** Low  
-**Probability:** Low  
-**Mitigation:**
-- Don't log context info
-- No external analytics of usage patterns
-- Keep data local
-- Clear about what's shown vs stored
+- Token counts are estimates (±2% accuracy)
+- Summarization quality depends on LLM capability
+- Cannot recover original messages after summarization
+- Context display is read-only (no editing)
 
----
+### Future Considerations
 
-## Future Enhancements
+- Message-level token breakdown (detailed view mode)
+- Context export for debugging
+- Multi-session context tracking
+- Advanced analytics and trends
 
-### Phase 2 Ideas
-- **Context History:** Track token usage over time (graphs)
-- **Context Export:** Save context snapshot for debugging
-- **Context Comparison:** Compare current vs previous sessions
-- **Smart Suggestions:** AI-powered context optimization tips
-- **Context Alerts:** Proactive warnings before issues
+## Competitive Analysis
 
-### Phase 3 Ideas
-- **Multi-Session Context:** Track across multiple sessions
-- **Context Sharing:** Share context snapshots with team
-- **Context Templates:** Pre-configured context for tasks
-- **Context Replay:** Recreate conversation from context snapshot
-- **Advanced Analytics:** Detailed token usage patterns
+**GitHub Copilot Chat**: No context visibility, frequent context overflow errors
+**Cursor**: Basic token counter, no automatic management
+**Aider**: Manual `/clear` command, user must manage context
+**Continue**: No context management features
 
----
+**Forge Advantage**: Automatic + transparent. Users get best of both worlds - hands-off management with full visibility when needed.
 
-## Open Questions
+## Go-to-Market Considerations
 
-1. **Should we show message-level token breakdown?**
-   - Pro: More granular visibility
-   - Con: UI complexity, performance cost
-   - Decision: Phase 2 feature (detailed view mode)
+### Positioning
 
-2. **Should we estimate costs for local models?**
-   - Pro: Consistency across providers
-   - Con: Cost is $0 for local models
-   - Decision: Show "Local model (no cost)" instead of $0.00
+**Message**: "Never lose context. Forge automatically manages your conversation, keeping what matters while optimizing what doesn't. Check `/context` anytime to see what your AI assistant knows."
 
-3. **Should we track context across sessions?**
-   - Pro: Better long-term insights
-   - Con: Persistence complexity
-   - Decision: Phase 3 feature
+**Key Benefits**:
+- No context overflow errors
+- Longer, more productive sessions
+- Lower token costs
+- Full transparency
 
-4. **Should context info be exportable?**
-   - Use case: Bug reports, debugging
-   - Complexity: Format, privacy concerns
-   - Decision: Add export in Phase 2
+### Documentation Needs
 
----
+- How-to guide: "Understanding Context Management"
+- FAQ: "What is token usage and why does it matter?"
+- Troubleshooting: "Context-related issues"
+- Best practices: "Optimizing long coding sessions"
+
+### Support Requirements
+
+Support teams should know:
+- How to interpret context statistics
+- When summarization occurs and why
+- Troubleshooting summarization failures
+- Explaining token counting to users
+
+## Evolution & Roadmap
+
+### Version History
+
+- **v1.0**: Core visibility and automatic summarization
+- **v1.1**: Multiple strategies, improved UI
+- **v2.0**: Cost estimation, workspace stats (future)
+
+### Future Vision
+
+**Phase 2** (3-6 months):
+- Cost estimation and budgeting
+- Workspace context in overlay
+- Message-level token breakdown
+- Context export capability
+
+**Phase 3** (6-12 months):
+- Multi-session context tracking
+- Advanced analytics and trends
+- AI-powered summarization optimization
+- Context sharing and templates
+
+### Deprecation Strategy
+
+Not applicable - core feature integral to product.
+
+## Technical References
+
+- **Architecture**: See `docs/architecture/context-management.md` for implementation details
+- **API Reference**: `pkg/agent/context/` package documentation
+- **Configuration**: Context manager and strategy configuration options
 
 ## Related Documentation
 
-- [ADR-0020: Context Information Overlay](../adr/0020-context-information-overlay.md)
-- [How-to: Use TUI Interface - Context](../how-to/use-tui-interface.md#context-information)
-- [Architecture: Memory System](../architecture/memory.md)
-- [Agent Loop Architecture](../architecture/agent-loop.md)
-
----
-
-## Changelog
-
-| Date | Version | Changes |
-|------|---------|---------|
-| 2024-12 | 1.0 | Initial PRD creation |
+- **Agent Loop**: `docs/product/agent-loop.md`
+- **Tool System**: `docs/product/tool-system.md`  
+- **Memory System**: `docs/product/memory-system.md`
+- **TUI Interface**: `docs/product/tui-executor.md`
